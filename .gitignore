@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+settings.json
+.vscode/
+.idea/
+*.lnk
+/LocalReports/
+/settings.ini
