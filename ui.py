@@ -58,13 +58,13 @@ class MainWindow(QMainWindow):
         lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(lbl_title)
 
-        # 1. 檔案與路徑設定
+        # 1. 輸入與輸出
         grp_files = QFrame()
         grp_files.setObjectName("grpFrame")
         grp_files_layout = QVBoxLayout(grp_files)
         grp_files_layout.setSpacing(8)
         
-        lbl_files_sec = QLabel("檔案與路徑設定")
+        lbl_files_sec = QLabel("輸入與輸出")
         lbl_files_sec.setObjectName("sectionHeader")
         grp_files_layout.addWidget(lbl_files_sec)
 
@@ -93,73 +93,50 @@ class MainWindow(QMainWindow):
         out_path_layout.addWidget(btn_out_browse)
         grp_files_layout.addLayout(out_path_layout)
 
-        left_layout.addWidget(grp_files)
-
-        grp_params = QFrame()
-        grp_params.setObjectName("grpFrame")
-        grp_params_layout = QVBoxLayout(grp_params)
-        grp_params_layout.setSpacing(8)
-
-        lbl_params_sec = QLabel("範圍與間隔時間設定")
-        lbl_params_sec.setObjectName("sectionHeader")
-        grp_params_layout.addWidget(lbl_params_sec)
-
-        grid_params = QGridLayout()
-        grid_params.setSpacing(10)
+        # 區間行號與列號設定
+        grid_io_params = QGridLayout()
+        grid_io_params.setSpacing(10)
+        grid_io_params.setContentsMargins(0, 5, 0, 0)
 
         # 起始行號
         lbl_start_row = QLabel("起始行號：")
         self.txt_start_row = QLineEdit("2")  # 預設起始為 2 (排除標頭)
         self.txt_start_row.setValidator(QIntValidator(1, 9999999))
-        grid_params.addWidget(lbl_start_row, 0, 0)
-        grid_params.addWidget(self.txt_start_row, 0, 1)
+        grid_io_params.addWidget(lbl_start_row, 0, 0)
+        grid_io_params.addWidget(self.txt_start_row, 0, 1)
 
         # 結束行號
         lbl_end_row = QLabel("結束行號：")
         self.txt_end_row = QLineEdit()
         self.txt_end_row.setPlaceholderText("預設至檔尾")
         self.txt_end_row.setValidator(QIntValidator(1, 9999999))
-        grid_params.addWidget(lbl_end_row, 0, 2)
-        grid_params.addWidget(self.txt_end_row, 0, 3)
+        grid_io_params.addWidget(lbl_end_row, 0, 2)
+        grid_io_params.addWidget(self.txt_end_row, 0, 3)
 
         # 來源列號
         lbl_src_col = QLabel("來源列號：")
         self.txt_src_col = QLineEdit("1")
         self.txt_src_col.setValidator(QIntValidator(1, 9999))
-        grid_params.addWidget(lbl_src_col, 1, 0)
-        grid_params.addWidget(self.txt_src_col, 1, 1)
+        grid_io_params.addWidget(lbl_src_col, 1, 0)
+        grid_io_params.addWidget(self.txt_src_col, 1, 1)
 
         # 目標列號
         lbl_tgt_col = QLabel("目標列號：")
         self.txt_tgt_col = QLineEdit("2")
         self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
-        grid_params.addWidget(lbl_tgt_col, 1, 2)
-        grid_params.addWidget(self.txt_tgt_col, 1, 3)
+        grid_io_params.addWidget(lbl_tgt_col, 1, 2)
+        grid_io_params.addWidget(self.txt_tgt_col, 1, 3)
 
-        # 批次間隔
-        lbl_batch_interval = QLabel("批次間隔(秒)：")
-        self.txt_batch_interval = QLineEdit("10")
-        self.txt_batch_interval.setValidator(QIntValidator(10, 30))
-        grid_params.addWidget(lbl_batch_interval, 2, 0)
-        grid_params.addWidget(self.txt_batch_interval, 2, 1)
+        grp_files_layout.addLayout(grid_io_params)
+        left_layout.addWidget(grp_files)
 
-        # 單筆間隔
-        lbl_single_interval = QLabel("單筆間隔(秒)：")
-        self.txt_single_interval = QLineEdit("1")
-        self.txt_single_interval.setValidator(QIntValidator(1, 5))
-        grid_params.addWidget(lbl_single_interval, 2, 2)
-        grid_params.addWidget(self.txt_single_interval, 2, 3)
-
-        grp_params_layout.addLayout(grid_params)
-        left_layout.addWidget(grp_params)
-
-        # 3. 語言設定
+        # 2. 翻譯設定
         grp_lang = QFrame()
         grp_lang.setObjectName("grpFrame")
         grp_lang_layout = QVBoxLayout(grp_lang)
         grp_lang_layout.setSpacing(8)
 
-        lbl_lang_sec = QLabel("翻譯語言設定")
+        lbl_lang_sec = QLabel("翻譯設定")
         lbl_lang_sec.setObjectName("sectionHeader")
         grp_lang_layout.addWidget(lbl_lang_sec)
 
@@ -187,10 +164,23 @@ class MainWindow(QMainWindow):
             self.cb_tgt_lang.addItem(name, code)
         self.cb_tgt_lang.setCurrentIndex(1) # 預設繁中
 
+        # 批次與單筆間隔時間
+        lbl_batch_interval = QLabel("批次間隔(秒)：")
+        self.txt_batch_interval = QLineEdit("10")
+        self.txt_batch_interval.setValidator(QIntValidator(10, 30))
+
+        lbl_single_interval = QLabel("單筆間隔(秒)：")
+        self.txt_single_interval = QLineEdit("1")
+        self.txt_single_interval.setValidator(QIntValidator(1, 5))
+
         grid_lang.addWidget(lbl_src_lang, 0, 0)
-        grid_lang.addWidget(self.cb_src_lang, 0, 1)
+        grid_lang.addWidget(self.cb_src_lang, 0, 1, 1, 3)
         grid_lang.addWidget(lbl_tgt_lang, 1, 0)
-        grid_lang.addWidget(self.cb_tgt_lang, 1, 1)
+        grid_lang.addWidget(self.cb_tgt_lang, 1, 1, 1, 3)
+        grid_lang.addWidget(lbl_batch_interval, 2, 0)
+        grid_lang.addWidget(self.txt_batch_interval, 2, 1)
+        grid_lang.addWidget(lbl_single_interval, 2, 2)
+        grid_lang.addWidget(self.txt_single_interval, 2, 3)
 
         grp_lang_layout.addLayout(grid_lang)
         left_layout.addWidget(grp_lang)
