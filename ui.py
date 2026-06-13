@@ -15,6 +15,28 @@ from utils import detect_encoding, detect_delimiter
 from translation_worker import CSVTranslatorWorker
 from translation_panel import TranslationPanel
 
+# UI 佈局常數
+WINDOW_DEFAULT_WIDTH = 1100
+WINDOW_DEFAULT_HEIGHT = 750
+WINDOW_MIN_WIDTH = 950
+WINDOW_MIN_HEIGHT = 600
+
+SIDEBAR_FULL_WIDTH = 341
+SIDEBAR_MIN_WIDTH = 60
+SIDEBAR_WIDTH = 280
+ACTIVITY_BAR_WIDTH = 60
+
+PREVIEW_DEFAULT_SECTION_SIZE = 110
+PREVIEW_VERTICAL_SECTION_SIZE = 28
+
+PROGRESS_BAR_WIDTH = 150
+START_BUTTON_MIN_WIDTH = 150
+
+INPUT_START_ROW_MAX_WIDTH = 80
+INPUT_END_ROW_MAX_WIDTH = 100
+INPUT_COL_MAX_WIDTH = 60
+
+
 # 恢復視窗幾何狀態
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -29,24 +51,10 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.restore_settings()
 
-    def init_ui(self):
-        self.setWindowTitle("CsvTranslator - CSV 批次翻譯工具")
-        self.resize(1100, 750)
-        self.setMinimumSize(950, 600)
-        
-        # 主視窗佈局設定
-        main_widget = QWidget()
-        main_widget.setObjectName("mainContainer")
-        self.setCentralWidget(main_widget)
-        
-        main_layout = QHBoxLayout(main_widget)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
-
-        # ----------------- 左側大容器：合併活動列與設定欄 -----------------
+    def _build_left_panel(self):
         self.left_container = QFrame()
         self.left_container.setObjectName("leftContainer")
-        self.left_container.setFixedWidth(341)  # 預設展開：60 + 1 + 280
+        self.left_container.setFixedWidth(SIDEBAR_FULL_WIDTH)
         
         left_layout = QHBoxLayout(self.left_container)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -55,7 +63,7 @@ class MainWindow(QMainWindow):
         # 1. 活動列 (QWidget)
         self.activity_bar = QWidget()
         self.activity_bar.setObjectName("activityBarWidget")
-        self.activity_bar.setFixedWidth(60)
+        self.activity_bar.setFixedWidth(ACTIVITY_BAR_WIDTH)
         
         activity_layout = QVBoxLayout(self.activity_bar)
         activity_layout.setContentsMargins(10, 15, 10, 15)
@@ -86,7 +94,7 @@ class MainWindow(QMainWindow):
         # 3. 側邊欄：翻譯設定 (QWidget)
         self.sidebar = QWidget()
         self.sidebar.setObjectName("leftSidebarWidget")
-        self.sidebar.setFixedWidth(280)
+        self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
         
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(15, 15, 15, 15)
@@ -98,15 +106,8 @@ class MainWindow(QMainWindow):
         sidebar_layout.addStretch()
 
         left_layout.addWidget(self.sidebar)
-        
-        main_layout.addWidget(self.left_container)
 
-        # ----------------- 右側面板：控制主區域與日誌 -----------------
-        right_panel = QVBoxLayout()
-        right_panel.setSpacing(15)
-
-
-        # 輸入與輸出面板（2列橫向配置）
+    def _build_files_group(self):
         grp_files = QFrame()
         grp_files.setObjectName("rightFrame")
         grp_files_layout = QVBoxLayout(grp_files)
@@ -174,27 +175,27 @@ class MainWindow(QMainWindow):
         lbl_start_row = QLabel("起始行號：")
         self.txt_start_row = QLineEdit("2")
         self.txt_start_row.setValidator(QIntValidator(1, 9999999))
-        self.txt_start_row.setMaximumWidth(80)
+        self.txt_start_row.setMaximumWidth(INPUT_START_ROW_MAX_WIDTH)
 
         lbl_end_row = QLabel("結束行號：")
         self.txt_end_row = QLineEdit()
         self.txt_end_row.setPlaceholderText("預設至檔尾")
         self.txt_end_row.setValidator(QIntValidator(1, 9999999))
-        self.txt_end_row.setMaximumWidth(100)
+        self.txt_end_row.setMaximumWidth(INPUT_END_ROW_MAX_WIDTH)
 
         lbl_src_col = QLabel("來源列號：")
         self.txt_src_col = QLineEdit("1")
         self.txt_src_col.setValidator(QIntValidator(1, 9999))
-        self.txt_src_col.setMaximumWidth(60)
+        self.txt_src_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
 
         lbl_tgt_col = QLabel("目標列號：")
         self.txt_tgt_col = QLineEdit("2")
         self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
-        self.txt_tgt_col.setMaximumWidth(60)
+        self.txt_tgt_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
 
         self.btn_start = QPushButton("開始")
         self.btn_start.setObjectName("btnStart")
-        self.btn_start.setMinimumWidth(150)
+        self.btn_start.setMinimumWidth(START_BUTTON_MIN_WIDTH)
         self.btn_start.clicked.connect(self.start_translation)
 
         row2_layout.addWidget(lbl_start_row)
@@ -209,9 +210,9 @@ class MainWindow(QMainWindow):
         row2_layout.addWidget(self.btn_start)
 
         grp_files_layout.addLayout(row2_layout)
-        right_panel.addWidget(grp_files)
+        return grp_files
 
-        # A. 來源檔案預覽
+    def _build_preview_group(self):
         grp_preview = QFrame()
         grp_preview.setObjectName("rightFrame")
         grp_preview_layout = QVBoxLayout(grp_preview)
@@ -240,13 +241,12 @@ class MainWindow(QMainWindow):
         self.table_preview = QTableWidget()
         self.table_preview.setRowCount(0)
         self.table_preview.setColumnCount(0)
-        self.table_preview.horizontalHeader().setDefaultSectionSize(110)
-        self.table_preview.verticalHeader().setDefaultSectionSize(28)
+        self.table_preview.horizontalHeader().setDefaultSectionSize(PREVIEW_DEFAULT_SECTION_SIZE)
+        self.table_preview.verticalHeader().setDefaultSectionSize(PREVIEW_VERTICAL_SECTION_SIZE)
         grp_preview_layout.addWidget(self.table_preview)
+        return grp_preview
 
-        right_panel.addWidget(grp_preview, stretch=3)
-
-        # B. 執行狀態與日誌
+    def _build_status_group(self):
         grp_status = QFrame()
         grp_status.setObjectName("rightFrame")
         grp_status_layout = QVBoxLayout(grp_status)
@@ -273,7 +273,7 @@ class MainWindow(QMainWindow):
 
         # 進度條：顯示 n/m (筆數)
         self.progress_bar = QProgressBar()
-        self.progress_bar.setFixedWidth(150)
+        self.progress_bar.setFixedWidth(PROGRESS_BAR_WIDTH)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0/0")
         status_header_layout.addWidget(self.progress_bar)
@@ -285,7 +285,40 @@ class MainWindow(QMainWindow):
         self.txt_log.setObjectName("logConsole")
         self.txt_log.setReadOnly(True)
         grp_status_layout.addWidget(self.txt_log)
+        return grp_status
 
+    def init_ui(self):
+        self.setWindowTitle("CsvTranslator - CSV 批次翻譯工具")
+        self.resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
+        self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
+        
+        # 主視窗佈局設定
+        main_widget = QWidget()
+        main_widget.setObjectName("mainContainer")
+        self.setCentralWidget(main_widget)
+        
+        main_layout = QHBoxLayout(main_widget)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
+
+        # ----------------- 左側大容器：合併活動列與設定欄 -----------------
+        self._build_left_panel()
+        main_layout.addWidget(self.left_container)
+
+        # ----------------- 右側面板：控制主區域與日誌 -----------------
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(15)
+
+        # 輸入與輸出面板
+        grp_files = self._build_files_group()
+        right_panel.addWidget(grp_files)
+
+        # 來源檔案預覽
+        grp_preview = self._build_preview_group()
+        right_panel.addWidget(grp_preview, stretch=3)
+
+        # 執行狀態與日誌
+        grp_status = self._build_status_group()
         right_panel.addWidget(grp_status, stretch=4)
 
         main_layout.addLayout(right_panel, stretch=1)
@@ -738,12 +771,12 @@ class MainWindow(QMainWindow):
         if self.sidebar.isVisible():
             self.sidebar.setVisible(False)
             self.v_line.setVisible(False)
-            self.left_container.setFixedWidth(60)
+            self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
             self.btn_translate.setProperty("active", False)
         else:
             self.sidebar.setVisible(True)
             self.v_line.setVisible(True)
-            self.left_container.setFixedWidth(341)
+            self.left_container.setFixedWidth(SIDEBAR_FULL_WIDTH)
             self.btn_translate.setProperty("active", True)
         self.btn_translate.style().polish(self.btn_translate)
 
