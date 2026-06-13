@@ -36,6 +36,9 @@ INPUT_START_ROW_MAX_WIDTH = 80
 INPUT_END_ROW_MAX_WIDTH = 100
 INPUT_COL_MAX_WIDTH = 60
 
+SWAP_BUTTON_SIZE = 32
+SWAP_ICON_SIZE = 20
+
 class SettingsKey:
     GEOMETRY = "geometry"
     IS_MAXIMIZED = "isMaximized"
@@ -165,6 +168,17 @@ class MainWindow(QMainWindow):
         src_layout.addWidget(self.txt_src_path)
         src_layout.addWidget(btn_src_browse)
         row1_layout.addLayout(src_layout)
+
+        # 左右交換按鈕
+        self.btn_swap = QPushButton()
+        self.btn_swap.setObjectName("btnSwap")
+        self.btn_swap.setFixedSize(30, 30)
+        swap_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "swap.png")
+        self.btn_swap.setIcon(QIcon(swap_icon_path))
+        self.btn_swap.setIconSize(QSize(SWAP_ICON_SIZE, SWAP_ICON_SIZE))
+        self.btn_swap.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_swap.clicked.connect(self.swap_csv_paths)
+        row1_layout.addWidget(self.btn_swap)
 
         # 輸出
         out_layout = QHBoxLayout()
@@ -463,6 +477,19 @@ class MainWindow(QMainWindow):
             background-color: #414868;
         }
 
+        QPushButton#btnSwap {
+            background-color: #3b4261;
+            border: none;
+            border-radius: 6px;
+            padding: 0px;
+        }
+        QPushButton#btnSwap:hover {
+            background-color: #414868;
+        }
+        QPushButton#btnSwap:pressed {
+            background-color: #2e3c64;
+        }
+
 
 
         /* 表格樣式 */
@@ -530,6 +557,12 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(qss)
 
     # ----------------- 事件與邏輯處理函數 -----------------
+    def swap_csv_paths(self):
+        src = self.txt_src_path.text()
+        out = self.txt_out_path.text()
+        self.txt_src_path.setText(out)
+        self.txt_out_path.setText(src)
+
     def browse_source_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "選擇來源 CSV 檔案", self.default_dir, "CSV 檔案 (*.csv);;所有檔案 (*)"
