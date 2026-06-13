@@ -317,9 +317,10 @@ class CSVTranslatorWorker(QThread):
                             tag_buffer.append((row, source_val, row_num))
                             line_buffer.append(row)
                             
-                        # 5.4 如果 tag buffer 長度達到 18 筆或 line buffer 達到 500 筆
-                        if len(tag_buffer) >= 18 or len(line_buffer) >= 500:
-                            self.log_emitted.emit("INFO", f"達到批次處理上限 (tag: {len(tag_buffer)}/18, line: {len(line_buffer)}/500)，開始進行批次翻譯...")
+                        # 5.4 如果 tag buffer 長度達到 18 筆，或 line buffer 達到 500 筆，或 tag buffer 總字元數超過 240
+                        total_char_len = sum(len(item[1]) for item in tag_buffer)
+                        if len(tag_buffer) >= 18 or len(line_buffer) >= 500 or total_char_len > 240:
+                            self.log_emitted.emit("INFO", f"達到批次處理上限 (tag: {len(tag_buffer)}/18, line: {len(line_buffer)}/500, chars: {total_char_len}/240)，開始進行批次翻譯...")
                             if self.translate_batch(tag_buffer, line_buffer, writer, reader, target_col_idx, source_col_idx, max_idx):
                                 # 5.4.2
                                 writer.writerows(line_buffer)
