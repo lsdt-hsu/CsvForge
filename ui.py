@@ -42,95 +42,23 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
 
-        # ----------------- 左側面板：參數與設定 -----------------
-        left_panel = QFrame()
-        left_panel.setObjectName("leftPanel")
-        left_panel.setFrameShape(QFrame.Shape.StyledPanel)
-        left_panel.setFixedWidth(420)
+        # ----------------- 左側側邊欄：翻譯設定 -----------------
+        self.sidebar = QFrame()
+        self.sidebar.setObjectName("leftPanel")
+        self.sidebar.setFrameShape(QFrame.Shape.StyledPanel)
+        self.sidebar.setFixedWidth(280)  # 縮小側邊欄寬度以節省空間
         
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(15, 15, 15, 15)
-        left_layout.setSpacing(15)
+        sidebar_layout = QVBoxLayout(self.sidebar)
+        sidebar_layout.setContentsMargins(15, 15, 15, 15)
+        sidebar_layout.setSpacing(15)
 
         # 標題
         lbl_title = QLabel("CsvTranslator")
         lbl_title.setObjectName("appTitle")
         lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_layout.addWidget(lbl_title)
+        sidebar_layout.addWidget(lbl_title)
 
-        # 1. 輸入與輸出
-        grp_files = QFrame()
-        grp_files.setObjectName("grpFrame")
-        grp_files_layout = QVBoxLayout(grp_files)
-        grp_files_layout.setSpacing(8)
-        
-        lbl_files_sec = QLabel("輸入與輸出")
-        lbl_files_sec.setObjectName("sectionHeader")
-        grp_files_layout.addWidget(lbl_files_sec)
-
-        lbl_src = QLabel("來源 CSV 檔案 (*.csv)：")
-        grp_files_layout.addWidget(lbl_src)
-        src_path_layout = QHBoxLayout()
-        self.txt_src_path = QLineEdit()
-        self.txt_src_path.setPlaceholderText("請選擇或輸入來源 CSV 檔案...")
-        self.txt_src_path.textChanged.connect(self.on_source_file_changed)
-        btn_src_browse = QPushButton("瀏覽...")
-        btn_src_browse.setObjectName("btnBrowse")
-        btn_src_browse.clicked.connect(self.browse_source_file)
-        src_path_layout.addWidget(self.txt_src_path)
-        src_path_layout.addWidget(btn_src_browse)
-        grp_files_layout.addLayout(src_path_layout)
-
-        lbl_out = QLabel("輸出 CSV 檔案 (*.csv)：")
-        grp_files_layout.addWidget(lbl_out)
-        out_path_layout = QHBoxLayout()
-        self.txt_out_path = QLineEdit()
-        self.txt_out_path.setPlaceholderText("請選擇或輸入輸出檔案路徑...")
-        btn_out_browse = QPushButton("瀏覽...")
-        btn_out_browse.setObjectName("btnBrowse")
-        btn_out_browse.clicked.connect(self.browse_output_file)
-        out_path_layout.addWidget(self.txt_out_path)
-        out_path_layout.addWidget(btn_out_browse)
-        grp_files_layout.addLayout(out_path_layout)
-
-        # 區間行號與列號設定
-        grid_io_params = QGridLayout()
-        grid_io_params.setSpacing(10)
-        grid_io_params.setContentsMargins(0, 5, 0, 0)
-
-        # 起始行號
-        lbl_start_row = QLabel("起始行號：")
-        self.txt_start_row = QLineEdit("2")  # 預設起始為 2 (排除標頭)
-        self.txt_start_row.setValidator(QIntValidator(1, 9999999))
-        grid_io_params.addWidget(lbl_start_row, 0, 0)
-        grid_io_params.addWidget(self.txt_start_row, 0, 1)
-
-        # 結束行號
-        lbl_end_row = QLabel("結束行號：")
-        self.txt_end_row = QLineEdit()
-        self.txt_end_row.setPlaceholderText("預設至檔尾")
-        self.txt_end_row.setValidator(QIntValidator(1, 9999999))
-        grid_io_params.addWidget(lbl_end_row, 0, 2)
-        grid_io_params.addWidget(self.txt_end_row, 0, 3)
-
-        # 來源列號
-        lbl_src_col = QLabel("來源列號：")
-        self.txt_src_col = QLineEdit("1")
-        self.txt_src_col.setValidator(QIntValidator(1, 9999))
-        grid_io_params.addWidget(lbl_src_col, 1, 0)
-        grid_io_params.addWidget(self.txt_src_col, 1, 1)
-
-        # 目標列號
-        lbl_tgt_col = QLabel("目標列號：")
-        self.txt_tgt_col = QLineEdit("2")
-        self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
-        grid_io_params.addWidget(lbl_tgt_col, 1, 2)
-        grid_io_params.addWidget(self.txt_tgt_col, 1, 3)
-
-        grp_files_layout.addLayout(grid_io_params)
-        left_layout.addWidget(grp_files)
-
-        # 2. 翻譯設定
+        # 翻譯設定
         grp_lang = QFrame()
         grp_lang.setObjectName("grpFrame")
         grp_lang_layout = QVBoxLayout(grp_lang)
@@ -174,30 +102,120 @@ class MainWindow(QMainWindow):
         self.txt_single_interval.setValidator(QIntValidator(1, 5))
 
         grid_lang.addWidget(lbl_src_lang, 0, 0)
-        grid_lang.addWidget(self.cb_src_lang, 0, 1, 1, 3)
+        grid_lang.addWidget(self.cb_src_lang, 0, 1)
         grid_lang.addWidget(lbl_tgt_lang, 1, 0)
-        grid_lang.addWidget(self.cb_tgt_lang, 1, 1, 1, 3)
+        grid_lang.addWidget(self.cb_tgt_lang, 1, 1)
         grid_lang.addWidget(lbl_batch_interval, 2, 0)
         grid_lang.addWidget(self.txt_batch_interval, 2, 1)
-        grid_lang.addWidget(lbl_single_interval, 2, 2)
-        grid_lang.addWidget(self.txt_single_interval, 2, 3)
+        grid_lang.addWidget(lbl_single_interval, 3, 0)
+        grid_lang.addWidget(self.txt_single_interval, 3, 1)
 
         grp_lang_layout.addLayout(grid_lang)
-        left_layout.addWidget(grp_lang)
+        sidebar_layout.addWidget(grp_lang)
+        sidebar_layout.addStretch()
 
-        # 4. 開始與停止控制
-        left_layout.addStretch()
-        
-        self.btn_start = QPushButton("開始翻譯")
-        self.btn_start.setObjectName("btnStart")
-        self.btn_start.clicked.connect(self.start_translation)
-        left_layout.addWidget(self.btn_start)
+        main_layout.addWidget(self.sidebar)
 
-        main_layout.addWidget(left_panel)
-
-        # ----------------- 右側面板：預覽、進度與日誌 -----------------
+        # ----------------- 右側面板：控制主區域與日誌 -----------------
         right_panel = QVBoxLayout()
         right_panel.setSpacing(15)
+
+        # 頂部控制列（切換側邊欄）
+        header_layout = QHBoxLayout()
+        self.btn_toggle_sidebar = QPushButton("◀ 收合設定")
+        self.btn_toggle_sidebar.setObjectName("btnToggleSidebar")
+        self.btn_toggle_sidebar.clicked.connect(self.toggle_sidebar)
+        header_layout.addWidget(self.btn_toggle_sidebar)
+        header_layout.addStretch()
+        right_panel.addLayout(header_layout)
+
+        # 輸入與輸出面板（2列橫向配置）
+        grp_files = QFrame()
+        grp_files.setObjectName("rightFrame")
+        grp_files_layout = QVBoxLayout(grp_files)
+        grp_files_layout.setContentsMargins(15, 12, 15, 12)
+        grp_files_layout.setSpacing(10)
+
+        lbl_files_sec = QLabel("輸入與輸出")
+        lbl_files_sec.setObjectName("sectionHeader")
+        grp_files_layout.addWidget(lbl_files_sec)
+
+        # 第一列：來源與輸出路徑
+        row1_layout = QHBoxLayout()
+        row1_layout.setSpacing(15)
+
+        # 來源
+        src_layout = QHBoxLayout()
+        lbl_src = QLabel("來源 CSV：")
+        self.txt_src_path = QLineEdit()
+        self.txt_src_path.setPlaceholderText("選擇來源 CSV...")
+        self.txt_src_path.textChanged.connect(self.on_source_file_changed)
+        btn_src_browse = QPushButton("瀏覽...")
+        btn_src_browse.setObjectName("btnBrowse")
+        btn_src_browse.clicked.connect(self.browse_source_file)
+        src_layout.addWidget(lbl_src)
+        src_layout.addWidget(self.txt_src_path)
+        src_layout.addWidget(btn_src_browse)
+        row1_layout.addLayout(src_layout)
+
+        # 輸出
+        out_layout = QHBoxLayout()
+        lbl_out = QLabel("輸出 CSV：")
+        self.txt_out_path = QLineEdit()
+        self.txt_out_path.setPlaceholderText("選擇輸出 CSV...")
+        btn_out_browse = QPushButton("瀏覽...")
+        btn_out_browse.setObjectName("btnBrowse")
+        btn_out_browse.clicked.connect(self.browse_output_file)
+        out_layout.addWidget(lbl_out)
+        out_layout.addWidget(self.txt_out_path)
+        out_layout.addWidget(btn_out_browse)
+        row1_layout.addLayout(out_layout)
+
+        grp_files_layout.addLayout(row1_layout)
+
+        # 第二列：起始/結束行號、來源/目標列號與開始翻譯按鈕
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(15)
+
+        lbl_start_row = QLabel("起始行號：")
+        self.txt_start_row = QLineEdit("2")
+        self.txt_start_row.setValidator(QIntValidator(1, 9999999))
+        self.txt_start_row.setMaximumWidth(80)
+
+        lbl_end_row = QLabel("結束行號：")
+        self.txt_end_row = QLineEdit()
+        self.txt_end_row.setPlaceholderText("預設至檔尾")
+        self.txt_end_row.setValidator(QIntValidator(1, 9999999))
+        self.txt_end_row.setMaximumWidth(100)
+
+        lbl_src_col = QLabel("來源列號：")
+        self.txt_src_col = QLineEdit("1")
+        self.txt_src_col.setValidator(QIntValidator(1, 9999))
+        self.txt_src_col.setMaximumWidth(60)
+
+        lbl_tgt_col = QLabel("目標列號：")
+        self.txt_tgt_col = QLineEdit("2")
+        self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
+        self.txt_tgt_col.setMaximumWidth(60)
+
+        self.btn_start = QPushButton("開始翻譯")
+        self.btn_start.setObjectName("btnStart")
+        self.btn_start.setMinimumWidth(150)
+        self.btn_start.clicked.connect(self.start_translation)
+
+        row2_layout.addWidget(lbl_start_row)
+        row2_layout.addWidget(self.txt_start_row)
+        row2_layout.addWidget(lbl_end_row)
+        row2_layout.addWidget(self.txt_end_row)
+        row2_layout.addWidget(lbl_src_col)
+        row2_layout.addWidget(self.txt_src_col)
+        row2_layout.addWidget(lbl_tgt_col)
+        row2_layout.addWidget(self.txt_tgt_col)
+        row2_layout.addStretch()
+        row2_layout.addWidget(self.btn_start)
+
+        grp_files_layout.addLayout(row2_layout)
+        right_panel.addWidget(grp_files)
 
         # A. 來源檔案預覽
         grp_preview = QFrame()
@@ -221,7 +239,7 @@ class MainWindow(QMainWindow):
         self.lbl_preview_status.setObjectName("previewStatus")
         grp_preview_layout.addWidget(self.lbl_preview_status)
 
-        right_panel.addWidget(grp_preview, stretch=4)
+        right_panel.addWidget(grp_preview, stretch=3)
 
         # B. 執行狀態與日誌
         grp_status = QFrame()
@@ -257,7 +275,7 @@ class MainWindow(QMainWindow):
         self.txt_log.setReadOnly(True)
         grp_status_layout.addWidget(self.txt_log)
 
-        right_panel.addWidget(grp_status, stretch=5)
+        right_panel.addWidget(grp_status, stretch=4)
 
         main_layout.addLayout(right_panel, stretch=1)
 
@@ -369,6 +387,15 @@ class MainWindow(QMainWindow):
             padding: 7px 12px;
         }
         QPushButton#btnBrowse:hover {
+            background-color: #414868;
+        }
+
+        QPushButton#btnToggleSidebar {
+            background-color: #3b4261;
+            font-size: 12px;
+            padding: 5px 12px;
+        }
+        QPushButton#btnToggleSidebar:hover {
             background-color: #414868;
         }
 
@@ -693,6 +720,14 @@ class MainWindow(QMainWindow):
             self.btn_start.setEnabled(True)
             self.btn_start.setText("開始翻譯")
             self.btn_start.setStyleSheet("") # 恢復 QSS 原生樣式
+
+    def toggle_sidebar(self):
+        if self.sidebar.isVisible():
+            self.sidebar.setVisible(False)
+            self.btn_toggle_sidebar.setText("▶ 展開設定")
+        else:
+            self.sidebar.setVisible(True)
+            self.btn_toggle_sidebar.setText("◀ 收合設定")
 
     def restore_settings(self):
         if not os.path.exists(self.settings_path):
