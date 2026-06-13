@@ -8,8 +8,8 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QProgressBar, QTextEdit,
     QFileDialog, QMessageBox, QFrame, QHeaderView
 )
-from PyQt6.QtCore import Qt, QTimer, QSettings
-from PyQt6.QtGui import QIntValidator, QFont
+from PyQt6.QtCore import Qt, QTimer, QSettings, QSize
+from PyQt6.QtGui import QIntValidator, QFont, QIcon
 
 from utils import detect_encoding, detect_delimiter
 from translation_worker import CSVTranslatorWorker
@@ -43,41 +43,68 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
 
-        # ----------------- 左側側邊欄：翻譯設定 -----------------
-        self.sidebar = QFrame()
-        self.sidebar.setObjectName("leftPanel")
-        self.sidebar.setFrameShape(QFrame.Shape.StyledPanel)
-        self.sidebar.setFixedWidth(280)  # 縮小側邊欄寬度以節省空間
+        # ----------------- 左側大容器：合併活動列與設定欄 -----------------
+        self.left_container = QFrame()
+        self.left_container.setObjectName("leftContainer")
+        self.left_container.setFixedWidth(341)  # 預設展開：60 + 1 + 280
+        
+        left_layout = QHBoxLayout(self.left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+
+        # 1. 活動列 (QWidget)
+        self.activity_bar = QWidget()
+        self.activity_bar.setObjectName("activityBarWidget")
+        self.activity_bar.setFixedWidth(60)
+        
+        activity_layout = QVBoxLayout(self.activity_bar)
+        activity_layout.setContentsMargins(10, 15, 10, 15)
+        activity_layout.setSpacing(10)
+        activity_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "translate.png")
+        self.btn_translate = QPushButton()
+        self.btn_translate.setObjectName("btnActivityTranslate")
+        self.btn_translate.setFixedSize(40, 40)
+        self.btn_translate.setIcon(QIcon(icon_path))
+        self.btn_translate.setIconSize(QSize(40, 40))
+        self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_translate.clicked.connect(self.toggle_sidebar)
+        self.btn_translate.setProperty("active", True)
+        
+        activity_layout.addWidget(self.btn_translate)
+        activity_layout.addStretch()
+        
+        left_layout.addWidget(self.activity_bar)
+
+        # 2. 垂直分割線 (QWidget)
+        self.v_line = QWidget()
+        self.v_line.setObjectName("sidebarSeparator")
+        self.v_line.setFixedWidth(1)
+        left_layout.addWidget(self.v_line)
+
+        # 3. 側邊欄：翻譯設定 (QWidget)
+        self.sidebar = QWidget()
+        self.sidebar.setObjectName("leftSidebarWidget")
+        self.sidebar.setFixedWidth(280)
         
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(15, 15, 15, 15)
         sidebar_layout.setSpacing(15)
-
-        # 標題
-        lbl_title = QLabel("CsvTranslator")
-        lbl_title.setObjectName("appTitle")
-        lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sidebar_layout.addWidget(lbl_title)
 
         # 翻譯設定面板
         self.translation_panel = TranslationPanel()
         sidebar_layout.addWidget(self.translation_panel)
         sidebar_layout.addStretch()
 
-        main_layout.addWidget(self.sidebar)
+        left_layout.addWidget(self.sidebar)
+        
+        main_layout.addWidget(self.left_container)
 
         # ----------------- 右側面板：控制主區域與日誌 -----------------
         right_panel = QVBoxLayout()
         right_panel.setSpacing(15)
 
-        # 頂部控制列（切換側邊欄）
-        header_layout = QHBoxLayout()
-        self.btn_toggle_sidebar = QPushButton("◀ 收合設定")
-        self.btn_toggle_sidebar.setObjectName("btnToggleSidebar")
-        self.btn_toggle_sidebar.clicked.connect(self.toggle_sidebar)
-        header_layout.addWidget(self.btn_toggle_sidebar)
-        header_layout.addStretch()
-        right_panel.addLayout(header_layout)
 
         # 輸入與輸出面板（2列橫向配置）
         grp_files = QFrame()
@@ -86,9 +113,26 @@ class MainWindow(QMainWindow):
         grp_files_layout.setContentsMargins(15, 12, 15, 12)
         grp_files_layout.setSpacing(10)
 
+        # 標題與段落標頭列（對齊下緣）
+        title_row_widget = QWidget()
+        title_row_widget.setObjectName("titleRowWidget")
+        title_layout = QHBoxLayout(title_row_widget)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(10)
+        
         lbl_files_sec = QLabel("輸入與輸出")
         lbl_files_sec.setObjectName("sectionHeader")
-        grp_files_layout.addWidget(lbl_files_sec)
+        title_layout.addWidget(lbl_files_sec, alignment=Qt.AlignmentFlag.AlignBottom)
+        
+        title_layout.addStretch()
+        
+        lbl_title = QLabel("CsvTranslator")
+        lbl_title.setObjectName("appTitle")
+        title_layout.addWidget(lbl_title, alignment=Qt.AlignmentFlag.AlignBottom)
+        
+        title_layout.addStretch()
+        
+        grp_files_layout.addWidget(title_row_widget)
 
         # 第一列：來源與輸出路徑
         row1_layout = QHBoxLayout()
@@ -243,10 +287,13 @@ class MainWindow(QMainWindow):
         }
 
         /* 面板樣式 */
-        QFrame#leftPanel {
+        QFrame#leftContainer {
             background-color: #20212e;
             border: 1px solid #2f3047;
             border-radius: 12px;
+        }
+        QWidget#sidebarSeparator {
+            background-color: #2f3047;
         }
         QFrame#grpFrame {
             background-color: #242538;
@@ -260,26 +307,39 @@ class MainWindow(QMainWindow):
             border-radius: 12px;
         }
 
+        /* 活動列按鈕 */
+        QPushButton#btnActivityTranslate {
+            background-color: transparent;
+            border: none;
+            border-radius: 8px;
+            padding: 0px;
+        }
+        QPushButton#btnActivityTranslate:hover {
+            background-color: #2e3047;
+        }
+        QPushButton#btnActivityTranslate[active="true"] {
+            background-color: #3b4261;
+        }
+
         /* 標籤字型與文字樣式 */
         QLabel {
             color: #a9b1d6;
             font-family: "Microsoft JhengHei", "Segoe UI", sans-serif;
             font-size: 13px;
         }
+        QWidget#titleRowWidget {
+            margin-bottom: 5px;
+        }
         QLabel#appTitle {
             font-size: 22px;
             font-weight: bold;
             color: #7aa2f7;
-            margin-bottom: 10px;
             font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
         }
         QLabel#sectionHeader {
             font-size: 14px;
             font-weight: bold;
             color: #7aa2f7;
-            border-bottom: 1px solid #2f3047;
-            padding-bottom: 5px;
-            margin-bottom: 5px;
         }
         QLabel#previewStatus {
             font-size: 11px;
@@ -340,14 +400,7 @@ class MainWindow(QMainWindow):
             background-color: #414868;
         }
 
-        QPushButton#btnToggleSidebar {
-            background-color: #3b4261;
-            font-size: 12px;
-            padding: 5px 12px;
-        }
-        QPushButton#btnToggleSidebar:hover {
-            background-color: #414868;
-        }
+
 
         /* 表格樣式 */
         QTableWidget {
@@ -671,10 +724,15 @@ class MainWindow(QMainWindow):
     def toggle_sidebar(self):
         if self.sidebar.isVisible():
             self.sidebar.setVisible(False)
-            self.btn_toggle_sidebar.setText("▶ 展開設定")
+            self.v_line.setVisible(False)
+            self.left_container.setFixedWidth(60)
+            self.btn_translate.setProperty("active", False)
         else:
             self.sidebar.setVisible(True)
-            self.btn_toggle_sidebar.setText("◀ 收合設定")
+            self.v_line.setVisible(True)
+            self.left_container.setFixedWidth(341)
+            self.btn_translate.setProperty("active", True)
+        self.btn_translate.style().polish(self.btn_translate)
 
     def restore_settings(self):
         if not os.path.exists(self.settings_path):
