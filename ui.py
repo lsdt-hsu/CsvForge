@@ -218,9 +218,24 @@ class MainWindow(QMainWindow):
         grp_preview_layout.setContentsMargins(15, 15, 15, 15)
         grp_preview_layout.setSpacing(8)
 
+        # 預覽標頭列（包含狀態訊息）
+        preview_header_widget = QWidget()
+        preview_header_layout = QHBoxLayout(preview_header_widget)
+        preview_header_layout.setContentsMargins(0, 0, 0, 0)
+        preview_header_layout.setSpacing(10)
+
         lbl_preview_title = QLabel("來源檔案預覽 (前 10 行)")
         lbl_preview_title.setObjectName("sectionHeader")
-        grp_preview_layout.addWidget(lbl_preview_title)
+        preview_header_layout.addWidget(lbl_preview_title)
+
+        preview_header_layout.addStretch()
+
+        self.lbl_preview_status = QLabel("尚未選擇來源 CSV 檔案")
+        self.lbl_preview_status.setObjectName("previewStatus")
+        self.lbl_preview_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        preview_header_layout.addWidget(self.lbl_preview_status)
+
+        grp_preview_layout.addWidget(preview_header_widget)
 
         self.table_preview = QTableWidget()
         self.table_preview.setRowCount(0)
@@ -228,10 +243,6 @@ class MainWindow(QMainWindow):
         self.table_preview.horizontalHeader().setDefaultSectionSize(110)
         self.table_preview.verticalHeader().setDefaultSectionSize(28)
         grp_preview_layout.addWidget(self.table_preview)
-
-        self.lbl_preview_status = QLabel("尚未選擇來源 CSV 檔案")
-        self.lbl_preview_status.setObjectName("previewStatus")
-        grp_preview_layout.addWidget(self.lbl_preview_status)
 
         right_panel.addWidget(grp_preview, stretch=3)
 
@@ -242,26 +253,32 @@ class MainWindow(QMainWindow):
         grp_status_layout.setContentsMargins(15, 15, 15, 15)
         grp_status_layout.setSpacing(8)
 
+        # 狀態與日誌標頭列
+        status_header_widget = QWidget()
+        status_header_layout = QHBoxLayout(status_header_widget)
+        status_header_layout.setContentsMargins(0, 0, 0, 0)
+        status_header_layout.setSpacing(15)
+
         lbl_log_title = QLabel("執行狀態與日誌")
         lbl_log_title.setObjectName("sectionHeader")
-        grp_status_layout.addWidget(lbl_log_title)
+        status_header_layout.addWidget(lbl_log_title)
 
-        # 進度、計時與日誌文字顯示
-        status_info_layout = QHBoxLayout()
-        self.lbl_progress_info = QLabel("進度：0 / 0 筆 (0%)")
-        self.lbl_time_info = QLabel("已用時間：00:00:00")
-        self.lbl_task_status = QLabel("狀態：就緒")
-        self.lbl_task_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        
-        status_info_layout.addWidget(self.lbl_progress_info)
-        status_info_layout.addWidget(self.lbl_time_info)
-        status_info_layout.addWidget(self.lbl_task_status)
-        grp_status_layout.addLayout(status_info_layout)
+        status_header_layout.addStretch()
 
-        # 進度、計時與日誌文字顯示
+        # 狀態訊息：僅顯示已用時間與狀態
+        self.elapsed_time_str = "00:00:00"
+        self.task_status_str = "就緒"
+        self.lbl_status_summary = QLabel("已用時間：00:00:00 | 狀態：就緒")
+        status_header_layout.addWidget(self.lbl_status_summary)
+
+        # 進度條：顯示 n/m (筆數)
         self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedWidth(150)
         self.progress_bar.setValue(0)
-        grp_status_layout.addWidget(self.progress_bar)
+        self.progress_bar.setFormat("0/0")
+        status_header_layout.addWidget(self.progress_bar)
+
+        grp_status_layout.addWidget(status_header_widget)
 
         # 結束行號
         self.txt_log = QTextEdit()
@@ -579,7 +596,8 @@ class MainWindow(QMainWindow):
             if self.worker:
                 self.btn_start.setText("正在停止...")
                 self.btn_start.setEnabled(False)
-                self.lbl_task_status.setText("狀態：正在中斷工作...")
+                self.task_status_str = "正在中斷工作..."
+                self.update_status_summary()
                 self.worker.cancel()
             return
 
@@ -631,9 +649,12 @@ class MainWindow(QMainWindow):
 
         # 清空舊 UI 顯示狀態
         self.txt_log.clear()
+        self.progress_bar.setRange(0, 0)
         self.progress_bar.setValue(0)
-        self.lbl_progress_info.setText("進度：0 / 0 筆 (0%)")
-        self.lbl_task_status.setText("狀態：翻譯中...")
+        self.progress_bar.setFormat("0/0")
+        self.elapsed_time_str = "00:00:00"
+        self.task_status_str = "翻譯中..."
+        self.update_status_summary()
         
         # 記錄開始時間
         self.start_time = time.time()
@@ -659,37 +680,44 @@ class MainWindow(QMainWindow):
             single_interval=single_interval
         )
         self.worker.progress_updated.connect(self.on_worker_progress)
-        self.worker.status_updated.connect(self.lbl_task_status.setText)
         self.worker.log_emitted.connect(self.append_log)
         self.worker.finished_successfully.connect(self.on_worker_success)
         self.worker.finished_with_error.connect(self.on_worker_error)
         
         self.worker.start()
 
+    def update_status_summary(self):
+        self.lbl_status_summary.setText(f"已用時間：{self.elapsed_time_str} | 狀態：{self.task_status_str}")
+
     def on_worker_progress(self, current, total):
-        self.progress_bar.setValue(int(current / total * 100))
-        self.lbl_progress_info.setText(f"進度：{current} / {total} 筆 ({int(current/total*100)}%)")
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(current)
+        self.progress_bar.setFormat(f"{current}/{total}")
 
     def update_elapsed_time(self):
         elapsed = int(time.time() - self.start_time)
         hrs = elapsed // 3600
         mins = (elapsed % 3600) // 60
         secs = elapsed % 60
-        self.lbl_time_info.setText(f"已用時間：{hrs:02d}:{mins:02d}:{secs:02d}")
+        self.elapsed_time_str = f"{hrs:02d}:{mins:02d}:{secs:02d}"
+        self.update_status_summary()
 
     def on_worker_success(self, out_path):
         self.timer.stop()
         self.set_ui_enabled(True)
         if self.worker and self.worker._is_cancelled:
-            self.lbl_task_status.setText("狀態：已取消")
+            self.task_status_str = "已取消"
+            self.update_status_summary()
             QMessageBox.information(self, "中斷", f"已取消翻譯！\n檔案已儲存至：\n{out_path}")
         else:
-            self.lbl_task_status.setText("狀態：完成")
+            self.task_status_str = "完成"
+            self.update_status_summary()
             QMessageBox.information(self, "成功", f"翻譯完成！\n檔案已儲存至：\n{out_path}")
 
     def on_worker_error(self, err_msg):
         self.timer.stop()
-        self.lbl_task_status.setText("狀態：錯誤")
+        self.task_status_str = "錯誤"
+        self.update_status_summary()
         self.set_ui_enabled(True)
         QMessageBox.critical(self, "翻譯中斷", f"翻譯過程發生錯誤：\n{err_msg}")
 
