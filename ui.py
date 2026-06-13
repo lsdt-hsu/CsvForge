@@ -36,6 +36,19 @@ INPUT_START_ROW_MAX_WIDTH = 80
 INPUT_END_ROW_MAX_WIDTH = 100
 INPUT_COL_MAX_WIDTH = 60
 
+class SettingsKey:
+    GEOMETRY = "geometry"
+    IS_MAXIMIZED = "isMaximized"
+    DEFAULT_DIR = "default_dir"
+    START_ROW = "start_row"
+    END_ROW = "end_row"
+    SRC_COL = "src_col"
+    TGT_COL = "tgt_col"
+    BATCH_INTERVAL = "batch_interval"
+    SINGLE_INTERVAL = "single_interval"
+    SRC_LANG = "src_lang"
+    TGT_LANG = "tgt_lang"
+
 
 # 恢復視窗幾何狀態
 class MainWindow(QMainWindow):
@@ -622,6 +635,49 @@ class MainWindow(QMainWindow):
             end_cursor.movePosition(end_cursor.MoveOperation.PreviousBlock, end_cursor.MoveMode.KeepAnchor)
             end_cursor.removeSelectedText()
 
+    def _validate_inputs(self):
+        # 檢查輸入欄位範圍
+        src_path = self.txt_src_path.text().strip()
+        out_path = self.txt_out_path.text().strip()
+        
+        if not src_path or not os.path.exists(src_path):
+            QMessageBox.warning(self, "輸入錯誤", "請選擇正確的來源 CSV 檔案路徑")
+            return None
+        if not out_path:
+            QMessageBox.warning(self, "輸入錯誤", "請指定輸出檔案路徑")
+            return None
+        
+        # 讀取並驗證行數欄位
+        try:
+            start_row = int(self.txt_start_row.text())
+            if start_row < 1:
+                raise ValueError()
+        except ValueError:
+            QMessageBox.warning(self, "輸入錯誤", "起始行號必須是大於或等於 1 的正整數")
+            return None
+
+        end_row = None
+        if self.txt_end_row.text().strip():
+            try:
+                end_row = int(self.txt_end_row.text())
+                if end_row < start_row:
+                    QMessageBox.warning(self, "輸入錯誤", "結束行號不能小於起始行號")
+                    return None
+            except ValueError:
+                QMessageBox.warning(self, "輸入錯誤", "結束行號必須是正整數")
+                return None
+
+        try:
+            src_col = int(self.txt_src_col.text())
+            tgt_col = int(self.txt_tgt_col.text())
+            if src_col < 1 or tgt_col < 1:
+                raise ValueError()
+        except ValueError:
+            QMessageBox.warning(self, "輸入錯誤", "來源列號與目標列號必須是大於或等於 1 的正整數")
+            return None
+
+        return (src_path, out_path, start_row, end_row, src_col, tgt_col)
+
     def start_translation(self):
         # 如果正在翻譯，按按鈕則觸發 STOP 中斷
         if self.btn_start.text() == "STOP":
@@ -633,45 +689,11 @@ class MainWindow(QMainWindow):
                 self.worker.cancel()
             return
 
-        # 檢查輸入欄位範圍
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
-        
-        if not src_path or not os.path.exists(src_path):
-            QMessageBox.warning(self, "輸入錯誤", "請選擇正確的來源 CSV 檔案路徑")
+        validated = self._validate_inputs()
+        if validated is None:
             return
-        if not out_path:
-            QMessageBox.warning(self, "輸入錯誤", "請指定輸出檔案路徑")
-            return
-        
-        # 讀取並驗證行數欄位
-        try:
-            start_row = int(self.txt_start_row.text())
-            if start_row < 1:
-                raise ValueError()
-        except ValueError:
-            QMessageBox.warning(self, "輸入錯誤", "起始行號必須是大於或等於 1 的正整數")
-            return
-
-        end_row = None
-        if self.txt_end_row.text().strip():
-            try:
-                end_row = int(self.txt_end_row.text())
-                if end_row < start_row:
-                    QMessageBox.warning(self, "輸入錯誤", "結束行號不能小於起始行號")
-                    return
-            except ValueError:
-                QMessageBox.warning(self, "輸入錯誤", "結束行號必須是正整數")
-                return
-
-        try:
-            src_col = int(self.txt_src_col.text())
-            tgt_col = int(self.txt_tgt_col.text())
-            if src_col < 1 or tgt_col < 1:
-                raise ValueError()
-        except ValueError:
-            QMessageBox.warning(self, "輸入錯誤", "來源列號與目標列號必須是大於或等於 1 的正整數")
-            return
+            
+        src_path, out_path, start_row, end_row, src_col, tgt_col = validated
 
         src_lang = self.translation_panel.get_src_lang()
         tgt_lang = self.translation_panel.get_tgt_lang()
@@ -786,39 +808,39 @@ class MainWindow(QMainWindow):
         try:
             settings = QSettings(self.settings_path, QSettings.Format.IniFormat)
             
-            geom = settings.value("geometry")
+            geom = settings.value(SettingsKey.GEOMETRY)
             if geom is not None:
                 self.restoreGeometry(geom)
             
             # 恢復視窗最大化狀態
-            is_max = settings.value("isMaximized")
+            is_max = settings.value(SettingsKey.IS_MAXIMIZED)
             if is_max == "true" or is_max is True:
                 self.showMaximized()
             
             # 讀取工作資料夾路徑
-            self.default_dir = settings.value("default_dir", os.path.expanduser("~"))
+            self.default_dir = settings.value(SettingsKey.DEFAULT_DIR, os.path.expanduser("~"))
             
             # 恢復使用者輸入欄位設定
-            self.txt_start_row.setText(settings.value("start_row", "2"))
-            self.txt_end_row.setText(settings.value("end_row", ""))
-            self.txt_src_col.setText(settings.value("src_col", "1"))
-            self.txt_tgt_col.setText(settings.value("tgt_col", "2"))
+            self.txt_start_row.setText(settings.value(SettingsKey.START_ROW, "2"))
+            self.txt_end_row.setText(settings.value(SettingsKey.END_ROW, ""))
+            self.txt_src_col.setText(settings.value(SettingsKey.SRC_COL, "1"))
+            self.txt_tgt_col.setText(settings.value(SettingsKey.TGT_COL, "2"))
 
             # 讀取批次與單筆間隔時間並驗證其合法性
-            batch_val = settings.value("batch_interval", "10")
+            batch_val = settings.value(SettingsKey.BATCH_INTERVAL, "10")
             if not batch_val.isdigit() or not (10 <= int(batch_val) <= 30):
                 batch_val = "10"
             self.translation_panel.set_batch_interval(batch_val)
 
-            single_val = settings.value("single_interval", "1")
+            single_val = settings.value(SettingsKey.SINGLE_INTERVAL, "1")
             if not single_val.isdigit() or not (1 <= int(single_val) <= 5):
                 single_val = "1"
             self.translation_panel.set_single_interval(single_val)
             
-            src_lang = settings.value("src_lang", "en")
+            src_lang = settings.value(SettingsKey.SRC_LANG, "en")
             self.translation_panel.set_src_lang(src_lang)
                 
-            tgt_lang = settings.value("tgt_lang", "zh-TW")
+            tgt_lang = settings.value(SettingsKey.TGT_LANG, "zh-TW")
             self.translation_panel.set_tgt_lang(tgt_lang)
         except Exception:
             pass
@@ -826,17 +848,17 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         try:
             settings = QSettings(self.settings_path, QSettings.Format.IniFormat)
-            settings.setValue("geometry", self.saveGeometry())
-            settings.setValue("isMaximized", self.isMaximized())
-            settings.setValue("default_dir", self.default_dir)
-            settings.setValue("start_row", self.txt_start_row.text())
-            settings.setValue("end_row", self.txt_end_row.text())
-            settings.setValue("src_col", self.txt_src_col.text())
-            settings.setValue("tgt_col", self.txt_tgt_col.text())
-            settings.setValue("batch_interval", str(self.translation_panel.get_batch_interval()))
-            settings.setValue("single_interval", str(self.translation_panel.get_single_interval()))
-            settings.setValue("src_lang", self.translation_panel.get_src_lang())
-            settings.setValue("tgt_lang", self.translation_panel.get_tgt_lang())
+            settings.setValue(SettingsKey.GEOMETRY, self.saveGeometry())
+            settings.setValue(SettingsKey.IS_MAXIMIZED, self.isMaximized())
+            settings.setValue(SettingsKey.DEFAULT_DIR, self.default_dir)
+            settings.setValue(SettingsKey.START_ROW, self.txt_start_row.text())
+            settings.setValue(SettingsKey.END_ROW, self.txt_end_row.text())
+            settings.setValue(SettingsKey.SRC_COL, self.txt_src_col.text())
+            settings.setValue(SettingsKey.TGT_COL, self.txt_tgt_col.text())
+            settings.setValue(SettingsKey.BATCH_INTERVAL, str(self.translation_panel.get_batch_interval()))
+            settings.setValue(SettingsKey.SINGLE_INTERVAL, str(self.translation_panel.get_single_interval()))
+            settings.setValue(SettingsKey.SRC_LANG, self.translation_panel.get_src_lang())
+            settings.setValue(SettingsKey.TGT_LANG, self.translation_panel.get_tgt_lang())
         except Exception:
             pass
         super().closeEvent(event)
