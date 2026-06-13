@@ -513,7 +513,7 @@ class MainWindow(QMainWindow):
             height: 18px;
         }
         QProgressBar::chunk {
-            background-color: #9ece6a;
+            background-color: #0000ff;
             border-radius: 5px;
         }
 
