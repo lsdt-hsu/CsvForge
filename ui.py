@@ -626,22 +626,8 @@ class MainWindow(QMainWindow):
         src_lang = self.translation_panel.get_src_lang()
         tgt_lang = self.translation_panel.get_tgt_lang()
 
-        # 驗證批次間隔與單筆間隔
-        try:
-            batch_interval = int(self.translation_panel.txt_batch_interval.text())
-            if not (10 <= batch_interval <= 30):
-                raise ValueError()
-        except ValueError:
-            QMessageBox.warning(self, "輸入錯誤", "批次間隔時間必須在 10 至 30 秒之間")
-            return
-
-        try:
-            single_interval = int(self.translation_panel.txt_single_interval.text())
-            if not (1 <= single_interval <= 5):
-                raise ValueError()
-        except ValueError:
-            QMessageBox.warning(self, "輸入錯誤", "單筆間隔時間必須在 1 至 5 秒之間")
-            return
+        batch_interval = self.translation_panel.get_batch_interval()
+        single_interval = self.translation_panel.get_single_interval()
 
         # 清空舊 UI 顯示狀態
         self.txt_log.clear()
@@ -787,8 +773,8 @@ class MainWindow(QMainWindow):
             settings.setValue("end_row", self.txt_end_row.text())
             settings.setValue("src_col", self.txt_src_col.text())
             settings.setValue("tgt_col", self.txt_tgt_col.text())
-            settings.setValue("batch_interval", self.translation_panel.txt_batch_interval.text())
-            settings.setValue("single_interval", self.translation_panel.txt_single_interval.text())
+            settings.setValue("batch_interval", str(self.translation_panel.get_batch_interval()))
+            settings.setValue("single_interval", str(self.translation_panel.get_single_interval()))
             settings.setValue("src_lang", self.translation_panel.get_src_lang())
             settings.setValue("tgt_lang", self.translation_panel.get_tgt_lang())
         except Exception:

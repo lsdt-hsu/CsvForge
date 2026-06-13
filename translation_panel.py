@@ -1,5 +1,5 @@
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QGridLayout, QComboBox, QLineEdit
-from PyQt6.QtGui import QIntValidator
+from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider
+from PyQt6.QtCore import Qt
 
 class TranslationPanel(QFrame):
     def __init__(self, parent=None):
@@ -39,25 +39,35 @@ class TranslationPanel(QFrame):
             self.cb_tgt_lang.addItem(name, code)
         self.cb_tgt_lang.setCurrentIndex(1) # 預設繁中
 
-        # 批次與單筆間隔時間
-        lbl_batch_interval = QLabel("批次間隔(秒)：")
-        self.txt_batch_interval = QLineEdit("10")
-        self.txt_batch_interval.setValidator(QIntValidator(10, 30))
+        # 批次與單筆間隔時間 (QSlider 改版)
+        self.lbl_batch_title = QLabel("批次間隔：10 秒")
+        self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
+        self.slider_batch_interval.setRange(10, 30)
+        self.slider_batch_interval.setValue(10)
+        self.slider_batch_interval.valueChanged.connect(self.update_batch_label)
 
-        lbl_single_interval = QLabel("單筆間隔(秒)：")
-        self.txt_single_interval = QLineEdit("1")
-        self.txt_single_interval.setValidator(QIntValidator(1, 5))
+        self.lbl_single_title = QLabel("單筆間隔：1 秒")
+        self.slider_single_interval = QSlider(Qt.Orientation.Horizontal)
+        self.slider_single_interval.setRange(1, 5)
+        self.slider_single_interval.setValue(1)
+        self.slider_single_interval.valueChanged.connect(self.update_single_label)
 
         grid.addWidget(lbl_src_lang, 0, 0)
         grid.addWidget(self.cb_src_lang, 0, 1)
         grid.addWidget(lbl_tgt_lang, 1, 0)
         grid.addWidget(self.cb_tgt_lang, 1, 1)
-        grid.addWidget(lbl_batch_interval, 2, 0)
-        grid.addWidget(self.txt_batch_interval, 2, 1)
-        grid.addWidget(lbl_single_interval, 3, 0)
-        grid.addWidget(self.txt_single_interval, 3, 1)
+        grid.addWidget(self.lbl_batch_title, 2, 0)
+        grid.addWidget(self.slider_batch_interval, 2, 1)
+        grid.addWidget(self.lbl_single_title, 3, 0)
+        grid.addWidget(self.slider_single_interval, 3, 1)
 
         layout.addLayout(grid)
+
+    def update_batch_label(self, val):
+        self.lbl_batch_title.setText(f"批次間隔：{val} 秒")
+
+    def update_single_label(self, val):
+        self.lbl_single_title.setText(f"單筆間隔：{val} 秒")
 
     def get_src_lang(self):
         return self.cb_src_lang.currentData()
@@ -66,16 +76,10 @@ class TranslationPanel(QFrame):
         return self.cb_tgt_lang.currentData()
 
     def get_batch_interval(self):
-        try:
-            return int(self.txt_batch_interval.text())
-        except ValueError:
-            return 10
+        return self.slider_batch_interval.value()
 
     def get_single_interval(self):
-        try:
-            return int(self.txt_single_interval.text())
-        except ValueError:
-            return 1
+        return self.slider_single_interval.value()
 
     def set_src_lang(self, code):
         idx = self.cb_src_lang.findData(code)
@@ -88,13 +92,19 @@ class TranslationPanel(QFrame):
             self.cb_tgt_lang.setCurrentIndex(idx)
 
     def set_batch_interval(self, val):
-        self.txt_batch_interval.setText(str(val))
+        try:
+            self.slider_batch_interval.setValue(int(val))
+        except ValueError:
+            self.slider_batch_interval.setValue(10)
 
     def set_single_interval(self, val):
-        self.txt_single_interval.setText(str(val))
+        try:
+            self.slider_single_interval.setValue(int(val))
+        except ValueError:
+            self.slider_single_interval.setValue(1)
 
     def set_enabled(self, enabled):
         self.cb_src_lang.setEnabled(enabled)
         self.cb_tgt_lang.setEnabled(enabled)
-        self.txt_batch_interval.setEnabled(enabled)
-        self.txt_single_interval.setEnabled(enabled)
+        self.slider_batch_interval.setEnabled(enabled)
+        self.slider_single_interval.setEnabled(enabled)
