@@ -12,7 +12,8 @@ from PyQt6.QtCore import Qt, QTimer, QSettings
 from PyQt6.QtGui import QIntValidator, QFont
 
 from utils import detect_encoding, detect_delimiter
-from worker import CSVTranslatorWorker
+from translation_worker import CSVTranslatorWorker
+from translation_panel import TranslationPanel
 
 # 恢復視窗幾何狀態
 class MainWindow(QMainWindow):
@@ -58,60 +59,9 @@ class MainWindow(QMainWindow):
         lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sidebar_layout.addWidget(lbl_title)
 
-        # 翻譯設定
-        grp_lang = QFrame()
-        grp_lang.setObjectName("grpFrame")
-        grp_lang_layout = QVBoxLayout(grp_lang)
-        grp_lang_layout.setSpacing(8)
-
-        lbl_lang_sec = QLabel("翻譯設定")
-        lbl_lang_sec.setObjectName("sectionHeader")
-        grp_lang_layout.addWidget(lbl_lang_sec)
-
-        grid_lang = QGridLayout()
-        grid_lang.setSpacing(10)
-
-        # 支援語言清單：en, zh-TW, zh-CN, ja, ko
-        self.langs = [
-            ("en", "en (英文)"),
-            ("zh-TW", "zh-TW (繁中)"),
-            ("zh-CN", "zh-CN (簡中)"),
-            ("ja", "ja (日文)"),
-            ("ko", "ko (韓文)"),
-        ]
-
-        lbl_src_lang = QLabel("來源語言：")
-        self.cb_src_lang = QComboBox()
-        for code, name in self.langs:
-            self.cb_src_lang.addItem(name, code)
-        self.cb_src_lang.setCurrentIndex(0) # 預設英文
-
-        lbl_tgt_lang = QLabel("目標語言：")
-        self.cb_tgt_lang = QComboBox()
-        for code, name in self.langs:
-            self.cb_tgt_lang.addItem(name, code)
-        self.cb_tgt_lang.setCurrentIndex(1) # 預設繁中
-
-        # 批次與單筆間隔時間
-        lbl_batch_interval = QLabel("批次間隔(秒)：")
-        self.txt_batch_interval = QLineEdit("10")
-        self.txt_batch_interval.setValidator(QIntValidator(10, 30))
-
-        lbl_single_interval = QLabel("單筆間隔(秒)：")
-        self.txt_single_interval = QLineEdit("1")
-        self.txt_single_interval.setValidator(QIntValidator(1, 5))
-
-        grid_lang.addWidget(lbl_src_lang, 0, 0)
-        grid_lang.addWidget(self.cb_src_lang, 0, 1)
-        grid_lang.addWidget(lbl_tgt_lang, 1, 0)
-        grid_lang.addWidget(self.cb_tgt_lang, 1, 1)
-        grid_lang.addWidget(lbl_batch_interval, 2, 0)
-        grid_lang.addWidget(self.txt_batch_interval, 2, 1)
-        grid_lang.addWidget(lbl_single_interval, 3, 0)
-        grid_lang.addWidget(self.txt_single_interval, 3, 1)
-
-        grp_lang_layout.addLayout(grid_lang)
-        sidebar_layout.addWidget(grp_lang)
+        # 翻譯設定面板
+        self.translation_panel = TranslationPanel()
+        sidebar_layout.addWidget(self.translation_panel)
         sidebar_layout.addStretch()
 
         main_layout.addWidget(self.sidebar)
@@ -198,7 +148,7 @@ class MainWindow(QMainWindow):
         self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
         self.txt_tgt_col.setMaximumWidth(60)
 
-        self.btn_start = QPushButton("開始翻譯")
+        self.btn_start = QPushButton("開始")
         self.btn_start.setObjectName("btnStart")
         self.btn_start.setMinimumWidth(150)
         self.btn_start.clicked.connect(self.start_translation)
@@ -620,12 +570,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "輸入錯誤", "來源列號與目標列號必須是大於或等於 1 的正整數")
             return
 
-        src_lang = self.cb_src_lang.currentData()
-        tgt_lang = self.cb_tgt_lang.currentData()
+        src_lang = self.translation_panel.get_src_lang()
+        tgt_lang = self.translation_panel.get_tgt_lang()
 
         # 驗證批次間隔與單筆間隔
         try:
-            batch_interval = int(self.txt_batch_interval.text())
+            batch_interval = int(self.translation_panel.txt_batch_interval.text())
             if not (10 <= batch_interval <= 30):
                 raise ValueError()
         except ValueError:
@@ -633,7 +583,7 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            single_interval = int(self.txt_single_interval.text())
+            single_interval = int(self.translation_panel.txt_single_interval.text())
             if not (1 <= single_interval <= 5):
                 raise ValueError()
         except ValueError:
@@ -711,14 +661,11 @@ class MainWindow(QMainWindow):
         self.txt_end_row.setEnabled(enabled)
         self.txt_src_col.setEnabled(enabled)
         self.txt_tgt_col.setEnabled(enabled)
-        self.txt_batch_interval.setEnabled(enabled)
-        self.txt_single_interval.setEnabled(enabled)
-        self.cb_src_lang.setEnabled(enabled)
-        self.cb_tgt_lang.setEnabled(enabled)
+        self.translation_panel.set_enabled(enabled)
         
         if enabled:
             self.btn_start.setEnabled(True)
-            self.btn_start.setText("開始翻譯")
+            self.btn_start.setText("開始")
             self.btn_start.setStyleSheet("") # 恢復 QSS 原生樣式
 
     def toggle_sidebar(self):
@@ -757,22 +704,18 @@ class MainWindow(QMainWindow):
             batch_val = settings.value("batch_interval", "10")
             if not batch_val.isdigit() or not (10 <= int(batch_val) <= 30):
                 batch_val = "10"
-            self.txt_batch_interval.setText(batch_val)
+            self.translation_panel.set_batch_interval(batch_val)
 
             single_val = settings.value("single_interval", "1")
             if not single_val.isdigit() or not (1 <= int(single_val) <= 5):
                 single_val = "1"
-            self.txt_single_interval.setText(single_val)
+            self.translation_panel.set_single_interval(single_val)
             
             src_lang = settings.value("src_lang", "en")
-            idx_src = self.cb_src_lang.findData(src_lang)
-            if idx_src != -1:
-                self.cb_src_lang.setCurrentIndex(idx_src)
+            self.translation_panel.set_src_lang(src_lang)
                 
             tgt_lang = settings.value("tgt_lang", "zh-TW")
-            idx_tgt = self.cb_tgt_lang.findData(tgt_lang)
-            if idx_tgt != -1:
-                self.cb_tgt_lang.setCurrentIndex(idx_tgt)
+            self.translation_panel.set_tgt_lang(tgt_lang)
         except Exception:
             pass
 
@@ -786,10 +729,10 @@ class MainWindow(QMainWindow):
             settings.setValue("end_row", self.txt_end_row.text())
             settings.setValue("src_col", self.txt_src_col.text())
             settings.setValue("tgt_col", self.txt_tgt_col.text())
-            settings.setValue("batch_interval", self.txt_batch_interval.text())
-            settings.setValue("single_interval", self.txt_single_interval.text())
-            settings.setValue("src_lang", self.cb_src_lang.currentData())
-            settings.setValue("tgt_lang", self.cb_tgt_lang.currentData())
+            settings.setValue("batch_interval", self.translation_panel.txt_batch_interval.text())
+            settings.setValue("single_interval", self.translation_panel.txt_single_interval.text())
+            settings.setValue("src_lang", self.translation_panel.get_src_lang())
+            settings.setValue("tgt_lang", self.translation_panel.get_tgt_lang())
         except Exception:
             pass
         super().closeEvent(event)
