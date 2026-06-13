@@ -471,7 +471,6 @@ class MainWindow(QMainWindow):
             border-radius: 5px;
         }
 
-            "WARNING": "#e0af68",    # 警告
         QTextEdit#logConsole {
             background-color: #16161e;
             border: 1px solid #2f3047;
