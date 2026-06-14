@@ -831,12 +831,18 @@ class MainWindow(QMainWindow):
             self.btn_start.setStyleSheet("") # 恢復 QSS 原生樣式
 
     def switch_sidebar_tab(self, tab_name):
-        # 如果側邊欄已顯示，且點選的是當前活躍的分頁，則收合側邊欄
+        is_task_running = self.worker is not None and self.worker.isRunning()
+
+        # 判斷點選的是否為當前活躍的分頁
         is_same_tab = False
         if tab_name == "translate" and self.sidebar_stacked.currentWidget() == self.translation_panel:
             is_same_tab = True
         elif tab_name == "edit" and self.sidebar_stacked.currentWidget() == self.edit_panel:
             is_same_tab = True
+
+        # 如果任務正在處理中，禁止切換到其他功能面板，僅允許收合/展開當前面板
+        if is_task_running and not is_same_tab:
+            return
 
         if self.sidebar.isVisible() and is_same_tab:
             # 收合
