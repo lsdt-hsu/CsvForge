@@ -12,3 +12,4 @@ settings.json
 *.lnk
 /LocalReports/
 /settings.ini
+/settings.json

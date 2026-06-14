@@ -16,6 +16,7 @@ from translation.translation_worker import CSVTranslatorWorker
 from translation.translation_panel import TranslationPanel
 from edit.edit_panel import EditPanel
 from edit.edit_worker import CSVEditWorker
+from settings_manager import SettingsManager
 
 # UI 佈局常數
 WINDOW_DEFAULT_WIDTH = 1100
@@ -41,19 +42,6 @@ INPUT_COL_MAX_WIDTH = 60
 SWAP_BUTTON_SIZE = 32
 SWAP_ICON_SIZE = 20
 
-class SettingsKey:
-    GEOMETRY = "geometry"
-    IS_MAXIMIZED = "isMaximized"
-    DEFAULT_DIR = "default_dir"
-    START_ROW = "start_row"
-    END_ROW = "end_row"
-    SRC_COL = "src_col"
-    TGT_COL = "tgt_col"
-    BATCH_INTERVAL = "batch_interval"
-    SINGLE_INTERVAL = "single_interval"
-    SRC_LANG = "src_lang"
-    TGT_LANG = "tgt_lang"
-    ACTIVE_TAB = "active_tab"
 
 
 # 恢復視窗幾何狀態
@@ -64,8 +52,8 @@ class MainWindow(QMainWindow):
         self.start_time = 0
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_elapsed_time)
-        self.settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.ini")
-        self.default_dir = os.path.expanduser("~")
+        self.settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json")
+        self.settings_manager = SettingsManager(self.settings_path)
         
         self.init_ui()
         self.restore_settings()
@@ -587,12 +575,13 @@ class MainWindow(QMainWindow):
         self.txt_out_path.setText(src)
 
     def browse_source_file(self):
+        current_src = self.txt_src_path.text().strip()
+        initial_path = current_src if current_src else os.path.expanduser("~")
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "選擇來源 CSV 檔案", self.default_dir, "CSV 檔案 (*.csv);;所有檔案 (*)"
+            self, "選擇來源 CSV 檔案", initial_path, "CSV 檔案 (*.csv);;所有檔案 (*)"
         )
         if file_path:
             self.txt_src_path.setText(file_path)
-            self.default_dir = os.path.dirname(os.path.abspath(file_path))
             # 自動推導輸出檔案路徑
             if not self.txt_out_path.text().strip():
                 dir_name, file_name = os.path.split(file_path)
@@ -601,12 +590,13 @@ class MainWindow(QMainWindow):
                 self.txt_out_path.setText(default_out)
 
     def browse_output_file(self):
+        current_out = self.txt_out_path.text().strip()
+        initial_path = current_out if current_out else os.path.expanduser("~")
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "選擇儲存輸出 CSV 檔案", self.default_dir, "CSV 檔案 (*.csv);;所有檔案 (*)"
+            self, "選擇儲存輸出 CSV 檔案", initial_path, "CSV 檔案 (*.csv);;所有檔案 (*)"
         )
         if file_path:
             self.txt_out_path.setText(file_path)
-            self.default_dir = os.path.dirname(os.path.abspath(file_path))
 
     def on_source_file_changed(self, file_path):
         if not file_path.strip() or not os.path.exists(file_path):
@@ -869,85 +859,93 @@ class MainWindow(QMainWindow):
         # 刷新按鈕樣式
         self.btn_translate.style().polish(self.btn_translate)
         self.btn_edit.style().polish(self.btn_edit)
+        
+        # 切換面板後立即儲存狀態
+        self.save_settings()
+
+    def save_settings(self):
+        # 視窗幾何位置與大小文字化儲存
+        is_max = self.isMaximized()
+        geom = self.normalGeometry() if is_max else self.geometry()
+        
+        # 組合 Active Tab 狀態
+        if not self.sidebar.isVisible():
+            active_tab = "hidden"
+        elif self.sidebar_stacked.currentWidget() == self.translation_panel:
+            active_tab = "translate"
+        else:
+            active_tab = "edit"
+
+        data = {
+            "window": {
+                "x": geom.x(),
+                "y": geom.y(),
+                "width": geom.width(),
+                "height": geom.height(),
+                "is_maximized": is_max
+            },
+            "main": {
+                "source_path": self.txt_src_path.text().strip(),
+                "output_path": self.txt_out_path.text().strip(),
+                "start_row": self.txt_start_row.text(),
+                "end_row": self.txt_end_row.text(),
+                "src_col": self.txt_src_col.text(),
+                "tgt_col": self.txt_tgt_col.text(),
+                "active_tab": active_tab
+            },
+            "panels": {
+                "translate": self.translation_panel.get_config(),
+                "edit": self.edit_panel.get_config()
+            }
+        }
+        self.settings_manager.save(data)
 
     def restore_settings(self):
-        if not os.path.exists(self.settings_path):
+        data = self.settings_manager.load()
+        if not data:
             return
+            
         try:
-            settings = QSettings(self.settings_path, QSettings.Format.IniFormat)
+            # 1. 恢復視窗幾何大小與位置
+            if "window" in data:
+                w_data = data["window"]
+                x = w_data.get("x", 100)
+                y = w_data.get("y", 100)
+                width = w_data.get("width", WINDOW_DEFAULT_WIDTH)
+                height = w_data.get("height", WINDOW_DEFAULT_HEIGHT)
+                self.setGeometry(x, y, width, height)
+                if w_data.get("is_maximized", False):
+                    self.showMaximized()
             
-            geom = settings.value(SettingsKey.GEOMETRY)
-            if geom is not None:
-                self.restoreGeometry(geom)
-            
-            # 恢復視窗最大化狀態
-            is_max = settings.value(SettingsKey.IS_MAXIMIZED)
-            if is_max == "true" or is_max is True:
-                self.showMaximized()
-            
-            # 讀取工作資料夾路徑
-            self.default_dir = settings.value(SettingsKey.DEFAULT_DIR, os.path.expanduser("~"))
-            
-            # 恢復使用者輸入欄位設定
-            self.txt_start_row.setText(settings.value(SettingsKey.START_ROW, "2"))
-            self.txt_end_row.setText(settings.value(SettingsKey.END_ROW, ""))
-            self.txt_src_col.setText(settings.value(SettingsKey.SRC_COL, "1"))
-            self.txt_tgt_col.setText(settings.value(SettingsKey.TGT_COL, "2"))
-
-            # 讀取批次與單筆間隔時間並驗證其合法性
-            batch_val = settings.value(SettingsKey.BATCH_INTERVAL, "10")
-            if not batch_val.isdigit() or not (10 <= int(batch_val) <= 30):
-                batch_val = "10"
-            self.translation_panel.set_batch_interval(batch_val)
-
-            single_val = settings.value(SettingsKey.SINGLE_INTERVAL, "1")
-            if not single_val.isdigit() or not (1 <= int(single_val) <= 5):
-                single_val = "1"
-            self.translation_panel.set_single_interval(single_val)
-            
-            src_lang = settings.value(SettingsKey.SRC_LANG, "en")
-            self.translation_panel.set_src_lang(src_lang)
+            # 2. 恢復主程式欄位與狀態
+            if "main" in data:
+                m_data = data["main"]
+                self.txt_src_path.setText(m_data.get("source_path", ""))
+                self.txt_out_path.setText(m_data.get("output_path", ""))
+                self.txt_start_row.setText(m_data.get("start_row", "2"))
+                self.txt_end_row.setText(m_data.get("end_row", ""))
+                self.txt_src_col.setText(m_data.get("src_col", "1"))
+                self.txt_tgt_col.setText(m_data.get("tgt_col", "2"))
                 
-            tgt_lang = settings.value(SettingsKey.TGT_LANG, "zh-TW")
-            self.translation_panel.set_tgt_lang(tgt_lang)
-            
-            # 恢復活躍的分頁狀態
-            active_tab = settings.value(SettingsKey.ACTIVE_TAB, "translate")
-            if active_tab == "hidden":
-                # 收合
-                self.sidebar.setVisible(False)
-                self.v_line.setVisible(False)
-                self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
-                self.btn_translate.setProperty("active", False)
-                self.btn_edit.setProperty("active", False)
-            else:
-                self.switch_sidebar_tab(active_tab)
+                # 恢復活躍面板
+                active_tab = m_data.get("active_tab", "translate")
+                if active_tab == "hidden":
+                    self.sidebar.setVisible(False)
+                    self.v_line.setVisible(False)
+                    self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
+                    self.btn_translate.setProperty("active", False)
+                    self.btn_edit.setProperty("active", False)
+                else:
+                    self.switch_sidebar_tab(active_tab)
+
+            # 3. 分配並恢復面板專屬組態區段
+            if "panels" in data:
+                p_data = data["panels"]
+                self.translation_panel.set_config(p_data.get("translate", {}))
+                self.edit_panel.set_config(p_data.get("edit", {}))
         except Exception:
             pass
 
     def closeEvent(self, event):
-        try:
-            settings = QSettings(self.settings_path, QSettings.Format.IniFormat)
-            settings.setValue(SettingsKey.GEOMETRY, self.saveGeometry())
-            settings.setValue(SettingsKey.IS_MAXIMIZED, self.isMaximized())
-            settings.setValue(SettingsKey.DEFAULT_DIR, self.default_dir)
-            settings.setValue(SettingsKey.START_ROW, self.txt_start_row.text())
-            settings.setValue(SettingsKey.END_ROW, self.txt_end_row.text())
-            settings.setValue(SettingsKey.SRC_COL, self.txt_src_col.text())
-            settings.setValue(SettingsKey.TGT_COL, self.txt_tgt_col.text())
-            settings.setValue(SettingsKey.BATCH_INTERVAL, str(self.translation_panel.get_batch_interval()))
-            settings.setValue(SettingsKey.SINGLE_INTERVAL, str(self.translation_panel.get_single_interval()))
-            settings.setValue(SettingsKey.SRC_LANG, self.translation_panel.get_src_lang())
-            settings.setValue(SettingsKey.TGT_LANG, self.translation_panel.get_tgt_lang())
-            
-            # 儲存 Active Tab 狀態
-            if not self.sidebar.isVisible():
-                active_tab = "hidden"
-            elif self.sidebar_stacked.currentWidget() == self.translation_panel:
-                active_tab = "translate"
-            else:
-                active_tab = "edit"
-            settings.setValue(SettingsKey.ACTIVE_TAB, active_tab)
-        except Exception:
-            pass
+        self.save_settings()
         super().closeEvent(event)

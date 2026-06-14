@@ -109,3 +109,23 @@ class TranslationPanel(BasePanel):
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
         self.slider_single_interval.setEnabled(enabled)
+
+    def get_config(self) -> dict:
+        return {
+            "batch_interval": self.get_batch_interval(),
+            "single_interval": self.get_single_interval(),
+            "src_lang": self.get_src_lang(),
+            "tgt_lang": self.get_tgt_lang()
+        }
+
+    def set_config(self, config: dict):
+        if not config:
+            return
+        if "batch_interval" in config:
+            self.set_batch_interval(config["batch_interval"])
+        if "single_interval" in config:
+            self.set_single_interval(config["single_interval"])
+        if "src_lang" in config:
+            self.set_src_lang(config["src_lang"])
+        if "tgt_lang" in config:
+            self.set_tgt_lang(config["tgt_lang"])
