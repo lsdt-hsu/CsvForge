@@ -62,6 +62,7 @@ class TranslationPanel(QFrame):
         grid.addWidget(self.slider_single_interval, 3, 1)
 
         layout.addLayout(grid)
+        layout.addStretch()
 
     def update_batch_label(self, val):
         self.lbl_batch_title.setText(f"批次間隔：{val} 秒")

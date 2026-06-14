@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QLineEdit, QPushButton, QComboBox,
     QTableWidget, QTableWidgetItem, QProgressBar, QTextEdit,
-    QFileDialog, QMessageBox, QFrame, QHeaderView
+    QFileDialog, QMessageBox, QFrame, QHeaderView, QStackedWidget
 )
 from PyQt6.QtCore import Qt, QTimer, QSettings, QSize
 from PyQt6.QtGui import QIntValidator, QFont, QIcon
@@ -14,6 +14,7 @@ from PyQt6.QtGui import QIntValidator, QFont, QIcon
 from utils import detect_encoding, detect_delimiter
 from translation_worker import CSVTranslatorWorker
 from translation_panel import TranslationPanel
+from edit_panel import EditPanel
 
 # UI 佈局常數
 WINDOW_DEFAULT_WIDTH = 1100
@@ -51,6 +52,7 @@ class SettingsKey:
     SINGLE_INTERVAL = "single_interval"
     SRC_LANG = "src_lang"
     TGT_LANG = "tgt_lang"
+    ACTIVE_TAB = "active_tab"
 
 
 # 恢復視窗幾何狀態
@@ -86,17 +88,30 @@ class MainWindow(QMainWindow):
         activity_layout.setSpacing(10)
         activity_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "translate.png")
+        # 翻譯按鈕
+        translate_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "translate.png")
         self.btn_translate = QPushButton()
         self.btn_translate.setObjectName("btnActivityTranslate")
         self.btn_translate.setFixedSize(40, 40)
-        self.btn_translate.setIcon(QIcon(icon_path))
+        self.btn_translate.setIcon(QIcon(translate_icon_path))
         self.btn_translate.setIconSize(QSize(40, 40))
         self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_translate.clicked.connect(self.toggle_sidebar)
+        self.btn_translate.clicked.connect(lambda: self.switch_sidebar_tab("translate"))
         self.btn_translate.setProperty("active", True)
-        
         activity_layout.addWidget(self.btn_translate)
+
+        # 編輯按鈕
+        edit_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edit.png")
+        self.btn_edit = QPushButton()
+        self.btn_edit.setObjectName("btnActivityEdit")
+        self.btn_edit.setFixedSize(40, 40)
+        self.btn_edit.setIcon(QIcon(edit_icon_path))
+        self.btn_edit.setIconSize(QSize(40, 40))
+        self.btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_edit.clicked.connect(lambda: self.switch_sidebar_tab("edit"))
+        self.btn_edit.setProperty("active", False)
+        activity_layout.addWidget(self.btn_edit)
+        
         activity_layout.addStretch()
         
         left_layout.addWidget(self.activity_bar)
@@ -107,7 +122,7 @@ class MainWindow(QMainWindow):
         self.v_line.setFixedWidth(1)
         left_layout.addWidget(self.v_line)
 
-        # 3. 側邊欄：翻譯設定 (QWidget)
+        # 3. 側邊欄 (QWidget)
         self.sidebar = QWidget()
         self.sidebar.setObjectName("leftSidebarWidget")
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
@@ -116,9 +131,16 @@ class MainWindow(QMainWindow):
         sidebar_layout.setContentsMargins(15, 15, 15, 15)
         sidebar_layout.setSpacing(15)
 
-        # 翻譯設定面板
+        # 堆疊式容器 (QStackedWidget)
+        self.sidebar_stacked = QStackedWidget()
+        
         self.translation_panel = TranslationPanel()
-        sidebar_layout.addWidget(self.translation_panel)
+        self.edit_panel = EditPanel()
+        
+        self.sidebar_stacked.addWidget(self.translation_panel)
+        self.sidebar_stacked.addWidget(self.edit_panel)
+        
+        sidebar_layout.addWidget(self.sidebar_stacked)
         sidebar_layout.addStretch()
 
         left_layout.addWidget(self.sidebar)
@@ -385,16 +407,16 @@ class MainWindow(QMainWindow):
         }
 
         /* 活動列按鈕 */
-        QPushButton#btnActivityTranslate {
+        QPushButton#btnActivityTranslate, QPushButton#btnActivityEdit {
             background-color: transparent;
             border: none;
             border-radius: 8px;
             padding: 0px;
         }
-        QPushButton#btnActivityTranslate:hover {
+        QPushButton#btnActivityTranslate:hover, QPushButton#btnActivityEdit:hover {
             background-color: #2e3047;
         }
-        QPushButton#btnActivityTranslate[active="true"] {
+        QPushButton#btnActivityTranslate[active="true"], QPushButton#btnActivityEdit[active="true"] {
             background-color: #3b4261;
         }
 
@@ -816,24 +838,46 @@ class MainWindow(QMainWindow):
         self.txt_src_col.setEnabled(enabled)
         self.txt_tgt_col.setEnabled(enabled)
         self.translation_panel.set_enabled(enabled)
+        self.edit_panel.set_enabled(enabled)
         
         if enabled:
             self.btn_start.setEnabled(True)
             self.btn_start.setText("開始")
             self.btn_start.setStyleSheet("") # 恢復 QSS 原生樣式
 
-    def toggle_sidebar(self):
-        if self.sidebar.isVisible():
+    def switch_sidebar_tab(self, tab_name):
+        # 如果側邊欄已顯示，且點選的是當前活躍的分頁，則收合側邊欄
+        is_same_tab = False
+        if tab_name == "translate" and self.sidebar_stacked.currentWidget() == self.translation_panel:
+            is_same_tab = True
+        elif tab_name == "edit" and self.sidebar_stacked.currentWidget() == self.edit_panel:
+            is_same_tab = True
+
+        if self.sidebar.isVisible() and is_same_tab:
+            # 收合
             self.sidebar.setVisible(False)
             self.v_line.setVisible(False)
             self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
             self.btn_translate.setProperty("active", False)
+            self.btn_edit.setProperty("active", False)
         else:
+            # 展開並切換
             self.sidebar.setVisible(True)
             self.v_line.setVisible(True)
             self.left_container.setFixedWidth(SIDEBAR_FULL_WIDTH)
-            self.btn_translate.setProperty("active", True)
+            
+            if tab_name == "translate":
+                self.sidebar_stacked.setCurrentWidget(self.translation_panel)
+                self.btn_translate.setProperty("active", True)
+                self.btn_edit.setProperty("active", False)
+            elif tab_name == "edit":
+                self.sidebar_stacked.setCurrentWidget(self.edit_panel)
+                self.btn_translate.setProperty("active", False)
+                self.btn_edit.setProperty("active", True)
+                
+        # 刷新按鈕樣式
         self.btn_translate.style().polish(self.btn_translate)
+        self.btn_edit.style().polish(self.btn_edit)
 
     def restore_settings(self):
         if not os.path.exists(self.settings_path):
@@ -875,6 +919,18 @@ class MainWindow(QMainWindow):
                 
             tgt_lang = settings.value(SettingsKey.TGT_LANG, "zh-TW")
             self.translation_panel.set_tgt_lang(tgt_lang)
+            
+            # 恢復活躍的分頁狀態
+            active_tab = settings.value(SettingsKey.ACTIVE_TAB, "translate")
+            if active_tab == "hidden":
+                # 收合
+                self.sidebar.setVisible(False)
+                self.v_line.setVisible(False)
+                self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
+                self.btn_translate.setProperty("active", False)
+                self.btn_edit.setProperty("active", False)
+            else:
+                self.switch_sidebar_tab(active_tab)
         except Exception:
             pass
 
@@ -892,6 +948,15 @@ class MainWindow(QMainWindow):
             settings.setValue(SettingsKey.SINGLE_INTERVAL, str(self.translation_panel.get_single_interval()))
             settings.setValue(SettingsKey.SRC_LANG, self.translation_panel.get_src_lang())
             settings.setValue(SettingsKey.TGT_LANG, self.translation_panel.get_tgt_lang())
+            
+            # 儲存 Active Tab 狀態
+            if not self.sidebar.isVisible():
+                active_tab = "hidden"
+            elif self.sidebar_stacked.currentWidget() == self.translation_panel:
+                active_tab = "translate"
+            else:
+                active_tab = "edit"
+            settings.setValue(SettingsKey.ACTIVE_TAB, active_tab)
         except Exception:
             pass
         super().closeEvent(event)
