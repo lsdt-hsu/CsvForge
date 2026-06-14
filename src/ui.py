@@ -6,7 +6,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QLineEdit, QPushButton, QComboBox,
     QTableWidget, QTableWidgetItem, QProgressBar, QTextEdit,
-    QFileDialog, QMessageBox, QFrame, QHeaderView, QStackedWidget
+    QFileDialog, QMessageBox, QFrame, QHeaderView, QStackedWidget,
+    QSplitter
 )
 from PyQt6.QtCore import Qt, QTimer, QSettings, QSize
 from PyQt6.QtGui import QIntValidator, QFont, QIcon
@@ -54,6 +55,10 @@ class MainWindow(QMainWindow):
         self.timer.timeout.connect(self.update_elapsed_time)
         self.settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json")
         self.settings_manager = SettingsManager(self.settings_path)
+        
+        self.status_expanded = True
+        self.status_expanded_height = 250
+        self.settings_restored = False
         
         self.init_ui()
         self.restore_settings()
@@ -141,26 +146,35 @@ class MainWindow(QMainWindow):
         grp_files_layout.setContentsMargins(15, 12, 15, 12)
         grp_files_layout.setSpacing(10)
 
-        # 標題與段落標頭列（對齊下緣）
+        # 標題與段落標頭列
         title_row_widget = QWidget()
         title_row_widget.setObjectName("titleRowWidget")
         title_layout = QHBoxLayout(title_row_widget)
         title_layout.setContentsMargins(0, 0, 0, 0)
         title_layout.setSpacing(10)
         
+        # 展開/收合按鈕
+        self.btn_toggle_files = QPushButton("▲")
+        self.btn_toggle_files.setObjectName("btnToggleFiles")
+        self.btn_toggle_files.setFixedSize(20, 20)
+        self.btn_toggle_files.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_toggle_files.clicked.connect(self.toggle_files_panel)
+        title_layout.addWidget(self.btn_toggle_files, alignment=Qt.AlignmentFlag.AlignVCenter)
+        
         lbl_files_sec = QLabel("輸入與輸出")
         lbl_files_sec.setObjectName("sectionHeader")
-        title_layout.addWidget(lbl_files_sec, alignment=Qt.AlignmentFlag.AlignBottom)
-        
-        title_layout.addStretch()
-        
-        lbl_title = QLabel("CsvTranslator")
-        lbl_title.setObjectName("appTitle")
-        title_layout.addWidget(lbl_title, alignment=Qt.AlignmentFlag.AlignBottom)
+        title_layout.addWidget(lbl_files_sec, alignment=Qt.AlignmentFlag.AlignVCenter)
         
         title_layout.addStretch()
         
         grp_files_layout.addWidget(title_row_widget)
+
+        # 建立內容容器
+        self.files_content_widget = QWidget()
+        self.files_content_widget.setObjectName("filesContentWidget")
+        files_content_layout = QVBoxLayout(self.files_content_widget)
+        files_content_layout.setContentsMargins(0, 0, 0, 0)
+        files_content_layout.setSpacing(10)
 
         # 第一列：來源與輸出路徑
         row1_layout = QHBoxLayout()
@@ -204,7 +218,7 @@ class MainWindow(QMainWindow):
         out_layout.addWidget(btn_out_browse)
         row1_layout.addLayout(out_layout)
 
-        grp_files_layout.addLayout(row1_layout)
+        files_content_layout.addLayout(row1_layout)
 
         # 第二列：起始/結束行號、來源/目標列號與開始翻譯按鈕
         row2_layout = QHBoxLayout()
@@ -247,7 +261,8 @@ class MainWindow(QMainWindow):
         row2_layout.addStretch()
         row2_layout.addWidget(self.btn_start)
 
-        grp_files_layout.addLayout(row2_layout)
+        files_content_layout.addLayout(row2_layout)
+        grp_files_layout.addWidget(self.files_content_widget)
         return grp_files
 
     def _build_preview_group(self):
@@ -292,14 +307,23 @@ class MainWindow(QMainWindow):
         grp_status_layout.setSpacing(8)
 
         # 狀態與日誌標頭列
-        status_header_widget = QWidget()
-        status_header_layout = QHBoxLayout(status_header_widget)
+        self.status_header_widget = QWidget()
+        self.status_header_widget.setObjectName("statusHeaderWidget")
+        status_header_layout = QHBoxLayout(self.status_header_widget)
         status_header_layout.setContentsMargins(0, 0, 0, 0)
         status_header_layout.setSpacing(15)
 
+        # 展開/收合按鈕
+        self.btn_toggle_status = QPushButton("▲")
+        self.btn_toggle_status.setObjectName("btnToggleStatus")
+        self.btn_toggle_status.setFixedSize(20, 20)
+        self.btn_toggle_status.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_toggle_status.clicked.connect(self.toggle_status_panel)
+        status_header_layout.addWidget(self.btn_toggle_status, alignment=Qt.AlignmentFlag.AlignVCenter)
+
         lbl_log_title = QLabel("執行狀態與日誌")
         lbl_log_title.setObjectName("sectionHeader")
-        status_header_layout.addWidget(lbl_log_title)
+        status_header_layout.addWidget(lbl_log_title, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         status_header_layout.addStretch()
 
@@ -307,18 +331,18 @@ class MainWindow(QMainWindow):
         self.elapsed_time_str = "00:00:00"
         self.task_status_str = "就緒"
         self.lbl_status_summary = QLabel("已用時間：00:00:00 | 狀態：就緒")
-        status_header_layout.addWidget(self.lbl_status_summary)
+        status_header_layout.addWidget(self.lbl_status_summary, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         # 進度條：顯示 n/m (筆數)
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedWidth(PROGRESS_BAR_WIDTH)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0/0")
-        status_header_layout.addWidget(self.progress_bar)
+        status_header_layout.addWidget(self.progress_bar, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        grp_status_layout.addWidget(status_header_widget)
+        grp_status_layout.addWidget(self.status_header_widget)
 
-        # 結束行號
+        # 日誌輸出框
         self.txt_log = QTextEdit()
         self.txt_log.setObjectName("logConsole")
         self.txt_log.setReadOnly(True)
@@ -348,16 +372,29 @@ class MainWindow(QMainWindow):
         right_panel.setSpacing(15)
 
         # 輸入與輸出面板
-        grp_files = self._build_files_group()
-        right_panel.addWidget(grp_files)
+        self.grp_files = self._build_files_group()
+        right_panel.addWidget(self.grp_files)
 
-        # 來源檔案預覽
-        grp_preview = self._build_preview_group()
-        right_panel.addWidget(grp_preview, stretch=3)
+        # 來源檔案預覽與日誌面板採用 QSplitter 垂直排列
+        self.right_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.right_splitter.setObjectName("rightSplitter")
 
-        # 執行狀態與日誌
-        grp_status = self._build_status_group()
-        right_panel.addWidget(grp_status, stretch=4)
+        self.grp_preview = self._build_preview_group()
+        self.grp_preview.setMinimumHeight(200)
+
+        self.grp_status = self._build_status_group()
+        self.grp_status.setMinimumHeight(140)
+
+        self.right_splitter.addWidget(self.grp_preview)
+        self.right_splitter.addWidget(self.grp_status)
+
+        # Stretch factor: preview panel is 1, status panel is 0 (keeps status height stable on resize)
+        self.right_splitter.setStretchFactor(0, 1)
+        self.right_splitter.setStretchFactor(1, 0)
+        
+        self.right_splitter.splitterMoved.connect(self.on_splitter_moved)
+
+        right_panel.addWidget(self.right_splitter)
 
         main_layout.addLayout(right_panel, stretch=1)
 
@@ -407,6 +444,33 @@ class MainWindow(QMainWindow):
         }
         QPushButton#btnActivityTranslate[active="true"], QPushButton#btnActivityEdit[active="true"] {
             background-color: #3b4261;
+        }
+
+        /* 折疊按鈕樣式 */
+        QPushButton#btnToggleFiles, QPushButton#btnToggleStatus {
+            background-color: transparent;
+            color: #7aa2f7;
+            border: none;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 0px;
+        }
+        QPushButton#btnToggleFiles:hover, QPushButton#btnToggleStatus:hover {
+            color: #89ddff;
+        }
+
+        /* Splitter 分隔線樣式 */
+        QSplitter::handle {
+            background-color: #2f3047;
+        }
+        QSplitter::handle:hover {
+            background-color: #7aa2f7;
+        }
+        QSplitter::handle:horizontal {
+            width: 4px;
+        }
+        QSplitter::handle:vertical {
+            height: 4px;
         }
 
         /* 標籤字型與文字樣式 */
@@ -895,6 +959,12 @@ class MainWindow(QMainWindow):
         else:
             active_tab = "edit"
 
+        # 確保在儲存前更新最新狀態面板的展開高度
+        if self.status_expanded:
+            sizes = self.right_splitter.sizes()
+            if len(sizes) > 1:
+                self.status_expanded_height = sizes[1]
+
         data = {
             "window": {
                 "x": geom.x(),
@@ -914,7 +984,14 @@ class MainWindow(QMainWindow):
             },
             "panels": {
                 "translate": self.translation_panel.get_config(),
-                "edit": self.edit_panel.get_config()
+                "edit": self.edit_panel.get_config(),
+                "status": {
+                    "expanded_height": self.status_expanded_height,
+                    "collapsed": not self.status_expanded
+                },
+                "files": {
+                    "collapsed": not self.files_content_widget.isVisible()
+                }
             }
         }
         self.settings_manager.save(data)
@@ -970,8 +1047,105 @@ class MainWindow(QMainWindow):
                 p_data = data["panels"]
                 self.translation_panel.set_config(p_data.get("translate", {}))
                 self.edit_panel.set_config(p_data.get("edit", {}))
+                
+                # 恢復展開與折疊設定
+                status_cfg = p_data.get("status", {})
+                self.status_expanded_height = status_cfg.get("expanded_height", 250)
+                status_collapsed = status_cfg.get("collapsed", False)
+                self.status_expanded = not status_collapsed
+                self.btn_toggle_status.setText("▲" if self.status_expanded else "▼")
+                self.txt_log.setVisible(self.status_expanded)
+                if not self.status_expanded:
+                    self.grp_status.setMinimumHeight(0)
+                    self.grp_status.setMaximumHeight(50)
+                else:
+                    self.grp_status.setMinimumHeight(140)
+                    self.grp_status.setMaximumHeight(16777215)
+                
+                files_cfg = p_data.get("files", {})
+                files_collapsed = files_cfg.get("collapsed", False)
+                if files_collapsed:
+                    self.files_content_widget.setVisible(False)
+                    self.btn_toggle_files.setText("▼")
+                else:
+                    self.files_content_widget.setVisible(True)
+                    self.btn_toggle_files.setText("▲")
         except Exception:
             pass
+
+    def toggle_files_panel(self):
+        collapsed = self.files_content_widget.isVisible()
+        self.files_content_widget.setVisible(not collapsed)
+        self.btn_toggle_files.setText("▼" if collapsed else "▲")
+        self.save_settings()
+
+    def toggle_status_panel(self):
+        self.status_expanded = not self.status_expanded
+        self.txt_log.setVisible(self.status_expanded)
+        self.btn_toggle_status.setText("▲" if self.status_expanded else "▼")
+        
+        if self.status_expanded:
+            self.grp_status.setMinimumHeight(140)
+            self.grp_status.setMaximumHeight(16777215)
+            
+            sizes = self.right_splitter.sizes()
+            if len(sizes) > 1:
+                total_h = sum(sizes)
+                status_h = max(140, self.status_expanded_height)
+                preview_h = max(200, total_h - status_h)
+                if preview_h < 200:
+                    preview_h = 200
+                    status_h = max(140, total_h - 200)
+                self.right_splitter.setSizes([preview_h, status_h])
+        else:
+            sizes = self.right_splitter.sizes()
+            if len(sizes) > 1 and sizes[1] > 100:
+                self.status_expanded_height = sizes[1]
+                
+            header_h = self.status_header_widget.sizeHint().height() + 30
+            if header_h < 50:
+                header_h = 50
+                
+            self.grp_status.setMinimumHeight(0)
+            self.grp_status.setMaximumHeight(header_h)
+            
+            sizes = self.right_splitter.sizes()
+            if len(sizes) > 1:
+                total_h = sum(sizes)
+                self.right_splitter.setSizes([total_h - header_h, header_h])
+                
+        self.save_settings()
+
+    def on_splitter_moved(self, pos, index):
+        if self.status_expanded:
+            sizes = self.right_splitter.sizes()
+            if len(sizes) > 1:
+                self.status_expanded_height = sizes[1]
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self.settings_restored:
+            self.settings_restored = True
+            self.apply_splitter_sizes()
+
+    def apply_splitter_sizes(self):
+        total_h = self.right_splitter.height()
+        handle_w = self.right_splitter.handleWidth()
+        available_h = total_h - handle_w
+        
+        if self.status_expanded:
+            status_h = max(140, self.status_expanded_height)
+            preview_h = max(200, available_h - status_h)
+            if preview_h < 200:
+                preview_h = 200
+                status_h = max(140, available_h - 200)
+            self.right_splitter.setSizes([preview_h, status_h])
+        else:
+            header_h = self.status_header_widget.sizeHint().height() + 30
+            if header_h < 50:
+                header_h = 50
+            preview_h = max(200, available_h - header_h)
+            self.right_splitter.setSizes([preview_h, header_h])
 
     def closeEvent(self, event):
         self.save_settings()
