@@ -439,6 +439,16 @@ class MainWindow(QMainWindow):
             height: 4px;
         }
 
+        /* QCheckBox 美化樣式 */
+        QCheckBox {
+            color: #a9b1d6;
+            font-family: "Microsoft JhengHei", "Segoe UI", sans-serif;
+            font-size: 13px;
+        }
+        QCheckBox:hover {
+            color: #c0caf5;
+        }
+
         /* 標籤字型與文字樣式 */
         QLabel {
             color: #a9b1d6;
@@ -899,6 +909,9 @@ class MainWindow(QMainWindow):
                 },
                 "files": {
                     "collapsed": not self.files_content_widget.isVisible()
+                },
+                "preview": {
+                    "first_row_header": self.preview_panel.is_first_row_header()
                 }
             }
         }
@@ -978,6 +991,10 @@ class MainWindow(QMainWindow):
                 else:
                     self.files_content_widget.setVisible(True)
                     self.btn_toggle_files.setText("▲")
+                
+                # 恢復預覽設定
+                preview_cfg = p_data.get("preview", {})
+                self.preview_panel.set_first_row_header(preview_cfg.get("first_row_header", False))
             
             # 恢復設定後更新開始按鈕狀態字樣
             self.update_start_button_ui()
