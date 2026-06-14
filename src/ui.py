@@ -12,12 +12,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QSettings, QSize
 from PyQt6.QtGui import QIntValidator, QFont, QIcon
 
-from utils import detect_encoding, detect_delimiter
 from translation.translation_worker import CSVTranslatorWorker
 from translation.translation_panel import TranslationPanel
 from edit.edit_panel import EditPanel
 from edit.edit_worker import CSVEditWorker
 from settings_manager import SettingsManager
+from preview.preview_panel import PreviewPanel
 
 # UI 佈局常數
 WINDOW_DEFAULT_WIDTH = 1100
@@ -30,8 +30,7 @@ SIDEBAR_MIN_WIDTH = 60
 SIDEBAR_WIDTH = 280
 ACTIVITY_BAR_WIDTH = 60
 
-PREVIEW_DEFAULT_SECTION_SIZE = 110
-PREVIEW_VERTICAL_SECTION_SIZE = 28
+#
 
 PROGRESS_BAR_WIDTH = 150
 START_BUTTON_MIN_WIDTH = 150
@@ -265,39 +264,6 @@ class MainWindow(QMainWindow):
         grp_files_layout.addWidget(self.files_content_widget)
         return grp_files
 
-    def _build_preview_group(self):
-        grp_preview = QFrame()
-        grp_preview.setObjectName("rightFrame")
-        grp_preview_layout = QVBoxLayout(grp_preview)
-        grp_preview_layout.setContentsMargins(15, 15, 15, 15)
-        grp_preview_layout.setSpacing(8)
-
-        # 預覽標頭列（包含狀態訊息）
-        preview_header_widget = QWidget()
-        preview_header_layout = QHBoxLayout(preview_header_widget)
-        preview_header_layout.setContentsMargins(0, 0, 0, 0)
-        preview_header_layout.setSpacing(10)
-
-        lbl_preview_title = QLabel("來源檔案預覽 (前 10 行)")
-        lbl_preview_title.setObjectName("sectionHeader")
-        preview_header_layout.addWidget(lbl_preview_title)
-
-        preview_header_layout.addStretch()
-
-        self.lbl_preview_status = QLabel("尚未選擇來源 CSV 檔案")
-        self.lbl_preview_status.setObjectName("previewStatus")
-        self.lbl_preview_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        preview_header_layout.addWidget(self.lbl_preview_status)
-
-        grp_preview_layout.addWidget(preview_header_widget)
-
-        self.table_preview = QTableWidget()
-        self.table_preview.setRowCount(0)
-        self.table_preview.setColumnCount(0)
-        self.table_preview.horizontalHeader().setDefaultSectionSize(PREVIEW_DEFAULT_SECTION_SIZE)
-        self.table_preview.verticalHeader().setDefaultSectionSize(PREVIEW_VERTICAL_SECTION_SIZE)
-        grp_preview_layout.addWidget(self.table_preview)
-        return grp_preview
 
     def _build_status_group(self):
         grp_status = QFrame()
@@ -379,13 +345,13 @@ class MainWindow(QMainWindow):
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
         self.right_splitter.setObjectName("rightSplitter")
 
-        self.grp_preview = self._build_preview_group()
-        self.grp_preview.setMinimumHeight(200)
+        self.preview_panel = PreviewPanel()
+        self.preview_panel.preview_loaded.connect(self.on_preview_loaded)
 
         self.grp_status = self._build_status_group()
         self.grp_status.setMinimumHeight(140)
 
-        self.right_splitter.addWidget(self.grp_preview)
+        self.right_splitter.addWidget(self.preview_panel)
         self.right_splitter.addWidget(self.grp_status)
 
         # Stretch factor: preview panel is 1, status panel is 0 (keeps status height stable on resize)
@@ -676,62 +642,14 @@ class MainWindow(QMainWindow):
 
     def on_source_file_changed(self, file_path):
         if not file_path.strip() or not os.path.exists(file_path):
-            self.table_preview.clear()
-            self.table_preview.setRowCount(0)
-            self.table_preview.setColumnCount(0)
-            self.lbl_preview_status.setText("請選擇來源檔案，或來源檔案不存在")
+            self.preview_panel.clear_preview()
             self.txt_end_row.setPlaceholderText("預設至檔尾")
             return
         
-        self.load_csv_preview(file_path)
+        self.preview_panel.load_preview(file_path)
 
-    def load_csv_preview(self, file_path):
-        try:
-            encoding = detect_encoding(file_path)
-            delimiter = detect_delimiter(file_path, encoding)
-            
-            rows = []
-            with open(file_path, 'r', encoding=encoding, errors='replace') as f:
-                reader = csv.reader(f, delimiter=delimiter)
-                for i, row in enumerate(reader):
-                    if i >= 10:
-                        break
-                    rows.append(row)
-            
-            if not rows:
-                self.lbl_preview_status.setText("來源檔案為空，無法進行預覽")
-                return
-
-            max_cols = max(len(r) for r in rows)
-            
-            self.table_preview.clear()
-            self.table_preview.setRowCount(len(rows))
-            self.table_preview.setColumnCount(max_cols)
-            
-            # 設定列與行標頭
-            col_headers = [f"第 {i+1} 欄" for i in range(max_cols)]
-            self.table_preview.setHorizontalHeaderLabels(col_headers)
-            
-            row_headers = [f"第 {i+1} 行" for i in range(len(rows))]
-            self.table_preview.setVerticalHeaderLabels(row_headers)
-            
-            for r_idx, row in enumerate(rows):
-                for c_idx in range(max_cols):
-                    val = row[c_idx] if c_idx < len(row) else ""
-                    item = QTableWidgetItem(val)
-                    item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
-                    self.table_preview.setItem(r_idx, c_idx, item)
-            
-            self.table_preview.resizeColumnsToContents()
-            self.lbl_preview_status.setText(f"預覽載入完成 (編碼: {encoding}, 分隔符: '{delimiter}')")
-            
-            # 自動推導輸出檔案路徑
-            with open(file_path, 'r', encoding=encoding, errors='replace') as f:
-                total_rows = sum(1 for _ in csv.reader(f, delimiter=delimiter))
-            self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
-
-        except Exception as e:
-            self.lbl_preview_status.setText(f"載入預覽失敗: {str(e)}")
+    def on_preview_loaded(self, total_rows):
+        self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
 
     def append_log(self, level, message):
         color_map = {
