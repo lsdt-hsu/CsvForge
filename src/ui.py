@@ -12,10 +12,10 @@ from PyQt6.QtCore import Qt, QTimer, QSettings, QSize
 from PyQt6.QtGui import QIntValidator, QFont, QIcon
 
 from utils import detect_encoding, detect_delimiter
-from translation_worker import CSVTranslatorWorker
-from translation_panel import TranslationPanel
-from edit_panel import EditPanel
-from edit_worker import CSVEditWorker
+from translation.translation_worker import CSVTranslatorWorker
+from translation.translation_panel import TranslationPanel
+from edit.edit_panel import EditPanel
+from edit.edit_worker import CSVEditWorker
 
 # UI 佈局常數
 WINDOW_DEFAULT_WIDTH = 1100
@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         self.start_time = 0
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_elapsed_time)
-        self.settings_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.ini")
+        self.settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.ini")
         self.default_dir = os.path.expanduser("~")
         
         self.init_ui()
@@ -90,7 +90,7 @@ class MainWindow(QMainWindow):
         activity_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
         # 翻譯按鈕
-        translate_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "translate.png")
+        translate_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "translate.png")
         self.btn_translate = QPushButton()
         self.btn_translate.setObjectName("btnActivityTranslate")
         self.btn_translate.setFixedSize(40, 40)
@@ -102,7 +102,7 @@ class MainWindow(QMainWindow):
         activity_layout.addWidget(self.btn_translate)
 
         # 編輯按鈕
-        edit_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edit.png")
+        edit_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "edit.png")
         self.btn_edit = QPushButton()
         self.btn_edit.setObjectName("btnActivityEdit")
         self.btn_edit.setFixedSize(40, 40)
@@ -196,7 +196,7 @@ class MainWindow(QMainWindow):
         self.btn_swap = QPushButton()
         self.btn_swap.setObjectName("btnSwap")
         self.btn_swap.setFixedSize(30, 30)
-        swap_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "swap.png")
+        swap_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "swap.png")
         self.btn_swap.setIcon(QIcon(swap_icon_path))
         self.btn_swap.setIconSize(QSize(SWAP_ICON_SIZE, SWAP_ICON_SIZE))
         self.btn_swap.setCursor(Qt.CursorShape.PointingHandCursor)
