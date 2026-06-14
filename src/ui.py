@@ -581,6 +581,12 @@ class MainWindow(QMainWindow):
             self, "選擇來源 CSV 檔案", initial_path, "CSV 檔案 (*.csv);;所有檔案 (*)"
         )
         if file_path:
+            # 檢查點：瀏覽來源檔案與輸出檔案相同
+            current_out = self.txt_out_path.text().strip()
+            if current_out and file_path == current_out:
+                QMessageBox.warning(self, "路徑重複", "選擇的來源 CSV 檔案不能與輸出 CSV 檔案路徑相同！請重新選擇。")
+                return # 放棄本次選擇結果
+            
             self.txt_src_path.setText(file_path)
             # 自動推導輸出檔案路徑
             if not self.txt_out_path.text().strip():
@@ -596,6 +602,12 @@ class MainWindow(QMainWindow):
             self, "選擇儲存輸出 CSV 檔案", initial_path, "CSV 檔案 (*.csv);;所有檔案 (*)"
         )
         if file_path:
+            # 檢查點：瀏覽輸出檔案與來源檔案相同
+            current_src = self.txt_src_path.text().strip()
+            if current_src and file_path == current_src:
+                QMessageBox.warning(self, "路徑重複", "選擇的輸出 CSV 檔案不能與來源 CSV 檔案路徑相同！請重新選擇。")
+                return # 放棄本次選擇結果
+                
             self.txt_out_path.setText(file_path)
 
     def on_source_file_changed(self, file_path):
@@ -690,6 +702,13 @@ class MainWindow(QMainWindow):
                 self.task_status_str = "正在中斷工作..."
                 self.update_status_summary()
                 self.worker.cancel()
+            return
+
+        # 檢查點：開始任務時來源與輸出不為空且相同
+        src_path = self.txt_src_path.text().strip()
+        out_path = self.txt_out_path.text().strip()
+        if src_path and out_path and src_path == out_path:
+            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
             return
 
         # 判斷當前活躍的分頁
@@ -922,6 +941,14 @@ class MainWindow(QMainWindow):
                 m_data = data["main"]
                 self.txt_src_path.setText(m_data.get("source_path", ""))
                 self.txt_out_path.setText(m_data.get("output_path", ""))
+                
+                # 檢查點：開啟程式時兩者不為空且內容相同
+                src_path = self.txt_src_path.text().strip()
+                out_path = self.txt_out_path.text().strip()
+                if src_path and out_path and src_path == out_path:
+                    QMessageBox.warning(self, "路徑重複", "偵測到儲存的來源 CSV 與輸出 CSV 路徑相同！已自動清空輸出路徑以防檔案毀損。")
+                    self.txt_out_path.clear()
+                    
                 self.txt_start_row.setText(m_data.get("start_row", "2"))
                 self.txt_end_row.setText(m_data.get("end_row", ""))
                 self.txt_src_col.setText(m_data.get("src_col", "1"))
