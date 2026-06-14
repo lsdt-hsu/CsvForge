@@ -15,6 +15,7 @@ from utils import detect_encoding, detect_delimiter
 from translation_worker import CSVTranslatorWorker
 from translation_panel import TranslationPanel
 from edit_panel import EditPanel
+from edit_worker import CSVEditWorker
 
 # UI 佈局常數
 WINDOW_DEFAULT_WIDTH = 1100
@@ -245,7 +246,7 @@ class MainWindow(QMainWindow):
         self.btn_start = QPushButton("開始")
         self.btn_start.setObjectName("btnStart")
         self.btn_start.setMinimumWidth(START_BUTTON_MIN_WIDTH)
-        self.btn_start.clicked.connect(self.start_translation)
+        self.btn_start.clicked.connect(self.start_task)
 
         row2_layout.addWidget(lbl_start_row)
         row2_layout.addWidget(self.txt_start_row)
@@ -690,51 +691,8 @@ class MainWindow(QMainWindow):
             end_cursor.movePosition(end_cursor.MoveOperation.PreviousBlock, end_cursor.MoveMode.KeepAnchor)
             end_cursor.removeSelectedText()
 
-    def _validate_inputs(self):
-        # 檢查輸入欄位範圍
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
-        
-        if not src_path or not os.path.exists(src_path):
-            QMessageBox.warning(self, "輸入錯誤", "請選擇正確的來源 CSV 檔案路徑")
-            return None
-        if not out_path:
-            QMessageBox.warning(self, "輸入錯誤", "請指定輸出檔案路徑")
-            return None
-        
-        # 讀取並驗證行數欄位
-        try:
-            start_row = int(self.txt_start_row.text())
-            if start_row < 1:
-                raise ValueError()
-        except ValueError:
-            QMessageBox.warning(self, "輸入錯誤", "起始行號必須是大於或等於 1 的正整數")
-            return None
-
-        end_row = None
-        if self.txt_end_row.text().strip():
-            try:
-                end_row = int(self.txt_end_row.text())
-                if end_row < start_row:
-                    QMessageBox.warning(self, "輸入錯誤", "結束行號不能小於起始行號")
-                    return None
-            except ValueError:
-                QMessageBox.warning(self, "輸入錯誤", "結束行號必須是正整數")
-                return None
-
-        try:
-            src_col = int(self.txt_src_col.text())
-            tgt_col = int(self.txt_tgt_col.text())
-            if src_col < 1 or tgt_col < 1:
-                raise ValueError()
-        except ValueError:
-            QMessageBox.warning(self, "輸入錯誤", "來源列號與目標列號必須是大於或等於 1 的正整數")
-            return None
-
-        return (src_path, out_path, start_row, end_row, src_col, tgt_col)
-
-    def start_translation(self):
-        # 如果正在翻譯，按按鈕則觸發 STOP 中斷
+    def start_task(self):
+        # 如果正在運行任務，按按鈕則觸發 STOP 中斷
         if self.btn_start.text() == "STOP":
             if self.worker:
                 self.btn_start.setText("正在停止...")
@@ -744,17 +702,23 @@ class MainWindow(QMainWindow):
                 self.worker.cancel()
             return
 
-        validated = self._validate_inputs()
-        if validated is None:
+        # 判斷當前活躍的分頁
+        active_tab = "translate"
+        if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
+            active_tab = "edit"
+
+        # 進行欄位驗證 (呼叫當前活躍面板的 validate)
+        current_panel = self.translation_panel if active_tab == "translate" else self.edit_panel
+        is_valid, title, err_msg = current_panel.validate(self)
+        if not is_valid:
+            QMessageBox.warning(self, title, err_msg)
             return
-            
-        src_path, out_path, start_row, end_row, src_col, tgt_col = validated
 
-        src_lang = self.translation_panel.get_src_lang()
-        tgt_lang = self.translation_panel.get_tgt_lang()
-
-        batch_interval = self.translation_panel.get_batch_interval()
-        single_interval = self.translation_panel.get_single_interval()
+        # 讀取通用設定值
+        src_path = self.txt_src_path.text().strip()
+        out_path = self.txt_out_path.text().strip()
+        start_row = int(self.txt_start_row.text())
+        end_row = int(self.txt_end_row.text()) if self.txt_end_row.text().strip() else None
 
         # 清空舊 UI 顯示狀態
         self.txt_log.clear()
@@ -762,32 +726,48 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0/0")
         self.elapsed_time_str = "00:00:00"
-        self.task_status_str = "翻譯中..."
+        self.task_status_str = "翻譯中..." if active_tab == "translate" else "編輯中..."
         self.update_status_summary()
         
         # 記錄開始時間
         self.start_time = time.time()
         self.timer.start(1000)
 
-        # 如果正在翻譯，按按鈕則觸發 STOP 中斷
+        # 改變開始按鈕狀態
         self.btn_start.setText("STOP")
         self.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
 
         self.set_ui_enabled(False)
 
-        # 初始化背景翻譯工作器
-        self.worker = CSVTranslatorWorker(
-            source_path=src_path,
-            output_path=out_path,
-            start_row=start_row,
-            end_row=end_row,
-            source_col=src_col,
-            target_col=tgt_col,
-            source_lang=src_lang,
-            target_lang=tgt_lang,
-            batch_interval=batch_interval,
-            single_interval=single_interval
-        )
+        # 根據活躍分頁初始化背景工作器
+        if active_tab == "translate":
+            src_col = int(self.txt_src_col.text())
+            tgt_col = int(self.txt_tgt_col.text())
+            src_lang = self.translation_panel.get_src_lang()
+            tgt_lang = self.translation_panel.get_tgt_lang()
+            batch_interval = self.translation_panel.get_batch_interval()
+            single_interval = self.translation_panel.get_single_interval()
+            
+            self.worker = CSVTranslatorWorker(
+                source_path=src_path,
+                output_path=out_path,
+                start_row=start_row,
+                end_row=end_row,
+                source_col=src_col,
+                target_col=tgt_col,
+                source_lang=src_lang,
+                target_lang=tgt_lang,
+                batch_interval=batch_interval,
+                single_interval=single_interval
+            )
+        else:
+            self.worker = CSVEditWorker(
+                source_path=src_path,
+                output_path=out_path,
+                start_row=start_row,
+                end_row=end_row
+            )
+
         self.worker.progress_updated.connect(self.on_worker_progress)
         self.worker.log_emitted.connect(self.append_log)
         self.worker.finished_successfully.connect(self.on_worker_success)
@@ -817,18 +797,21 @@ class MainWindow(QMainWindow):
         if self.worker and self.worker._is_cancelled:
             self.task_status_str = "已取消"
             self.update_status_summary()
-            QMessageBox.information(self, "中斷", f"已取消翻譯！\n檔案已儲存至：\n{out_path}")
+            title, msg = self.worker.get_cancel_message(out_path)
+            QMessageBox.information(self, title, msg)
         else:
             self.task_status_str = "完成"
             self.update_status_summary()
-            QMessageBox.information(self, "成功", f"翻譯完成！\n檔案已儲存至：\n{out_path}")
+            title, msg = self.worker.get_success_message(out_path)
+            QMessageBox.information(self, title, msg)
 
     def on_worker_error(self, err_msg):
         self.timer.stop()
         self.task_status_str = "錯誤"
         self.update_status_summary()
         self.set_ui_enabled(True)
-        QMessageBox.critical(self, "翻譯中斷", f"翻譯過程發生錯誤：\n{err_msg}")
+        title, msg = self.worker.get_error_message(err_msg)
+        QMessageBox.critical(self, title, msg)
 
     def set_ui_enabled(self, enabled):
         self.txt_src_path.setEnabled(enabled)

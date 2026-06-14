@@ -2,40 +2,21 @@ import os
 import re
 import csv
 import concurrent.futures
-from PyQt6.QtCore import QThread, pyqtSignal
 from deep_translator import GoogleTranslator
-from utils import detect_encoding, detect_delimiter
 from network import get_http_error_info
+from csv_worker import BaseCSVWorker
 
 # --- CSV 翻譯執行緒工人類 ---
-class CSVTranslatorWorker(QThread):
-    progress_updated = pyqtSignal(int, int)      # 已翻譯列數, 總共列數
-    status_updated = pyqtSignal(str)             # 狀態欄更新日誌
-    log_emitted = pyqtSignal(str, str)           # 級別 (INFO/SUCCESS/WARNING/ERROR), 訊息
-    finished_successfully = pyqtSignal(str)      # 成功時的輸出檔案路徑
-    finished_with_error = pyqtSignal(str)        # 錯誤原因
-
+class CSVTranslatorWorker(BaseCSVWorker):
     def __init__(self, source_path, output_path, start_row, end_row, source_col, target_col, source_lang, target_lang, batch_interval=10, single_interval=1):
-        super().__init__()
-        self.source_path = source_path
-        self.output_path = output_path
-        self.start_row = start_row
-        self.end_row = end_row
+        super().__init__(source_path, output_path, start_row, end_row)
         self.source_col = source_col
         self.target_col = target_col
         self.source_lang = source_lang
         self.target_lang = target_lang
         self.batch_interval = batch_interval
         self.single_interval = single_interval
-        self._is_paused = False
-        self._is_cancelled = False
         self.error_rank = 0
-
-    def pause(self):
-        self._is_paused = True
-
-    def cancel(self):
-        self._is_cancelled = True
 
     def _get_http_error_suffix(self):
         """
@@ -247,14 +228,8 @@ class CSVTranslatorWorker(QThread):
         try:
             self.error_rank = 0
             self.log_emitted.emit("INFO", "開始執行 CSV 翻譯工作...")
-            self.log_emitted.emit("INFO", "正在檢測檔案編碼與格式...")
-            encoding = detect_encoding(self.source_path)
-            delimiter = detect_delimiter(self.source_path, encoding)
-            self.log_emitted.emit("INFO", f"檢測到檔案編碼: {encoding}，分隔符: '{delimiter}'")
-
-            # 讀取檔案總行數
-            with open(self.source_path, 'r', encoding=encoding, errors='replace') as f:
-                total_file_rows = sum(1 for _ in csv.reader(f, delimiter=delimiter))
+            encoding, delimiter = self.detect_format()
+            total_file_rows = self.count_total_rows(encoding, delimiter)
             self.log_emitted.emit("INFO", f"來源檔案讀取完成，共 {total_file_rows} 行。")
 
             # 翻譯範圍限制
@@ -380,3 +355,12 @@ class CSVTranslatorWorker(QThread):
         except Exception as e:
             self.log_emitted.emit("ERROR", f"翻譯過程發生錯誤：{str(e)}")
             self.finished_with_error.emit(str(e))
+
+    def get_success_message(self, out_path):
+        return "成功", f"翻譯完成！\n檔案已儲存至：\n{out_path}"
+
+    def get_cancel_message(self, out_path):
+        return "中斷", f"已取消翻譯！\n檔案已儲存至：\n{out_path}"
+
+    def get_error_message(self, err_msg):
+        return "翻譯中斷", f"翻譯過程發生錯誤：\n{err_msg}"
