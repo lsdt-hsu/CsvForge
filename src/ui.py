@@ -247,7 +247,7 @@ class MainWindow(QMainWindow):
         self.btn_start = QPushButton("開始")
         self.btn_start.setObjectName("btnStart")
         self.btn_start.setMinimumWidth(START_BUTTON_MIN_WIDTH)
-        self.btn_start.clicked.connect(self.start_task)
+        self.btn_start.clicked.connect(self.on_start_button_clicked)
 
         row2_layout.addWidget(lbl_start_row)
         row2_layout.addWidget(self.txt_start_row)
@@ -676,16 +676,6 @@ class MainWindow(QMainWindow):
             end_cursor.removeSelectedText()
 
     def start_task(self):
-        # 如果正在運行任務，按按鈕則觸發 STOP 中斷
-        if self.btn_start.text() == "STOP":
-            if self.worker:
-                self.btn_start.setText("正在停止...")
-                self.btn_start.setEnabled(False)
-                self.task_status_str = "正在中斷工作..."
-                self.update_status_summary()
-                self.worker.cancel()
-            return
-
         # 檢查點：開始任務時來源與輸出不為空且相同
         src_path = self.txt_src_path.text().strip()
         out_path = self.txt_out_path.text().strip()
@@ -755,18 +745,16 @@ class MainWindow(QMainWindow):
         self.start_time = time.time()
         self.timer.start(1000)
 
-        # 改變開始按鈕狀態
-        self.btn_start.setText("STOP")
-        self.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
-
-        self.set_ui_enabled(False)
-
         self.worker.progress_updated.connect(self.on_worker_progress)
         self.worker.log_emitted.connect(self.append_log)
         self.worker.finished_successfully.connect(self.on_worker_success)
         self.worker.finished_with_error.connect(self.on_worker_error)
         
         self.worker.start()
+
+        # 改變開始按鈕狀態與啟用狀態
+        self.set_ui_enabled(False)
+        self.update_start_button_ui()
 
     def update_status_summary(self):
         self.lbl_status_summary.setText(f"已用時間：{self.elapsed_time_str} | 狀態：{self.task_status_str}")
@@ -818,8 +806,7 @@ class MainWindow(QMainWindow):
         
         if enabled:
             self.btn_start.setEnabled(True)
-            self.btn_start.setText("開始")
-            self.btn_start.setStyleSheet("") # 恢復 QSS 原生樣式
+            self.update_start_button_ui()
 
     def switch_sidebar_tab(self, tab_name):
         is_task_running = self.worker is not None and self.worker.isRunning()
@@ -860,6 +847,9 @@ class MainWindow(QMainWindow):
         # 刷新按鈕樣式
         self.btn_translate.style().polish(self.btn_translate)
         self.btn_edit.style().polish(self.btn_edit)
+        
+        # 更新開始按鈕狀態字樣
+        self.update_start_button_ui()
         
         # 切換面板後立即儲存狀態
         self.save_settings()
@@ -988,6 +978,9 @@ class MainWindow(QMainWindow):
                 else:
                     self.files_content_widget.setVisible(True)
                     self.btn_toggle_files.setText("▲")
+            
+            # 恢復設定後更新開始按鈕狀態字樣
+            self.update_start_button_ui()
         except Exception:
             pass
 
@@ -1064,6 +1057,49 @@ class MainWindow(QMainWindow):
                 header_h = 50
             preview_h = max(200, available_h - header_h)
             self.right_splitter.setSizes([preview_h, header_h])
+
+    def get_active_panel(self):
+        if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
+            return self.edit_panel
+        return self.translation_panel
+
+    def get_start_button_state(self) -> str:
+        if self.worker is not None and self.worker.isRunning():
+            if self.worker._is_cancelled:
+                return "disabled"
+            else:
+                return "critical"
+        return "normal"
+
+    def update_start_button_ui(self):
+        state = self.get_start_button_state()
+        panel = self.get_active_panel()
+        text = panel.get_start_button_text(state)
+        self.btn_start.setText(text)
+        
+        if state == "disabled":
+            self.btn_start.setEnabled(False)
+            self.btn_start.setStyleSheet("background-color: #24283b; color: #565f89;")
+        elif state == "critical":
+            self.btn_start.setEnabled(True)
+            self.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
+        else: # normal
+            self.btn_start.setEnabled(True)
+            self.btn_start.setStyleSheet("") # 恢復 QSS 原生樣式
+
+    def on_start_button_clicked(self):
+        state = self.get_start_button_state()
+        if state == "disabled":
+            return
+        panel = self.get_active_panel()
+        panel.handle_start_button_click(self, state)
+
+    def cancel_task(self):
+        if self.worker:
+            self.task_status_str = "正在中斷工作..."
+            self.update_status_summary()
+            self.worker.cancel()
+            self.update_start_button_ui()
 
     def closeEvent(self, event):
         self.save_settings()
