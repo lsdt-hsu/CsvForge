@@ -55,3 +55,40 @@ class BaseCSVWorker(QThread):
 
     def get_error_message(self, err_msg):
         return "出錯", f"工作執行時發生錯誤：\n{err_msg}"
+
+    def validate_inputs(self):
+        """
+        驗證通用輸入欄位（路徑與行號），並在成功時將其轉換為整數/適當型別。
+        回傳: (is_valid, error_message)
+        """
+        if not self.source_path or not os.path.exists(self.source_path):
+            return False, "請選擇正確的來源 CSV 檔案路徑"
+        if not self.output_path:
+            return False, "請指定輸出檔案路徑"
+            
+        try:
+            start_row_val = int(self.start_row)
+            if start_row_val < 1:
+                return False, "起始行號必須是大於或等於 1 的正整數"
+            self.start_row = start_row_val
+        except (ValueError, TypeError):
+            return False, "起始行號必須是大於或等於 1 的正整數"
+
+        if self.end_row is not None and str(self.end_row).strip() != "":
+            try:
+                end_row_val = int(self.end_row)
+                if end_row_val < self.start_row:
+                    return False, "結束行號不能小於起始行號"
+                self.end_row = end_row_val
+            except (ValueError, TypeError):
+                return False, "結束行號必須是正整數"
+        else:
+            self.end_row = None
+                
+        return self.validate_specific_inputs()
+
+    def validate_specific_inputs(self):
+        """
+        子類別可覆寫此方法以進行其特有的欄位驗證與轉型。
+        """
+        return True, ""

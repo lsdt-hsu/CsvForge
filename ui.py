@@ -707,18 +707,49 @@ class MainWindow(QMainWindow):
         if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
             active_tab = "edit"
 
-        # 進行欄位驗證 (呼叫當前活躍面板的 validate)
-        current_panel = self.translation_panel if active_tab == "translate" else self.edit_panel
-        is_valid, title, err_msg = current_panel.validate(self)
-        if not is_valid:
-            QMessageBox.warning(self, title, err_msg)
-            return
-
-        # 讀取通用設定值
+        # 讀取通用設定值（以原始字串傳遞給 Worker，由 Worker 進行多態驗證與轉型）
         src_path = self.txt_src_path.text().strip()
         out_path = self.txt_out_path.text().strip()
-        start_row = int(self.txt_start_row.text())
-        end_row = int(self.txt_end_row.text()) if self.txt_end_row.text().strip() else None
+        start_row = self.txt_start_row.text().strip()
+        end_row = self.txt_end_row.text().strip()
+
+        # 根據活躍分頁初始化背景工作器實例
+        if active_tab == "translate":
+            src_col = self.txt_src_col.text().strip()
+            tgt_col = self.txt_tgt_col.text().strip()
+            src_lang = self.translation_panel.get_src_lang()
+            tgt_lang = self.translation_panel.get_tgt_lang()
+            batch_interval = self.translation_panel.get_batch_interval()
+            single_interval = self.translation_panel.get_single_interval()
+            
+            worker_instance = CSVTranslatorWorker(
+                source_path=src_path,
+                output_path=out_path,
+                start_row=start_row,
+                end_row=end_row,
+                source_col=src_col,
+                target_col=tgt_col,
+                source_lang=src_lang,
+                target_lang=tgt_lang,
+                batch_interval=batch_interval,
+                single_interval=single_interval
+            )
+        else:
+            worker_instance = CSVEditWorker(
+                source_path=src_path,
+                output_path=out_path,
+                start_row=start_row,
+                end_row=end_row
+            )
+
+        # 呼叫工作器進行多態輸入驗證
+        is_valid, err_msg = worker_instance.validate_inputs()
+        if not is_valid:
+            QMessageBox.warning(self, "輸入錯誤", err_msg)
+            return
+
+        # 驗證成功，設定工作器屬性
+        self.worker = worker_instance
 
         # 清空舊 UI 顯示狀態
         self.txt_log.clear()
@@ -738,35 +769,6 @@ class MainWindow(QMainWindow):
         self.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
 
         self.set_ui_enabled(False)
-
-        # 根據活躍分頁初始化背景工作器
-        if active_tab == "translate":
-            src_col = int(self.txt_src_col.text())
-            tgt_col = int(self.txt_tgt_col.text())
-            src_lang = self.translation_panel.get_src_lang()
-            tgt_lang = self.translation_panel.get_tgt_lang()
-            batch_interval = self.translation_panel.get_batch_interval()
-            single_interval = self.translation_panel.get_single_interval()
-            
-            self.worker = CSVTranslatorWorker(
-                source_path=src_path,
-                output_path=out_path,
-                start_row=start_row,
-                end_row=end_row,
-                source_col=src_col,
-                target_col=tgt_col,
-                source_lang=src_lang,
-                target_lang=tgt_lang,
-                batch_interval=batch_interval,
-                single_interval=single_interval
-            )
-        else:
-            self.worker = CSVEditWorker(
-                source_path=src_path,
-                output_path=out_path,
-                start_row=start_row,
-                end_row=end_row
-            )
 
         self.worker.progress_updated.connect(self.on_worker_progress)
         self.worker.log_emitted.connect(self.append_log)

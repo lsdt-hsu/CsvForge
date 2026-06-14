@@ -109,13 +109,3 @@ class TranslationPanel(BasePanel):
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
         self.slider_single_interval.setEnabled(enabled)
-
-    def validate_additional_inputs(self, ui_instance):
-        try:
-            src_col = int(ui_instance.txt_src_col.text())
-            tgt_col = int(ui_instance.txt_tgt_col.text())
-            if src_col < 1 or tgt_col < 1:
-                raise ValueError()
-        except ValueError:
-            return False, "來源列號與目標列號必須是大於或等於 1 的正整數"
-        return True, ""
