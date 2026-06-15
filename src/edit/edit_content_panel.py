@@ -27,6 +27,7 @@ class CSVTableModel(QAbstractTableModel):
         self.start_row = 1          # 起始行號 (1-based)
         self.end_row = None         # 結束行號 (1-based, None 表示至結尾)
         self.is_header = False      # 第一行是否為標題
+        self.num_cols = 0            # 快取欄位數量，避免 O(N) 重複計算
         self.visible_row_indices = [] # 儲存當前可見資料行在 all_rows 中的索引值
 
     def set_data(self, all_rows, start_row, end_row, is_header):
@@ -35,6 +36,7 @@ class CSVTableModel(QAbstractTableModel):
         self.start_row = start_row
         self.end_row = end_row
         self.is_header = is_header
+        self.num_cols = max(len(row) for row in all_rows) if all_rows else 0
         self.update_visible_rows()
         self.endResetModel()
 
@@ -48,28 +50,24 @@ class CSVTableModel(QAbstractTableModel):
         self.visible_row_indices = []
         if not self.all_rows:
             return
-            
+
         total_rows = len(self.all_rows)
         end_idx = self.end_row if self.end_row is not None else total_rows
-        
-        # 遍歷 CSV 中的 1-based 行號
-        for r_num in range(1, total_rows + 1):
-            if self.is_header:
-                # 勾選第一行為標題時，第一行 (r_num=1) 作為橫向標題，不顯示在內容中。
-                # 起始行號如果是 1，其內容從第 2 行開始顯示。
-                if r_num >= max(2, self.start_row) and r_num <= end_idx:
-                    self.visible_row_indices.append(r_num - 1)
-            else:
-                if r_num >= self.start_row and r_num <= end_idx:
-                    self.visible_row_indices.append(r_num - 1)
+        end_idx = min(end_idx, total_rows)
+
+        if self.is_header:
+            start = max(2, self.start_row)
+        else:
+            start = self.start_row
+
+        if start <= end_idx:
+            self.visible_row_indices = list(range(start - 1, end_idx))
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.visible_row_indices)
 
     def columnCount(self, parent=QModelIndex()):
-        if not self.all_rows:
-            return 0
-        return max(len(row) for row in self.all_rows)
+        return self.num_cols
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
