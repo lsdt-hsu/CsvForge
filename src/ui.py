@@ -130,6 +130,7 @@ class MainWindow(QMainWindow):
         
         self.translation_panel = TranslationPanel()
         self.edit_panel = EditPanel()
+        self.edit_panel.request_filter.connect(self.start_filtering)
         
         self.sidebar_stacked.addWidget(self.translation_panel)
         self.sidebar_stacked.addWidget(self.edit_panel)
@@ -843,6 +844,14 @@ class MainWindow(QMainWindow):
                 self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row)
                 self.content_stack.setCurrentWidget(self.edit_content_panel)
                 
+                # 更新欄位下拉選單
+                loaded_rows = self.worker.loaded_rows
+                if loaded_rows:
+                    num_cols = max(len(r) for r in loaded_rows)
+                    is_hdr = self.edit_content_panel.is_first_row_header()
+                    headers = loaded_rows[0] if is_hdr else None
+                    self.edit_panel.update_column_dropdowns(num_cols, headers)
+                
             title, msg = self.worker.get_success_message(out_path)
             QMessageBox.information(self, title, msg)
 
@@ -853,6 +862,84 @@ class MainWindow(QMainWindow):
         self.set_ui_enabled(True)
         title, msg = self.worker.get_error_message(err_msg)
         QMessageBox.critical(self, title, msg)
+
+    def start_filtering(self, filter_method, filter_text, col1_idx, col2_idx):
+        if not hasattr(self.worker, "loaded_rows") or not self.worker.loaded_rows:
+            QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
+            return
+            
+        start_row = 1
+        try:
+            start_row = int(self.txt_start_row.text())
+        except ValueError:
+            pass
+        end_row = None
+        if self.txt_end_row.text().strip():
+            try:
+                end_row = int(self.txt_end_row.text())
+            except ValueError:
+                pass
+                
+        src_col = 1
+        try:
+            src_col = int(self.txt_src_col.text())
+        except ValueError:
+            pass
+        tgt_col = 1
+        try:
+            tgt_col = int(self.txt_tgt_col.text())
+        except ValueError:
+            pass
+            
+        is_header = self.edit_content_panel.is_first_row_header()
+        
+        from edit.filter_worker import FilterWorker
+        from PyQt6.QtWidgets import QProgressDialog
+        
+        self.filter_progress = QProgressDialog("正在執行過濾...", "取消", 0, len(self.worker.loaded_rows), self)
+        self.filter_progress.setWindowTitle("請稍候")
+        self.filter_progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self.filter_progress.setAutoClose(False)
+        self.filter_progress.setAutoReset(False)
+        self.filter_progress.show()
+        
+        self.filter_worker = FilterWorker(
+            all_rows=self.worker.loaded_rows,
+            start_row=start_row,
+            end_row=end_row,
+            is_header=is_header,
+            filter_method=filter_method,
+            filter_text=filter_text,
+            src_col=src_col,
+            tgt_col=tgt_col,
+            col1_idx=col1_idx,
+            col2_idx=col2_idx,
+            parent=self
+        )
+        self.filter_progress.canceled.connect(self.filter_worker.cancel)
+        self.filter_worker.progress_updated.connect(self.filter_progress.setValue)
+        self.filter_worker.filter_completed.connect(self.on_filter_completed)
+        self.filter_worker.filter_error.connect(self.on_filter_error)
+        self.filter_worker.start()
+
+    def on_filter_completed(self, matched_indices, elapsed_time):
+        self.edit_content_panel.table_model.set_filtered_indices(matched_indices)
+        
+        def close_dialog():
+            if hasattr(self, "filter_progress") and self.filter_progress:
+                self.filter_progress.close()
+                self.filter_progress = None
+                
+        if elapsed_time < 0.7:
+            QTimer.singleShot(int((0.7 - elapsed_time) * 1000), close_dialog)
+        else:
+            close_dialog()
+
+    def on_filter_error(self, err_msg):
+        if hasattr(self, "filter_progress") and self.filter_progress:
+            self.filter_progress.close()
+            self.filter_progress = None
+        QMessageBox.critical(self, "過濾錯誤", err_msg)
 
     def set_ui_enabled(self, enabled):
         self.txt_src_path.setEnabled(enabled)

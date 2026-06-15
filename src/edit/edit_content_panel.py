@@ -28,6 +28,7 @@ class CSVTableModel(QAbstractTableModel):
         self.end_row = None         # 結束行號 (1-based, None 表示至結尾)
         self.is_header = False      # 第一行是否為標題
         self.num_cols = 0            # 快取欄位數量，避免 O(N) 重複計算
+        self.filtered_indices = None # None = 未啟用過濾; list = 過濾後的 0-based 索引
         self.visible_row_indices = [] # 儲存當前可見資料行在 all_rows 中的索引值
 
     def set_data(self, all_rows, start_row, end_row, is_header):
@@ -46,6 +47,12 @@ class CSVTableModel(QAbstractTableModel):
         self.update_visible_rows()
         self.endResetModel()
 
+    def set_filtered_indices(self, indices):
+        self.beginResetModel()
+        self.filtered_indices = indices
+        self.update_visible_rows()
+        self.endResetModel()
+
     def update_visible_rows(self):
         self.visible_row_indices = []
         if not self.all_rows:
@@ -60,8 +67,18 @@ class CSVTableModel(QAbstractTableModel):
         else:
             start = self.start_row
 
-        if start <= end_idx:
+        if start > end_idx:
+            return
+
+        if self.filtered_indices is None:
             self.visible_row_indices = list(range(start - 1, end_idx))
+        else:
+            range_start = start - 1
+            range_end = end_idx
+            self.visible_row_indices = [
+                i for i in self.filtered_indices
+                if range_start <= i < range_end
+            ]
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.visible_row_indices)
