@@ -18,6 +18,7 @@ from edit.edit_panel import EditPanel
 from edit.edit_worker import CSVEditWorker
 from settings_manager import SettingsManager
 from preview.preview_panel import PreviewPanel
+from edit.edit_content_panel import EditContentPanel
 
 # UI 佈局常數
 WINDOW_DEFAULT_WIDTH = 1100
@@ -345,13 +346,29 @@ class MainWindow(QMainWindow):
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
         self.right_splitter.setObjectName("rightSplitter")
 
+        # 建立內容堆疊器與預覽、編輯面板
+        self.content_stack = QStackedWidget()
+
         self.preview_panel = PreviewPanel()
         self.preview_panel.preview_loaded.connect(self.on_preview_loaded)
+
+        self.edit_content_panel = EditContentPanel()
+
+        self.content_stack.addWidget(self.preview_panel)
+        self.content_stack.addWidget(self.edit_content_panel)
+
+        # 雙向同步「第一行為標題」核取方塊的 clicked 訊號
+        self.preview_panel.chk_first_row_header.clicked.connect(
+            lambda: self.edit_content_panel.chk_first_row_header.setChecked(self.preview_panel.chk_first_row_header.isChecked())
+        )
+        self.edit_content_panel.chk_first_row_header.clicked.connect(
+            lambda: self.preview_panel.chk_first_row_header.setChecked(self.preview_panel.chk_first_row_header.isChecked())
+        )
 
         self.grp_status = self._build_status_group()
         self.grp_status.setMinimumHeight(140)
 
-        self.right_splitter.addWidget(self.preview_panel)
+        self.right_splitter.addWidget(self.content_stack)
         self.right_splitter.addWidget(self.grp_status)
 
         # Stretch factor: preview panel is 1, status panel is 0 (keeps status height stable on resize)
@@ -544,19 +561,30 @@ class MainWindow(QMainWindow):
 
 
         /* 表格樣式 */
-        QTableWidget {
+        QTableWidget, QTableView {
             background-color: #16161e;
             color: #a9b1d6;
             border: 1px solid #2f3047;
             gridline-color: #232433;
             border-radius: 8px;
+            outline: none; /* 移除選取格時的焦點虛線框 */
         }
-        QTableWidget::item {
+        QTableWidget::item, QTableView::item {
             padding: 5px;
+            outline: none;
         }
-        QTableWidget::item:selected {
+        QTableWidget::item:selected, QTableView::item:selected {
             background-color: #2e3c64;
             color: #c0caf5;
+            outline: none;
+        }
+        QAbstractItemView QLineEdit {
+            background-color: #16161e;
+            color: #c0caf5;
+            border: none; /* 編輯時不顯示編輯框外線 */
+            border-radius: 0px;
+            padding: 0px;
+            margin: 0px;
         }
         QHeaderView::section {
             background-color: #20212e;
@@ -793,6 +821,28 @@ class MainWindow(QMainWindow):
         else:
             self.task_status_str = "完成"
             self.update_status_summary()
+            
+            # 判斷當前是否為編輯分頁
+            active_tab = "translate"
+            if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
+                active_tab = "edit"
+                
+            if active_tab == "edit" and hasattr(self.worker, "loaded_rows"):
+                start_row = 1
+                try:
+                    start_row = int(self.txt_start_row.text())
+                except ValueError:
+                    pass
+                end_row = None
+                if self.txt_end_row.text().strip():
+                    try:
+                        end_row = int(self.txt_end_row.text())
+                    except ValueError:
+                        pass
+                
+                self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row)
+                self.content_stack.setCurrentWidget(self.edit_content_panel)
+                
             title, msg = self.worker.get_success_message(out_path)
             QMessageBox.information(self, title, msg)
 
@@ -849,10 +899,15 @@ class MainWindow(QMainWindow):
                 self.sidebar_stacked.setCurrentWidget(self.translation_panel)
                 self.btn_translate.setProperty("active", True)
                 self.btn_edit.setProperty("active", False)
+                self.content_stack.setCurrentWidget(self.preview_panel)
             elif tab_name == "edit":
                 self.sidebar_stacked.setCurrentWidget(self.edit_panel)
                 self.btn_translate.setProperty("active", False)
                 self.btn_edit.setProperty("active", True)
+                if self.edit_content_panel.table_model.all_rows:
+                    self.content_stack.setCurrentWidget(self.edit_content_panel)
+                else:
+                    self.content_stack.setCurrentWidget(self.preview_panel)
                 
         # 刷新按鈕樣式
         self.btn_translate.style().polish(self.btn_translate)
@@ -994,7 +1049,9 @@ class MainWindow(QMainWindow):
                 
                 # 恢復預覽設定
                 preview_cfg = p_data.get("preview", {})
-                self.preview_panel.set_first_row_header(preview_cfg.get("first_row_header", False))
+                is_hdr = preview_cfg.get("first_row_header", False)
+                self.preview_panel.set_first_row_header(is_hdr)
+                self.edit_content_panel.set_first_row_header(is_hdr)
             
             # 恢復設定後更新開始按鈕狀態字樣
             self.update_start_button_ui()

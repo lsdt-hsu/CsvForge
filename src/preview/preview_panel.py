@@ -2,7 +2,7 @@ import csv
 import os
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QLabel, QTableWidget, QTableWidgetItem,
-    QCheckBox
+    QCheckBox, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from base_panel import BasePanel
@@ -10,6 +10,13 @@ from utils import detect_encoding, detect_delimiter
 
 PREVIEW_DEFAULT_SECTION_SIZE = 110
 PREVIEW_VERTICAL_SECTION_SIZE = 28
+
+class CsvNoFocusDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+        if opt.state & QStyle.StateFlag.State_HasFocus:
+            opt.state = opt.state & ~QStyle.StateFlag.State_HasFocus
+        super().paint(painter, opt, index)
 
 class PreviewPanel(BasePanel):
     preview_loaded = pyqtSignal(int)  # 發送總行數給主視窗以更新結束行號佔位字
@@ -58,6 +65,7 @@ class PreviewPanel(BasePanel):
         self.table_preview.horizontalHeader().setDefaultSectionSize(PREVIEW_DEFAULT_SECTION_SIZE)
         self.table_preview.verticalHeader().setDefaultSectionSize(PREVIEW_VERTICAL_SECTION_SIZE)
         self.table_preview.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.table_preview.setItemDelegate(CsvNoFocusDelegate(self.table_preview))
         layout.addWidget(self.table_preview)
 
     def on_header_checkbox_changed(self, state):
