@@ -234,12 +234,12 @@ class MainWindow(QMainWindow):
         self.txt_end_row.setValidator(QIntValidator(1, 9999999))
         self.txt_end_row.setMaximumWidth(INPUT_END_ROW_MAX_WIDTH)
 
-        lbl_src_col = QLabel("來源列號：")
+        lbl_src_col = QLabel("來源欄號：")
         self.txt_src_col = QLineEdit("1")
         self.txt_src_col.setValidator(QIntValidator(1, 9999))
         self.txt_src_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
 
-        lbl_tgt_col = QLabel("目標列號：")
+        lbl_tgt_col = QLabel("目標欄號：")
         self.txt_tgt_col = QLineEdit("2")
         self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
         self.txt_tgt_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
