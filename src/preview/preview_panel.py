@@ -81,6 +81,8 @@ class PreviewPanel(BasePanel):
             col_headers = [header_row[i] if i < len(header_row) else "" for i in range(max_cols)]
             # 填補空白標題
             col_headers = [h if h.strip() else f"第 {i+1} 欄" for i, h in enumerate(col_headers)]
+            # 加上編號格式 "n. <欄位內容>"
+            col_headers = [f"{i+1}. {h}" for i, h in enumerate(col_headers)]
             self.table_preview.setColumnCount(max_cols)
             self.table_preview.setHorizontalHeaderLabels(col_headers)
 
