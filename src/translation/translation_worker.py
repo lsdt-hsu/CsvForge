@@ -81,7 +81,7 @@ class CSVTranslatorWorker(BaseCSVWorker):
                 raise RuntimeError("使用者已取消翻譯")
             
             # 每一筆個別翻譯前，加入單筆間隔冷卻時間 (每 100ms 檢查一次是否取消)
-            for _ in range(self.single_interval * 10):
+            for _ in range(int(self.single_interval * 10)):
                 if self._is_cancelled:
                     raise RuntimeError("使用者已取消翻譯")
                 self.msleep(100)

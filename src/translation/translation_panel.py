@@ -46,10 +46,10 @@ class TranslationPanel(BasePanel):
         self.slider_batch_interval.setValue(10)
         self.slider_batch_interval.valueChanged.connect(self.update_batch_label)
 
-        self.lbl_single_title = QLabel("單筆間隔：1 秒")
+        self.lbl_single_title = QLabel("單筆間隔：1.0 秒")
         self.slider_single_interval = QSlider(Qt.Orientation.Horizontal)
-        self.slider_single_interval.setRange(1, 5)
-        self.slider_single_interval.setValue(1)
+        self.slider_single_interval.setRange(2, 10)
+        self.slider_single_interval.setValue(2)
         self.slider_single_interval.valueChanged.connect(self.update_single_label)
 
         self.lbl_batch_size_title = QLabel("批次筆數：18 筆")
@@ -76,7 +76,7 @@ class TranslationPanel(BasePanel):
         self.lbl_batch_title.setText(f"批次間隔：{val} 秒")
 
     def update_single_label(self, val):
-        self.lbl_single_title.setText(f"單筆間隔：{val} 秒")
+        self.lbl_single_title.setText(f"單筆間隔：{val * 0.5:.1f} 秒")
 
     def update_batch_size_label(self, val):
         self.lbl_batch_size_title.setText(f"批次筆數：{val} 筆")
@@ -91,7 +91,7 @@ class TranslationPanel(BasePanel):
         return self.slider_batch_interval.value()
 
     def get_single_interval(self):
-        return self.slider_single_interval.value()
+        return self.slider_single_interval.value() * 0.5
 
     def get_batch_size(self):
         return self.slider_batch_size.value()
@@ -114,9 +114,9 @@ class TranslationPanel(BasePanel):
 
     def set_single_interval(self, val):
         try:
-            self.slider_single_interval.setValue(int(val))
-        except ValueError:
-            self.slider_single_interval.setValue(1)
+            self.slider_single_interval.setValue(int(float(val) * 2))
+        except (ValueError, TypeError):
+            self.slider_single_interval.setValue(2)
 
     def set_batch_size(self, val):
         try:
