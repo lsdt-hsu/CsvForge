@@ -225,6 +225,10 @@ class CSVTranslatorWorker(BaseCSVWorker):
             raise RuntimeError(fail_status)
 
     def run(self):
+        from utils import prevent_sleep
+        sleep_prevented = prevent_sleep(True)
+        if sleep_prevented:
+            self.log_emitted.emit("INFO", "已成功通知系統在翻譯期間不要進入休眠狀態。")
         try:
             self.error_rank = 0
             self.log_emitted.emit("INFO", "開始執行 CSV 翻譯工作...")
@@ -345,16 +349,20 @@ class CSVTranslatorWorker(BaseCSVWorker):
                         writer.writerows(line_buffer)
                         tag_buffer.clear()
                         line_buffer.clear()
-
+ 
             if self._is_cancelled:
                 self.log_emitted.emit("WARNING", f"翻譯已取消！結果已寫入至：{self.output_path}")
             else:
                 self.log_emitted.emit("SUCCESS", f"翻譯完成！結果已寫入至：{self.output_path}")
             self.finished_successfully.emit(self.output_path)
-
+ 
         except Exception as e:
             self.log_emitted.emit("ERROR", f"翻譯過程發生錯誤：{str(e)}")
             self.finished_with_error.emit(str(e))
+        finally:
+            if sleep_prevented:
+                prevent_sleep(False)
+                self.log_emitted.emit("INFO", "已恢復系統正常休眠設定。")
 
     def get_success_message(self, out_path):
         return "成功", f"翻譯完成！\n檔案已儲存至：\n{out_path}"
