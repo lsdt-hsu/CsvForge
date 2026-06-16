@@ -94,7 +94,7 @@ class EditPanel(BasePanel):
         col2 = self.cmb_col2.currentData() if self.cmb_col2.count() > 0 else 0
         
         # 驗證
-        if method in ("範圍欄位─完全符合", "範圍欄位─包含", "範圍欄位─正規表達式"):
+        if method in ("範圍欄位─包含", "範圍欄位─正規表達式"):
             if not text.strip():
                 QMessageBox.warning(self, "錯誤", "過濾文字不可為空。")
                 return
