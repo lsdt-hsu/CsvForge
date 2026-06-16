@@ -741,6 +741,7 @@ class MainWindow(QMainWindow):
             tgt_lang = self.translation_panel.get_tgt_lang()
             batch_interval = self.translation_panel.get_batch_interval()
             single_interval = self.translation_panel.get_single_interval()
+            batch_size = self.translation_panel.get_batch_size()
             
             worker_instance = CSVTranslatorWorker(
                 source_path=src_path,
@@ -752,7 +753,8 @@ class MainWindow(QMainWindow):
                 source_lang=src_lang,
                 target_lang=tgt_lang,
                 batch_interval=batch_interval,
-                single_interval=single_interval
+                single_interval=single_interval,
+                batch_size=batch_size
             )
         else:
             worker_instance = CSVEditWorker(

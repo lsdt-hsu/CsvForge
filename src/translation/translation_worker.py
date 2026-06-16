@@ -8,7 +8,7 @@ from csv_worker import BaseCSVWorker
 
 # --- CSV 翻譯執行緒工人類 ---
 class CSVTranslatorWorker(BaseCSVWorker):
-    def __init__(self, source_path, output_path, start_row, end_row, source_col, target_col, source_lang, target_lang, batch_interval=10, single_interval=1):
+    def __init__(self, source_path, output_path, start_row, end_row, source_col, target_col, source_lang, target_lang, batch_interval=10, single_interval=1, batch_size=18):
         super().__init__(source_path, output_path, start_row, end_row)
         self.source_col = source_col
         self.target_col = target_col
@@ -16,6 +16,7 @@ class CSVTranslatorWorker(BaseCSVWorker):
         self.target_lang = target_lang
         self.batch_interval = batch_interval
         self.single_interval = single_interval
+        self.batch_size = batch_size
         self.error_rank = 0
 
     def _get_http_error_suffix(self):
@@ -322,10 +323,10 @@ class CSVTranslatorWorker(BaseCSVWorker):
                             tag_buffer.append((row, source_val, row_num))
                             line_buffer.append(row)
                             
-                        # 5.4 如果 tag buffer 長度達到 18 筆，或 line buffer 達到 500 筆，或 tag buffer 總字元數超過 240
+                        # 5.4 如果 tag buffer 長度達到 batch_size 筆，或 line buffer 達到 500 筆，或 tag buffer 總字元數超過 240
                         total_char_len = sum(len(item[1]) for item in tag_buffer)
-                        if len(tag_buffer) >= 18 or len(line_buffer) >= 500 or total_char_len > 240:
-                            self.log_emitted.emit("INFO", f"達到批次處理上限 (tag: {len(tag_buffer)}/18, line: {len(line_buffer)}/500, chars: {total_char_len}/240)，開始進行批次翻譯...")
+                        if len(tag_buffer) >= self.batch_size or len(line_buffer) >= 500 or total_char_len > 240:
+                            self.log_emitted.emit("INFO", f"達到批次處理上限 (tag: {len(tag_buffer)}/{self.batch_size}, line: {len(line_buffer)}/500, chars: {total_char_len}/240)，開始進行批次翻譯...")
                             if self.translate_batch(tag_buffer, line_buffer, writer, reader, target_col_idx, source_col_idx, max_idx):
                                 # 5.4.2
                                 writer.writerows(line_buffer)

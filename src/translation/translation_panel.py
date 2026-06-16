@@ -52,6 +52,12 @@ class TranslationPanel(BasePanel):
         self.slider_single_interval.setValue(1)
         self.slider_single_interval.valueChanged.connect(self.update_single_label)
 
+        self.lbl_batch_size_title = QLabel("批次筆數：18 筆")
+        self.slider_batch_size = QSlider(Qt.Orientation.Horizontal)
+        self.slider_batch_size.setRange(10, 20)
+        self.slider_batch_size.setValue(18)
+        self.slider_batch_size.valueChanged.connect(self.update_batch_size_label)
+
         grid.addWidget(lbl_src_lang, 0, 0)
         grid.addWidget(self.cb_src_lang, 0, 1)
         grid.addWidget(lbl_tgt_lang, 1, 0)
@@ -60,6 +66,8 @@ class TranslationPanel(BasePanel):
         grid.addWidget(self.slider_batch_interval, 2, 1)
         grid.addWidget(self.lbl_single_title, 3, 0)
         grid.addWidget(self.slider_single_interval, 3, 1)
+        grid.addWidget(self.lbl_batch_size_title, 4, 0)
+        grid.addWidget(self.slider_batch_size, 4, 1)
 
         layout.addLayout(grid)
         layout.addStretch()
@@ -69,6 +77,9 @@ class TranslationPanel(BasePanel):
 
     def update_single_label(self, val):
         self.lbl_single_title.setText(f"單筆間隔：{val} 秒")
+
+    def update_batch_size_label(self, val):
+        self.lbl_batch_size_title.setText(f"批次筆數：{val} 筆")
 
     def get_src_lang(self):
         return self.cb_src_lang.currentData()
@@ -81,6 +92,9 @@ class TranslationPanel(BasePanel):
 
     def get_single_interval(self):
         return self.slider_single_interval.value()
+
+    def get_batch_size(self):
+        return self.slider_batch_size.value()
 
     def set_src_lang(self, code):
         idx = self.cb_src_lang.findData(code)
@@ -104,16 +118,24 @@ class TranslationPanel(BasePanel):
         except ValueError:
             self.slider_single_interval.setValue(1)
 
+    def set_batch_size(self, val):
+        try:
+            self.slider_batch_size.setValue(int(val))
+        except ValueError:
+            self.slider_batch_size.setValue(18)
+
     def set_enabled(self, enabled):
         self.cb_src_lang.setEnabled(enabled)
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
         self.slider_single_interval.setEnabled(enabled)
+        self.slider_batch_size.setEnabled(enabled)
 
     def get_config(self) -> dict:
         return {
             "batch_interval": self.get_batch_interval(),
             "single_interval": self.get_single_interval(),
+            "batch_size": self.get_batch_size(),
             "src_lang": self.get_src_lang(),
             "tgt_lang": self.get_tgt_lang()
         }
@@ -125,6 +147,8 @@ class TranslationPanel(BasePanel):
             self.set_batch_interval(config["batch_interval"])
         if "single_interval" in config:
             self.set_single_interval(config["single_interval"])
+        if "batch_size" in config:
+            self.set_batch_size(config["batch_size"])
         if "src_lang" in config:
             self.set_src_lang(config["src_lang"])
         if "tgt_lang" in config:
