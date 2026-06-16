@@ -4,7 +4,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 class FilterWorker(QThread):
     progress_updated = pyqtSignal(int, int)
-    filter_completed = pyqtSignal(list, float)  # 傳回: 匹配的索引列表, 執行時間(秒)
+    filter_completed = pyqtSignal(object, float)  # 傳回: 匹配的索引列表, 執行時間(秒)
     filter_error = pyqtSignal(str)
 
     def __init__(self, all_rows, start_row, end_row, is_header, 
