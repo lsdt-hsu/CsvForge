@@ -35,14 +35,19 @@ class EditPanel(BasePanel):
 
         # 1. 比對欄位下拉選單
         self.lbl_compare_col = QLabel("比對欄位：")
+        self.lbl_compare_col.setFixedWidth(75)
         self.cmb_compare_col = QComboBox()
         self.cmb_compare_col.addItem("不過濾", "none")
         self.cmb_compare_col.addItem("所有欄位", "all")
         self.cmb_compare_col.addItem("來源-目標欄位", "range")
         self.cmb_compare_col.currentIndexChanged.connect(self.on_compare_col_changed)
         
-        controls_layout.addWidget(self.lbl_compare_col)
-        controls_layout.addWidget(self.cmb_compare_col)
+        row1_layout = QHBoxLayout()
+        row1_layout.setContentsMargins(0, 0, 0, 0)
+        row1_layout.setSpacing(10)
+        row1_layout.addWidget(self.lbl_compare_col)
+        row1_layout.addWidget(self.cmb_compare_col)
+        controls_layout.addLayout(row1_layout)
 
         # 建立一個容器以群組「比對方式」與「比對目標」，便於一併隱藏/顯示
         self.filter_options_widget = QWidget()
@@ -52,18 +57,30 @@ class EditPanel(BasePanel):
 
         # 2. 比對方式下拉選單
         self.lbl_compare_method = QLabel("比對方式：")
+        self.lbl_compare_method.setFixedWidth(75)
         self.cmb_compare_method = QComboBox()
         self.cmb_compare_method.addItems(["完全符合", "包含", "未包含", "正規表達式"])
-        self.filter_options_layout.addWidget(self.lbl_compare_method)
-        self.filter_options_layout.addWidget(self.cmb_compare_method)
+        
+        row2_layout = QHBoxLayout()
+        row2_layout.setContentsMargins(0, 0, 0, 0)
+        row2_layout.setSpacing(10)
+        row2_layout.addWidget(self.lbl_compare_method)
+        row2_layout.addWidget(self.cmb_compare_method)
+        self.filter_options_layout.addLayout(row2_layout)
 
         # 3. 比對目標下拉選單
         self.lbl_compare_target = QLabel("比對目標：")
+        self.lbl_compare_target.setFixedWidth(75)
         self.cmb_compare_target = QComboBox()
         self.cmb_compare_target.addItem("手動輸入", "manual")
         self.cmb_compare_target.currentIndexChanged.connect(self.on_compare_target_changed)
-        self.filter_options_layout.addWidget(self.lbl_compare_target)
-        self.filter_options_layout.addWidget(self.cmb_compare_target)
+        
+        row3_layout = QHBoxLayout()
+        row3_layout.setContentsMargins(0, 0, 0, 0)
+        row3_layout.setSpacing(10)
+        row3_layout.addWidget(self.lbl_compare_target)
+        row3_layout.addWidget(self.cmb_compare_target)
+        self.filter_options_layout.addLayout(row3_layout)
 
         # 4. 比對值輸入框 (手動輸入的子項目，採用內縮佈局且無 label)
         self.value_container = QWidget()
