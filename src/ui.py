@@ -1222,7 +1222,7 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if not self.settings_restored:
             self.settings_restored = True
-            self.apply_splitter_sizes()
+            QTimer.singleShot(0, self.apply_splitter_sizes)
 
     def apply_splitter_sizes(self):
         total_h = self.right_splitter.height()
@@ -1230,6 +1230,8 @@ class MainWindow(QMainWindow):
         available_h = total_h - handle_w
         
         if self.status_expanded:
+            self.grp_status.setMinimumHeight(140)
+            self.grp_status.setMaximumHeight(16777215)
             status_h = max(140, self.status_expanded_height)
             preview_h = max(200, available_h - status_h)
             if preview_h < 200:
@@ -1240,6 +1242,8 @@ class MainWindow(QMainWindow):
             header_h = self.status_header_widget.sizeHint().height() + 30
             if header_h < 50:
                 header_h = 50
+            self.grp_status.setMinimumHeight(0)
+            self.grp_status.setMaximumHeight(header_h)
             preview_h = max(200, available_h - header_h)
             self.right_splitter.setSizes([preview_h, header_h])
 
