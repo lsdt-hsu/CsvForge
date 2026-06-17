@@ -103,7 +103,7 @@ class CSVTranslatorWorker(BaseCSVWorker):
                 
                 r_obj[target_col_idx] = single_translated_processed
                 
-                self.error_rank = max(0, self.error_rank - 2)
+                self.error_rank = max(0, self.error_rank - 1)
                 
                 success_status = f"個別翻譯成功 | 來源：{source_val} | 翻譯：{single_translated_processed} | 行號：{row_num} | Error Rank: {self.error_rank}"
                 self.status_updated.emit(success_status)
@@ -209,7 +209,7 @@ class CSVTranslatorWorker(BaseCSVWorker):
             for (r_obj, _, _), trans_text in zip(tag_buffer, translated_tags):
                 r_obj[target_col_idx] = trans_text
                 
-            self.error_rank = max(0, self.error_rank - 2)
+            self.error_rank = max(0, self.error_rank - 1)
             
             first_row = tag_buffer[0][2]
             last_row = tag_buffer[-1][2]
