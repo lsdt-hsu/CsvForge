@@ -887,7 +887,7 @@ class MainWindow(QMainWindow):
         title, msg = self.worker.get_error_message(err_msg)
         QMessageBox.critical(self, title, msg)
 
-    def start_filtering(self, filter_method, filter_text, col1_idx, col2_idx):
+    def start_filtering(self, compare_col, compare_method, compare_target, compare_value):
         if not hasattr(self.worker, "loaded_rows") or not self.worker.loaded_rows:
             QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
             return
@@ -932,12 +932,12 @@ class MainWindow(QMainWindow):
             start_row=start_row,
             end_row=end_row,
             is_header=is_header,
-            filter_method=filter_method,
-            filter_text=filter_text,
+            compare_col=compare_col,
+            compare_method=compare_method,
+            compare_target=compare_target,
+            compare_value=compare_value,
             src_col=src_col,
             tgt_col=tgt_col,
-            col1_idx=col1_idx,
-            col2_idx=col2_idx,
             parent=self
         )
         self.filter_progress.canceled.connect(self.filter_worker.cancel)
