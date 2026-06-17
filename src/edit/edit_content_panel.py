@@ -236,3 +236,7 @@ class EditContentPanel(BasePanel):
 
     def set_first_row_header(self, checked: bool):
         self.chk_first_row_header.setChecked(checked)
+
+    def clear(self):
+        self.table_model.set_data([], 1, None, False)
+        self.lbl_status.setText("尚未載入編輯資料")

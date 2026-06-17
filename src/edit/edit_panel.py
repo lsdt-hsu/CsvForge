@@ -74,17 +74,39 @@ class EditPanel(BasePanel):
 
         # 初始化控制項顯示狀態
         self.on_compare_col_changed(0)
-
     def on_compare_col_changed(self, idx):
         # 取得目前比對欄位的值
         col_type = self.cmb_compare_col.currentData()
-        if col_type == "none":
+        if col_type is None or col_type == "none":
             # 隱藏所有選項目標與輸入框
             self.filter_options_widget.setVisible(False)
         else:
             self.filter_options_widget.setVisible(True)
             # 根據比對目標決定輸入框是否顯示
             self.on_compare_target_changed(self.cmb_compare_target.currentIndex())
+
+    def reset_panel(self):
+        # 暫時阻擋訊號以避免頻繁觸發畫面重繪
+        self.cmb_compare_col.blockSignals(True)
+        self.cmb_compare_target.blockSignals(True)
+        
+        self.cmb_compare_col.clear()
+        self.cmb_compare_col.addItem("不過濾", "none")
+        self.cmb_compare_col.addItem("所有欄位", "all")
+        self.cmb_compare_col.addItem("來源-目標欄位", "range")
+        self.cmb_compare_col.setCurrentIndex(0)
+        
+        self.cmb_compare_target.clear()
+        self.cmb_compare_target.addItem("手動輸入", "manual")
+        self.cmb_compare_target.setCurrentIndex(0)
+        
+        self.txt_compare_value.clear()
+        
+        self.cmb_compare_col.blockSignals(False)
+        self.cmb_compare_target.blockSignals(False)
+        
+        # 手動觸發一次以隱藏所有子項目
+        self.on_compare_col_changed(0)
 
     def on_compare_target_changed(self, idx):
         target_type = self.cmb_compare_target.currentData()

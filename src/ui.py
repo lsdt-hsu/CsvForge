@@ -683,9 +683,19 @@ class MainWindow(QMainWindow):
         if not file_path.strip() or not os.path.exists(file_path):
             self.preview_panel.clear_preview()
             self.txt_end_row.setPlaceholderText("預設至檔尾")
+            self.edit_content_panel.clear()
+            self.edit_panel.reset_panel()
+            if self.worker and hasattr(self.worker, "loaded_rows"):
+                self.worker.loaded_rows = []
+            self.content_stack.setCurrentWidget(self.preview_panel)
             return
         
         self.preview_panel.load_preview(file_path)
+        self.edit_content_panel.clear()
+        self.edit_panel.reset_panel()
+        if self.worker and hasattr(self.worker, "loaded_rows"):
+            self.worker.loaded_rows = []
+        self.content_stack.setCurrentWidget(self.preview_panel)
 
     def on_preview_loaded(self, total_rows):
         self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
@@ -888,7 +898,8 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, title, msg)
 
     def start_filtering(self, compare_col, compare_method, compare_target, compare_value):
-        if not hasattr(self.worker, "loaded_rows") or not self.worker.loaded_rows:
+        rows = self.edit_content_panel.table_model.all_rows
+        if not rows:
             QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
             return
             
@@ -920,7 +931,7 @@ class MainWindow(QMainWindow):
         from edit.filter_worker import FilterWorker
         from PyQt6.QtWidgets import QProgressDialog
         
-        self.filter_progress = QProgressDialog("正在執行過濾...", "取消", 0, len(self.worker.loaded_rows), self)
+        self.filter_progress = QProgressDialog("正在執行過濾...", "取消", 0, len(rows), self)
         self.filter_progress.setWindowTitle("請稍候")
         self.filter_progress.setWindowModality(Qt.WindowModality.WindowModal)
         self.filter_progress.setAutoClose(False)
@@ -928,7 +939,7 @@ class MainWindow(QMainWindow):
         self.filter_progress.show()
         
         self.filter_worker = FilterWorker(
-            all_rows=self.worker.loaded_rows,
+            all_rows=rows,
             start_row=start_row,
             end_row=end_row,
             is_header=is_header,
