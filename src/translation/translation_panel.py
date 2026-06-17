@@ -10,7 +10,7 @@ class TranslationPanel(BasePanel):
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(0, 0, 0, 0)
 
         lbl_sec = QLabel("翻譯設定")
         lbl_sec.setObjectName("sectionHeader")

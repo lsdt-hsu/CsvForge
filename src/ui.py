@@ -405,10 +405,10 @@ class MainWindow(QMainWindow):
             background-color: #2f3047;
         }
         QFrame#grpFrame {
-            background-color: #242538;
-            border: 1px solid #2f3047;
-            border-radius: 8px;
-            padding: 5px;
+            background-color: transparent;
+            border: none;
+            border-radius: 0px;
+            padding: 0px;
         }
         QFrame#rightFrame {
             background-color: #20212e;
