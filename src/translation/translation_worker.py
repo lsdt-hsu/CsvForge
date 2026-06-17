@@ -81,7 +81,10 @@ class CSVTranslatorWorker(BaseCSVWorker):
                 raise RuntimeError("使用者已取消翻譯")
             
             # 每一筆個別翻譯前，加入單筆間隔冷卻時間 (每 100ms 檢查一次是否取消)
-            for _ in range(int(self.single_interval * 10)):
+            actual_single_interval = self.single_interval + self.error_rank * 10
+            if self.error_rank > 0:
+                self.log_emitted.emit("WARNING", f"偵測到 Error Rank 為 {self.error_rank}，單筆翻譯間隔延長 {self.error_rank * 10} 秒，共 {actual_single_interval} 秒。")
+            for _ in range(int(actual_single_interval * 10)):
                 if self._is_cancelled:
                     raise RuntimeError("使用者已取消翻譯")
                 self.msleep(100)
@@ -100,7 +103,7 @@ class CSVTranslatorWorker(BaseCSVWorker):
                 
                 r_obj[target_col_idx] = single_translated_processed
                 
-                self.error_rank = max(0, self.error_rank - 1)
+                self.error_rank = max(0, self.error_rank - 2)
                 
                 success_status = f"個別翻譯成功 | 來源：{source_val} | 翻譯：{single_translated_processed} | 行號：{row_num} | Error Rank: {self.error_rank}"
                 self.status_updated.emit(success_status)
@@ -153,8 +156,12 @@ class CSVTranslatorWorker(BaseCSVWorker):
         line_buffer.clear()
         
         # 逐筆個別翻譯執行到最後，加上跟批次翻譯一樣的冷卻時間
-        self.log_emitted.emit("WARNING", f"個別翻譯批次完成，進行冷卻，休息 {self.batch_interval} 秒...")
-        for _ in range(self.batch_interval):
+        actual_batch_interval = self.batch_interval + self.error_rank * 10
+        if self.error_rank > 0:
+            self.log_emitted.emit("WARNING", f"個別翻譯批次完成，偵測到 Error Rank 為 {self.error_rank}，批次冷卻時間延長 {self.error_rank * 10} 秒，共 {actual_batch_interval} 秒...")
+        else:
+            self.log_emitted.emit("WARNING", f"個別翻譯批次完成，進行冷卻，休息 {self.batch_interval} 秒...")
+        for _ in range(actual_batch_interval):
             if self._is_cancelled:
                 break
             self.msleep(1000)
@@ -202,10 +209,12 @@ class CSVTranslatorWorker(BaseCSVWorker):
             for (r_obj, _, _), trans_text in zip(tag_buffer, translated_tags):
                 r_obj[target_col_idx] = trans_text
                 
+            self.error_rank = max(0, self.error_rank - 2)
+            
             first_row = tag_buffer[0][2]
             last_row = tag_buffer[-1][2]
             
-            success_status = f"批次翻譯成功 | 來源：{joined_string} | 翻譯：{translated_text} | 行號：{first_row} - {last_row}"
+            success_status = f"批次翻譯成功 | 來源：{joined_string} | 翻譯：{translated_text} | 行號：{first_row} - {last_row} | Error Rank: {self.error_rank}"
             self.status_updated.emit(success_status)
             self.log_emitted.emit("SUCCESS", f"批次翻譯成功 (第 {first_row} - {last_row} 行)")
             self.log_emitted.emit("INFO", f"送出文字：{joined_string}")
@@ -334,8 +343,12 @@ class CSVTranslatorWorker(BaseCSVWorker):
                                 line_buffer.clear()
                                 
                                 # 5.4.3 休息指定的批次間隔時間
-                                self.log_emitted.emit("WARNING", f"休息 {self.batch_interval} 秒...")
-                                for _ in range(self.batch_interval):
+                                actual_batch_interval = self.batch_interval + self.error_rank * 10
+                                if self.error_rank > 0:
+                                    self.log_emitted.emit("WARNING", f"偵測到 Error Rank 為 {self.error_rank}，批次翻譯間隔延長 {self.error_rank * 10} 秒，共 {actual_batch_interval} 秒...")
+                                else:
+                                    self.log_emitted.emit("WARNING", f"休息 {self.batch_interval} 秒...")
+                                for _ in range(actual_batch_interval):
                                     if self._is_cancelled:
                                         break
                                     self.msleep(1000)
