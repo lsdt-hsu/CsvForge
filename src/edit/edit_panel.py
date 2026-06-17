@@ -21,6 +21,18 @@ class EditPanel(BasePanel):
         lbl_sec.setObjectName("sectionHeader")
         layout.addWidget(lbl_sec)
 
+        # 尚未載入資料提示標籤
+        self.lbl_no_data = QLabel("尚未載入資料")
+        self.lbl_no_data.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_no_data.setStyleSheet("color: #565f89; font-style: italic; margin-top: 5px;")
+        layout.addWidget(self.lbl_no_data)
+
+        # 建立一個容器以包裝所有過濾控制項
+        self.controls_container = QWidget()
+        controls_layout = QVBoxLayout(self.controls_container)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(8)
+
         # 1. 比對欄位下拉選單
         self.lbl_compare_col = QLabel("比對欄位：")
         self.cmb_compare_col = QComboBox()
@@ -29,8 +41,8 @@ class EditPanel(BasePanel):
         self.cmb_compare_col.addItem("來源-目標欄位", "range")
         self.cmb_compare_col.currentIndexChanged.connect(self.on_compare_col_changed)
         
-        layout.addWidget(self.lbl_compare_col)
-        layout.addWidget(self.cmb_compare_col)
+        controls_layout.addWidget(self.lbl_compare_col)
+        controls_layout.addWidget(self.cmb_compare_col)
 
         # 建立一個容器以群組「比對方式」與「比對目標」，便於一併隱藏/顯示
         self.filter_options_widget = QWidget()
@@ -63,16 +75,19 @@ class EditPanel(BasePanel):
         value_layout.addWidget(self.txt_compare_value)
         self.filter_options_layout.addWidget(self.value_container)
 
-        layout.addWidget(self.filter_options_widget)
+        controls_layout.addWidget(self.filter_options_widget)
 
         # 開始過濾按鈕
         self.btn_start_filter = QPushButton("開始過濾")
         self.btn_start_filter.clicked.connect(self.on_filter_clicked)
-        layout.addWidget(self.btn_start_filter)
+        controls_layout.addWidget(self.btn_start_filter)
 
+        layout.addWidget(self.controls_container)
         layout.addStretch()
 
-        # 初始化控制項顯示狀態
+        # 初始化控制項顯示狀態：未載入資料狀態
+        self.lbl_no_data.setVisible(True)
+        self.controls_container.setVisible(False)
         self.on_compare_col_changed(0)
     def on_compare_col_changed(self, idx):
         # 取得目前比對欄位的值
@@ -86,6 +101,9 @@ class EditPanel(BasePanel):
             self.on_compare_target_changed(self.cmb_compare_target.currentIndex())
 
     def reset_panel(self):
+        self.lbl_no_data.setVisible(True)
+        self.controls_container.setVisible(False)
+
         # 暫時阻擋訊號以避免頻繁觸發畫面重繪
         self.cmb_compare_col.blockSignals(True)
         self.cmb_compare_target.blockSignals(True)
@@ -116,6 +134,9 @@ class EditPanel(BasePanel):
             self.value_container.setVisible(False)
 
     def update_column_dropdowns(self, num_cols, headers=None):
+        self.lbl_no_data.setVisible(False)
+        self.controls_container.setVisible(True)
+
         # 記下目前選取的狀態，以便重整時儘量保留
         old_col_idx = self.cmb_compare_col.currentIndex()
         old_target_idx = self.cmb_compare_target.currentIndex()
