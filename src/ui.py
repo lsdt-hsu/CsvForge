@@ -793,6 +793,13 @@ class MainWindow(QMainWindow):
         
         self.worker.start()
 
+        # 如果是翻譯工作，防止系統進入休眠
+        if active_tab == "translate":
+            from utils import prevent_sleep
+            self.sleep_prevented = prevent_sleep(True)
+            if self.sleep_prevented:
+                self.append_log("INFO", "已成功通知系統在翻譯期間不要進入休眠狀態。")
+
         # 改變開始按鈕狀態與啟用狀態
         self.set_ui_enabled(False)
         self.update_start_button_ui()
@@ -816,6 +823,13 @@ class MainWindow(QMainWindow):
     def on_worker_success(self, out_path):
         self.timer.stop()
         self.set_ui_enabled(True)
+        
+        # 恢復系統休眠設定
+        if getattr(self, "sleep_prevented", False):
+            from utils import prevent_sleep
+            prevent_sleep(False)
+            self.sleep_prevented = False
+            self.append_log("INFO", "已恢復系統正常休眠設定。")
         if self.worker and self.worker._is_cancelled:
             self.task_status_str = "已取消"
             self.update_status_summary()
@@ -862,6 +876,14 @@ class MainWindow(QMainWindow):
         self.task_status_str = "錯誤"
         self.update_status_summary()
         self.set_ui_enabled(True)
+        
+        # 恢復系統休眠設定
+        if getattr(self, "sleep_prevented", False):
+            from utils import prevent_sleep
+            prevent_sleep(False)
+            self.sleep_prevented = False
+            self.append_log("INFO", "已恢復系統正常休眠設定。")
+            
         title, msg = self.worker.get_error_message(err_msg)
         QMessageBox.critical(self, title, msg)
 
@@ -1265,5 +1287,8 @@ class MainWindow(QMainWindow):
             self.update_start_button_ui()
 
     def closeEvent(self, event):
+        if getattr(self, "sleep_prevented", False):
+            from utils import prevent_sleep
+            prevent_sleep(False)
         self.save_settings()
         super().closeEvent(event)
