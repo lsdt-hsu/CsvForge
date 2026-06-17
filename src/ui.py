@@ -546,16 +546,16 @@ class MainWindow(QMainWindow):
             background-color: #414868;
         }
 
-        QPushButton#btnSwap {
+        QPushButton#btnSwap, QPushButton#btnSwapRules {
             background-color: #3b4261;
             border: none;
             border-radius: 6px;
             padding: 0px;
         }
-        QPushButton#btnSwap:hover {
+        QPushButton#btnSwap:hover, QPushButton#btnSwapRules:hover {
             background-color: #414868;
         }
-        QPushButton#btnSwap:pressed {
+        QPushButton#btnSwap:pressed, QPushButton#btnSwapRules:pressed {
             background-color: #2e3c64;
         }
 
@@ -632,6 +632,49 @@ class MainWindow(QMainWindow):
             font-size: 12px;
             color: #9ece6a;
             padding: 8px;
+        }
+
+        /* 圓形切換按鈕 */
+        QPushButton#btnToggleRule {
+            background-color: #3b4261;
+            color: #7aa2f7;
+            border: 1px solid #2f3047;
+            border-radius: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 0px;
+        }
+        QPushButton#btnToggleRule:hover {
+            background-color: #414868;
+            color: #89ddff;
+            border-color: #7aa2f7;
+        }
+        QPushButton#btnToggleRule:pressed {
+            background-color: #2e3c64;
+        }
+
+        /* QRadioButton 美化樣式 */
+        QRadioButton {
+            color: #a9b1d6;
+            font-family: "Microsoft JhengHei", "Segoe UI", sans-serif;
+            font-size: 13px;
+        }
+        QRadioButton:hover {
+            color: #c0caf5;
+        }
+        QRadioButton::indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            border: 2px solid #2f3047;
+            background-color: #16161e;
+        }
+        QRadioButton::indicator:hover {
+            border-color: #7aa2f7;
+        }
+        QRadioButton::indicator:checked {
+            border-color: #7aa2f7;
+            background-color: #7aa2f7;
         }
         """
         self.setStyleSheet(qss)
@@ -897,7 +940,7 @@ class MainWindow(QMainWindow):
         title, msg = self.worker.get_error_message(err_msg)
         QMessageBox.critical(self, title, msg)
 
-    def start_filtering(self, compare_col, compare_method, compare_target, compare_value):
+    def start_filtering(self, filter_config):
         rows = self.edit_content_panel.table_model.all_rows
         if not rows:
             QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
@@ -943,12 +986,9 @@ class MainWindow(QMainWindow):
             start_row=start_row,
             end_row=end_row,
             is_header=is_header,
-            compare_col=compare_col,
-            compare_method=compare_method,
-            compare_target=compare_target,
-            compare_value=compare_value,
             src_col=src_col,
             tgt_col=tgt_col,
+            filter_config=filter_config,
             parent=self
         )
         self.filter_progress.canceled.connect(self.filter_worker.cancel)

@@ -1,12 +1,70 @@
+import os
 from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton,
-    QWidget, QHBoxLayout, QMessageBox
+    QWidget, QHBoxLayout, QMessageBox, QRadioButton
 )
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QSize
+from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon
 from base_panel import BasePanel
 
+class CircularToggleButton(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.is_minus = False # False = Plus (⊕), True = Minus (⊖)
+        self.setFixedSize(30, 30)
+
+    def set_minus(self, is_minus):
+        if self.is_minus != is_minus:
+            self.is_minus = is_minus
+            self.update()
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self.update()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self.update()
+
+    def paintEvent(self, event):
+        # Let QSS render background and borders
+        super().paintEvent(event)
+        
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        is_hover = self.underMouse()
+        is_pressed = self.isDown()
+        
+        if is_hover or is_pressed:
+            fg_color = QColor("#89ddff")
+        else:
+            fg_color = QColor("#7aa2f7")
+            
+        rect = self.rect()
+        center_x = rect.width() / 2.0
+        center_y = rect.height() / 2.0
+        
+        line_len = 10.0
+        pen_width = 2.5
+        
+        painter.setPen(QPen(fg_color, pen_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        
+        # Horizontal line
+        painter.drawLine(
+            int(center_x - line_len / 2.0), int(center_y),
+            int(center_x + line_len / 2.0), int(center_y)
+        )
+        
+        # Vertical line
+        if not self.is_minus:
+            painter.drawLine(
+                int(center_x), int(center_y - line_len / 2.0),
+                int(center_x), int(center_y + line_len / 2.0)
+            )
+
 class EditPanel(BasePanel):
-    request_filter = pyqtSignal(object, str, object, str) # compare_col, compare_method, compare_target, compare_value
+    request_filter = pyqtSignal(dict) # 傳送包含雙規則的 filter_config 字典
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -94,6 +152,126 @@ class EditPanel(BasePanel):
 
         controls_layout.addWidget(self.filter_options_widget)
 
+        # 5. 切換與邏輯運算元列
+        toggle_layout = QHBoxLayout()
+        toggle_layout.setContentsMargins(0, 0, 0, 0)
+        toggle_layout.setSpacing(10)
+
+        self.btn_toggle_rule = CircularToggleButton()
+        self.btn_toggle_rule.setObjectName("btnToggleRule")
+        self.btn_toggle_rule.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_toggle_rule.clicked.connect(self.on_toggle_rule_clicked)
+        toggle_layout.addWidget(self.btn_toggle_rule, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        # 上下交換按鈕
+        self.btn_swap_rules = QPushButton()
+        self.btn_swap_rules.setObjectName("btnSwapRules")
+        self.btn_swap_rules.setFixedSize(30, 30)
+        self.btn_swap_rules.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        swap_icon_path = os.path.join(root_dir, "assets", "swap.png")
+        if os.path.exists(swap_icon_path):
+            pixmap = QPixmap(swap_icon_path)
+            transform = QTransform().rotate(90)
+            rotated_pixmap = pixmap.transformed(transform, Qt.TransformationMode.SmoothTransformation)
+            self.btn_swap_rules.setIcon(QIcon(rotated_pixmap))
+            self.btn_swap_rules.setIconSize(QSize(20, 20))
+            
+        self.btn_swap_rules.clicked.connect(self.swap_rules)
+        self.btn_swap_rules.setVisible(False) # 預設隱藏，只在雙規則模式下顯示
+        toggle_layout.addWidget(self.btn_swap_rules, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        # 在交換按鈕與單選按鈕之間加入彈性空白，將 AND / OR 單選按鈕推至最右側
+        toggle_layout.addStretch()
+
+        self.op_widget = QWidget()
+        op_layout = QHBoxLayout(self.op_widget)
+        op_layout.setContentsMargins(5, 0, 0, 0)
+        op_layout.setSpacing(15)
+        op_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        
+        self.rbtn_and = QRadioButton("AND")
+        self.rbtn_and.setChecked(True)
+        self.rbtn_and.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        self.rbtn_or = QRadioButton("OR")
+        self.rbtn_or.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        op_layout.addWidget(self.rbtn_and)
+        op_layout.addWidget(self.rbtn_or)
+        toggle_layout.addWidget(self.op_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
+        
+        controls_layout.addLayout(toggle_layout)
+
+        # 6. 規則二容器與控制項
+        self.second_rule_container = QWidget()
+        second_rule_layout = QVBoxLayout(self.second_rule_container)
+        second_rule_layout.setContentsMargins(0, 0, 0, 0)
+        second_rule_layout.setSpacing(8)
+
+        # 比對欄位二下拉選單
+        self.lbl_compare_col2 = QLabel("比對欄位：")
+        self.lbl_compare_col2.setFixedWidth(75)
+        self.cmb_compare_col2 = QComboBox()
+        self.cmb_compare_col2.addItem("不過濾", "none")
+        self.cmb_compare_col2.addItem("所有欄位", "all")
+        self.cmb_compare_col2.addItem("來源-目標欄位", "range")
+        self.cmb_compare_col2.currentIndexChanged.connect(self.on_compare_col2_changed)
+        
+        row1_layout2 = QHBoxLayout()
+        row1_layout2.setContentsMargins(0, 0, 0, 0)
+        row1_layout2.setSpacing(10)
+        row1_layout2.addWidget(self.lbl_compare_col2)
+        row1_layout2.addWidget(self.cmb_compare_col2)
+        second_rule_layout.addLayout(row1_layout2)
+
+        # 建立一個容器以群組「比對方式二」與「比對目標二」，便於一併隱藏/顯示
+        self.filter_options_widget2 = QWidget()
+        self.filter_options_layout2 = QVBoxLayout(self.filter_options_widget2)
+        self.filter_options_layout2.setContentsMargins(0, 0, 0, 0)
+        self.filter_options_layout2.setSpacing(8)
+
+        # 比對方式二下拉選單
+        self.lbl_compare_method2 = QLabel("比對方式：")
+        self.lbl_compare_method2.setFixedWidth(75)
+        self.cmb_compare_method2 = QComboBox()
+        self.cmb_compare_method2.addItems(["完全符合", "包含", "未包含", "正規表達式"])
+        
+        row2_layout2 = QHBoxLayout()
+        row2_layout2.setContentsMargins(0, 0, 0, 0)
+        row2_layout2.setSpacing(10)
+        row2_layout2.addWidget(self.lbl_compare_method2)
+        row2_layout2.addWidget(self.cmb_compare_method2)
+        self.filter_options_layout2.addLayout(row2_layout2)
+
+        # 比對目標二下拉選單
+        self.lbl_compare_target2 = QLabel("比對目標：")
+        self.lbl_compare_target2.setFixedWidth(75)
+        self.cmb_compare_target2 = QComboBox()
+        self.cmb_compare_target2.addItem("手動輸入", "manual")
+        self.cmb_compare_target2.currentIndexChanged.connect(self.on_compare_target2_changed)
+        
+        row3_layout2 = QHBoxLayout()
+        row3_layout2.setContentsMargins(0, 0, 0, 0)
+        row3_layout2.setSpacing(10)
+        row3_layout2.addWidget(self.lbl_compare_target2)
+        row3_layout2.addWidget(self.cmb_compare_target2)
+        self.filter_options_layout2.addLayout(row3_layout2)
+
+        # 比對值二輸入框
+        self.value_container2 = QWidget()
+        value_layout2 = QHBoxLayout(self.value_container2)
+        value_layout2.setContentsMargins(20, 0, 0, 0)  # 內縮 20 像素
+        value_layout2.setSpacing(0)
+        self.txt_compare_value2 = QLineEdit()
+        self.txt_compare_value2.setPlaceholderText("輸入比對值或正規表達式")
+        value_layout2.addWidget(self.txt_compare_value2)
+        self.filter_options_layout2.addWidget(self.value_container2)
+
+        second_rule_layout.addWidget(self.filter_options_widget2)
+        controls_layout.addWidget(self.second_rule_container)
+
         # 開始過濾按鈕
         self.btn_start_filter = QPushButton("開始過濾")
         self.btn_start_filter.clicked.connect(self.on_filter_clicked)
@@ -105,7 +283,13 @@ class EditPanel(BasePanel):
         # 初始化控制項顯示狀態：未載入資料狀態
         self.lbl_no_data.setVisible(True)
         self.controls_container.setVisible(False)
+        
+        # 預設為單規則狀態
+        self.is_dual = False
+        self.set_dual_state(False)
+        
         self.on_compare_col_changed(0)
+        self.on_compare_col2_changed(0)
     def on_compare_col_changed(self, idx):
         # 取得目前比對欄位的值
         col_type = self.cmb_compare_col.currentData()
@@ -124,6 +308,8 @@ class EditPanel(BasePanel):
         # 暫時阻擋訊號以避免頻繁觸發畫面重繪
         self.cmb_compare_col.blockSignals(True)
         self.cmb_compare_target.blockSignals(True)
+        self.cmb_compare_col2.blockSignals(True)
+        self.cmb_compare_target2.blockSignals(True)
         
         self.cmb_compare_col.clear()
         self.cmb_compare_col.addItem("不過濾", "none")
@@ -134,14 +320,32 @@ class EditPanel(BasePanel):
         self.cmb_compare_target.clear()
         self.cmb_compare_target.addItem("手動輸入", "manual")
         self.cmb_compare_target.setCurrentIndex(0)
+
+        self.cmb_compare_col2.clear()
+        self.cmb_compare_col2.addItem("不過濾", "none")
+        self.cmb_compare_col2.addItem("所有欄位", "all")
+        self.cmb_compare_col2.addItem("來源-目標欄位", "range")
+        self.cmb_compare_col2.setCurrentIndex(0)
+        
+        self.cmb_compare_target2.clear()
+        self.cmb_compare_target2.addItem("手動輸入", "manual")
+        self.cmb_compare_target2.setCurrentIndex(0)
         
         self.txt_compare_value.clear()
+        self.txt_compare_value2.clear()
         
         self.cmb_compare_col.blockSignals(False)
         self.cmb_compare_target.blockSignals(False)
+        self.cmb_compare_col2.blockSignals(False)
+        self.cmb_compare_target2.blockSignals(False)
+        
+        # 預設回歸單規則狀態
+        self.set_dual_state(False)
+        self.rbtn_and.setChecked(True)
         
         # 手動觸發一次以隱藏所有子項目
         self.on_compare_col_changed(0)
+        self.on_compare_col2_changed(0)
 
     def on_compare_target_changed(self, idx):
         target_type = self.cmb_compare_target.currentData()
@@ -150,6 +354,38 @@ class EditPanel(BasePanel):
         else:
             self.value_container.setVisible(False)
 
+    def on_compare_col2_changed(self, idx):
+        col_type = self.cmb_compare_col2.currentData()
+        if col_type is None or col_type == "none":
+            self.filter_options_widget2.setVisible(False)
+        else:
+            self.filter_options_widget2.setVisible(True)
+            self.on_compare_target2_changed(self.cmb_compare_target2.currentIndex())
+
+    def on_compare_target2_changed(self, idx):
+        target_type = self.cmb_compare_target2.currentData()
+        if target_type == "manual":
+            self.value_container2.setVisible(True)
+        else:
+            self.value_container2.setVisible(False)
+
+    def on_toggle_rule_clicked(self):
+        self.set_dual_state(not self.is_dual)
+
+    def set_dual_state(self, is_dual):
+        self.is_dual = is_dual
+        if is_dual:
+            self.btn_toggle_rule.set_minus(True)
+            self.btn_swap_rules.setVisible(True)
+            self.op_widget.setVisible(True)
+            self.second_rule_container.setVisible(True)
+            self.on_compare_col2_changed(self.cmb_compare_col2.currentIndex())
+        else:
+            self.btn_toggle_rule.set_minus(False)
+            self.btn_swap_rules.setVisible(False)
+            self.op_widget.setVisible(False)
+            self.second_rule_container.setVisible(False)
+
     def update_column_dropdowns(self, num_cols, headers=None):
         self.lbl_no_data.setVisible(False)
         self.controls_container.setVisible(True)
@@ -157,8 +393,10 @@ class EditPanel(BasePanel):
         # 記下目前選取的狀態，以便重整時儘量保留
         old_col_idx = self.cmb_compare_col.currentIndex()
         old_target_idx = self.cmb_compare_target.currentIndex()
+        old_col2_idx = self.cmb_compare_col2.currentIndex()
+        old_target2_idx = self.cmb_compare_target2.currentIndex()
 
-        # 1. 重整比對欄位
+        # 1. 重整比對欄位一
         self.cmb_compare_col.clear()
         self.cmb_compare_col.addItem("不過濾", "none")
         self.cmb_compare_col.addItem("所有欄位", "all")
@@ -167,12 +405,28 @@ class EditPanel(BasePanel):
             text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
             self.cmb_compare_col.addItem(text, i)  # userData contains 0-based index
 
-        # 2. 重整比對目標
+        # 2. 重整比對目標一
         self.cmb_compare_target.clear()
         self.cmb_compare_target.addItem("手動輸入", "manual")
         for i in range(num_cols):
             text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
             self.cmb_compare_target.addItem(text, i)  # userData contains 0-based index
+
+        # 3. 重整比對欄位二
+        self.cmb_compare_col2.clear()
+        self.cmb_compare_col2.addItem("不過濾", "none")
+        self.cmb_compare_col2.addItem("所有欄位", "all")
+        self.cmb_compare_col2.addItem("來源-目標欄位", "range")
+        for i in range(num_cols):
+            text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
+            self.cmb_compare_col2.addItem(text, i)  # userData contains 0-based index
+
+        # 4. 重整比對目標二
+        self.cmb_compare_target2.clear()
+        self.cmb_compare_target2.addItem("手動輸入", "manual")
+        for i in range(num_cols):
+            text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
+            self.cmb_compare_target2.addItem(text, i)  # userData contains 0-based index
 
         # 還原或重設選取狀態
         if old_col_idx < self.cmb_compare_col.count():
@@ -185,13 +439,23 @@ class EditPanel(BasePanel):
         else:
             self.cmb_compare_target.setCurrentIndex(0)
 
+        if old_col2_idx < self.cmb_compare_col2.count():
+            self.cmb_compare_col2.setCurrentIndex(old_col2_idx)
+        else:
+            self.cmb_compare_col2.setCurrentIndex(0)
+
+        if old_target2_idx < self.cmb_compare_target2.count():
+            self.cmb_compare_target2.setCurrentIndex(old_target2_idx)
+        else:
+            self.cmb_compare_target2.setCurrentIndex(0)
+
     def on_filter_clicked(self):
         compare_col = self.cmb_compare_col.currentData()
         compare_method = self.cmb_compare_method.currentText()
         compare_target = self.cmb_compare_target.currentData()
         compare_value = self.txt_compare_value.text()
 
-        # 驗證
+        # 驗證規則一
         if compare_col != "none":
             if compare_target == "manual":
                 if compare_method == "正規表達式":
@@ -199,40 +463,167 @@ class EditPanel(BasePanel):
                     try:
                         re.compile(compare_value)
                     except re.error as e:
-                        QMessageBox.warning(self, "錯誤", f"正規表達式語法錯誤: {e}")
+                        QMessageBox.warning(self, "錯誤", f"規則一正規表達式語法錯誤: {e}")
                         return
             else:
-                # 欄位比對
                 if compare_col == compare_target:
-                    QMessageBox.warning(self, "錯誤", "欄位比對必須選擇不同的欄位。")
+                    QMessageBox.warning(self, "錯誤", "規則一：欄位比對必須選擇不同的欄位。")
                     return
-                
-        self.request_filter.emit(compare_col, compare_method, compare_target, compare_value)
+
+        # 取得與驗證規則二
+        compare_col2 = "none"
+        compare_method2 = "完全符合"
+        compare_target2 = "manual"
+        compare_value2 = ""
+
+        if self.is_dual:
+            compare_col2 = self.cmb_compare_col2.currentData()
+            compare_method2 = self.cmb_compare_method2.currentText()
+            compare_target2 = self.cmb_compare_target2.currentData()
+            compare_value2 = self.txt_compare_value2.text()
+
+            if compare_col2 != "none":
+                if compare_target2 == "manual":
+                    if compare_method2 == "正規表達式":
+                        import re
+                        try:
+                            re.compile(compare_value2)
+                        except re.error as e:
+                            QMessageBox.warning(self, "錯誤", f"規則二正規表達式語法錯誤: {e}")
+                            return
+                else:
+                    if compare_col2 == compare_target2:
+                        QMessageBox.warning(self, "錯誤", "規則二：欄位比對必須選擇不同的欄位。")
+                        return
+
+        filter_config = {
+            "is_dual": self.is_dual,
+            "op": "AND" if self.rbtn_and.isChecked() else "OR",
+            "rule1": {
+                "compare_col": compare_col,
+                "compare_method": compare_method,
+                "compare_target": compare_target,
+                "compare_value": compare_value
+            },
+            "rule2": {
+                "compare_col": compare_col2,
+                "compare_method": compare_method2,
+                "compare_target": compare_target2,
+                "compare_value": compare_value2
+            }
+        }
+        self.request_filter.emit(filter_config)
 
     def set_enabled(self, enabled):
         self.cmb_compare_col.setEnabled(enabled)
         self.cmb_compare_method.setEnabled(enabled)
         self.cmb_compare_target.setEnabled(enabled)
         self.txt_compare_value.setEnabled(enabled)
+        self.cmb_compare_col2.setEnabled(enabled)
+        self.cmb_compare_method2.setEnabled(enabled)
+        self.cmb_compare_target2.setEnabled(enabled)
+        self.txt_compare_value2.setEnabled(enabled)
+        self.btn_toggle_rule.setEnabled(enabled)
+        self.btn_swap_rules.setEnabled(enabled)
+        self.rbtn_and.setEnabled(enabled)
+        self.rbtn_or.setEnabled(enabled)
         self.btn_start_filter.setEnabled(enabled)
+
+    def swap_rules(self):
+        # 暫時阻擋訊號以避免頻繁觸發 UI 重繪與顯示隱藏邏輯
+        self.cmb_compare_col.blockSignals(True)
+        self.cmb_compare_method.blockSignals(True)
+        self.cmb_compare_target.blockSignals(True)
+        self.cmb_compare_col2.blockSignals(True)
+        self.cmb_compare_method2.blockSignals(True)
+        self.cmb_compare_target2.blockSignals(True)
+        
+        # 讀取規則一的值
+        col1 = self.cmb_compare_col.currentIndex()
+        method1 = self.cmb_compare_method.currentIndex()
+        target1 = self.cmb_compare_target.currentIndex()
+        val1 = self.txt_compare_value.text()
+        
+        # 讀取規則二的值
+        col2 = self.cmb_compare_col2.currentIndex()
+        method2 = self.cmb_compare_method2.currentIndex()
+        target2 = self.cmb_compare_target2.currentIndex()
+        val2 = self.txt_compare_value2.text()
+        
+        # 將規則一設定為規則二的值
+        self.cmb_compare_col.setCurrentIndex(col2)
+        self.cmb_compare_method.setCurrentIndex(method2)
+        self.cmb_compare_target.setCurrentIndex(target2)
+        self.txt_compare_value.setText(val2)
+        
+        # 將規則二設定為規則一的值
+        self.cmb_compare_col2.setCurrentIndex(col1)
+        self.cmb_compare_method2.setCurrentIndex(method1)
+        self.cmb_compare_target2.setCurrentIndex(target1)
+        self.txt_compare_value2.setText(val1)
+        
+        # 解除訊號阻擋
+        self.cmb_compare_col.blockSignals(False)
+        self.cmb_compare_method.blockSignals(False)
+        self.cmb_compare_target.blockSignals(False)
+        self.cmb_compare_col2.blockSignals(False)
+        self.cmb_compare_method2.blockSignals(False)
+        self.cmb_compare_target2.blockSignals(False)
+        
+        # 手動觸發一次顯示/隱藏更新
+        self.on_compare_col_changed(self.cmb_compare_col.currentIndex())
+        self.on_compare_col2_changed(self.cmb_compare_col2.currentIndex())
 
     def get_config(self) -> dict:
         return {
-            "compare_col": self.cmb_compare_col.currentIndex(),
-            "compare_method": self.cmb_compare_method.currentIndex(),
-            "compare_target": self.cmb_compare_target.currentIndex(),
-            "compare_value": self.txt_compare_value.text()
+            "is_dual": self.is_dual,
+            "op": "AND" if self.rbtn_and.isChecked() else "OR",
+            "rule1": {
+                "compare_col": self.cmb_compare_col.currentIndex(),
+                "compare_method": self.cmb_compare_method.currentIndex(),
+                "compare_target": self.cmb_compare_target.currentIndex(),
+                "compare_value": self.txt_compare_value.text()
+            },
+            "rule2": {
+                "compare_col": self.cmb_compare_col2.currentIndex(),
+                "compare_method": self.cmb_compare_method2.currentIndex(),
+                "compare_target": self.cmb_compare_target2.currentIndex(),
+                "compare_value": self.txt_compare_value2.text()
+            }
         }
 
     def set_config(self, config: dict):
-        if "compare_col" in config:
-            self.cmb_compare_col.setCurrentIndex(config["compare_col"])
-        if "compare_method" in config:
-            self.cmb_compare_method.setCurrentIndex(config["compare_method"])
-        if "compare_target" in config:
-            self.cmb_compare_target.setCurrentIndex(config["compare_target"])
-        if "compare_value" in config:
-            self.txt_compare_value.setText(config["compare_value"])
+        if not config:
+            return
+        
+        is_dual = config.get("is_dual", False)
+        self.set_dual_state(is_dual)
+
+        op = config.get("op", "AND")
+        if op == "AND":
+            self.rbtn_and.setChecked(True)
+        else:
+            self.rbtn_or.setChecked(True)
+
+        rule1 = config.get("rule1", {})
+        if "compare_col" in rule1:
+            self.cmb_compare_col.setCurrentIndex(rule1["compare_col"])
+        if "compare_method" in rule1:
+            self.cmb_compare_method.setCurrentIndex(rule1["compare_method"])
+        if "compare_target" in rule1:
+            self.cmb_compare_target.setCurrentIndex(rule1["compare_target"])
+        if "compare_value" in rule1:
+            self.txt_compare_value.setText(rule1["compare_value"])
+
+        rule2 = config.get("rule2", {})
+        if "compare_col" in rule2:
+            self.cmb_compare_col2.setCurrentIndex(rule2["compare_col"])
+        if "compare_method" in rule2:
+            self.cmb_compare_method2.setCurrentIndex(rule2["compare_method"])
+        if "compare_target" in rule2:
+            self.cmb_compare_target2.setCurrentIndex(rule2["compare_target"])
+        if "compare_value" in rule2:
+            self.txt_compare_value2.setText(rule2["compare_value"])
 
     def get_start_button_text(self, state: str) -> str:
         if state == "critical":

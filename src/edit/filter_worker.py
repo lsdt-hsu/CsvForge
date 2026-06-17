@@ -8,25 +8,63 @@ class FilterWorker(QThread):
     filter_error = pyqtSignal(str)
 
     def __init__(self, all_rows, start_row, end_row, is_header, 
-                 compare_col, compare_method, compare_target, compare_value, 
-                 src_col, tgt_col, parent=None):
+                 src_col, tgt_col, filter_config, parent=None):
         super().__init__(parent)
         self.all_rows = all_rows
         self.start_row = start_row
         self.end_row = end_row
         self.is_header = is_header
         
-        self.compare_col = compare_col
-        self.compare_method = compare_method
-        self.compare_target = compare_target
-        self.compare_value = compare_value
         self.src_col = src_col
         self.tgt_col = tgt_col
+        self.filter_config = filter_config
         
         self._is_cancelled = False
 
     def cancel(self):
         self._is_cancelled = True
+
+    def check_row_match(self, row, compare_col, compare_method, compare_target, compare_value, regex_pattern):
+        # 決定比對範圍欄位索引集合
+        if compare_col == "all":
+            cols_to_check = list(range(len(row)))
+        elif compare_col == "range":
+            start_c = max(0, self.src_col - 1)
+            end_c = min(len(row) - 1, self.tgt_col - 1)
+            cols_to_check = list(range(start_c, end_c + 1))
+        else:
+            # 特定欄位 (整數)
+            cols_to_check = [compare_col]
+
+        # 決定比對目標值
+        if compare_target == "manual":
+            target_val = compare_value
+        else:
+            # 特定欄位的值 (整數)
+            t_idx = compare_target
+            target_val = row[t_idx] if t_idx < len(row) else ""
+
+        is_match = False
+        
+        if compare_method == "完全符合":
+            is_match = any((row[c] if c < len(row) else "") == target_val for c in cols_to_check)
+        elif compare_method == "包含":
+            is_match = any(target_val in (row[c] if c < len(row) else "") for c in cols_to_check)
+        elif compare_method == "未包含":
+            # 「未包含」：所有欄位皆不包含 target_val (AND 邏輯)
+            is_match = all(target_val not in (row[c] if c < len(row) else "") for c in cols_to_check)
+        elif compare_method == "正規表達式":
+            if compare_target == "manual" and regex_pattern:
+                is_match = any(bool(regex_pattern.search(row[c] if c < len(row) else "")) for c in cols_to_check)
+            else:
+                # 欄位比對當作正規表達式（以 target_val 做為 pattern）
+                try:
+                    t_regex = re.compile(target_val)
+                    is_match = any(bool(t_regex.search(row[c] if c < len(row) else "")) for c in cols_to_check)
+                except re.error:
+                    is_match = False
+                    
+        return is_match
 
     def run(self):
         start_time = time.time()
@@ -37,19 +75,36 @@ class FilterWorker(QThread):
             end_bound = self.end_row if self.end_row is not None else total_rows
             end_bound = min(end_bound, total_rows)
             
+            is_dual = self.filter_config.get("is_dual", False)
+            rule1 = self.filter_config.get("rule1", {})
+            rule2 = self.filter_config.get("rule2", {})
+            
+            col1 = rule1.get("compare_col", "none")
+            col2 = rule2.get("compare_col", "none") if is_dual else "none"
+            
             # 若為「不過濾」，回傳 None 交給 Model 處理
-            if self.compare_col == "none":
+            if col1 == "none" and col2 == "none":
                 self.filter_completed.emit(None, time.time() - start_time)
                 return
 
             # 正規表達式預先編譯
-            regex_pattern = None
-            if self.compare_method == "正規表達式" and self.compare_target == "manual":
-                try:
-                    regex_pattern = re.compile(self.compare_value)
-                except re.error as e:
-                    self.filter_error.emit(f"正規表達式語法錯誤: {e}")
-                    return
+            regex_pattern1 = None
+            if col1 != "none":
+                if rule1.get("compare_method") == "正規表達式" and rule1.get("compare_target") == "manual":
+                    try:
+                        regex_pattern1 = re.compile(rule1.get("compare_value", ""))
+                    except re.error as e:
+                        self.filter_error.emit(f"規則一正規表達式語法錯誤: {e}")
+                        return
+
+            regex_pattern2 = None
+            if is_dual and col2 != "none":
+                if rule2.get("compare_method") == "正規表達式" and rule2.get("compare_target") == "manual":
+                    try:
+                        regex_pattern2 = re.compile(rule2.get("compare_value", ""))
+                    except re.error as e:
+                        self.filter_error.emit(f"規則二正規表達式語法錯誤: {e}")
+                        return
 
             for i, row in enumerate(self.all_rows):
                 if self._is_cancelled:
@@ -69,44 +124,38 @@ class FilterWorker(QThread):
                 if not (actual_start <= r_num <= end_bound):
                     continue
                 
-                # 決定比對範圍欄位索引集合
-                if self.compare_col == "all":
-                    cols_to_check = list(range(len(row)))
-                elif self.compare_col == "range":
-                    start_c = max(0, self.src_col - 1)
-                    end_c = min(len(row) - 1, self.tgt_col - 1)
-                    cols_to_check = list(range(start_c, end_c + 1))
+                # 規則一比對
+                if col1 == "none":
+                    match1 = True
                 else:
-                    # 特定欄位 (整數)
-                    cols_to_check = [self.compare_col]
-
-                # 決定比對目標值
-                if self.compare_target == "manual":
-                    target_val = self.compare_value
-                else:
-                    # 特定欄位的值 (整數)
-                    t_idx = self.compare_target
-                    target_val = row[t_idx] if t_idx < len(row) else ""
-
-                is_match = False
+                    match1 = self.check_row_match(
+                        row, col1,
+                        rule1.get("compare_method"),
+                        rule1.get("compare_target"),
+                        rule1.get("compare_value"),
+                        regex_pattern1
+                    )
                 
-                if self.compare_method == "完全符合":
-                    is_match = any((row[c] if c < len(row) else "") == target_val for c in cols_to_check)
-                elif self.compare_method == "包含":
-                    is_match = any(target_val in (row[c] if c < len(row) else "") for c in cols_to_check)
-                elif self.compare_method == "未包含":
-                    # 「未包含」：所有欄位皆不包含 target_val (AND 邏輯)
-                    is_match = all(target_val not in (row[c] if c < len(row) else "") for c in cols_to_check)
-                elif self.compare_method == "正規表達式":
-                    if self.compare_target == "manual" and regex_pattern:
-                        is_match = any(bool(regex_pattern.search(row[c] if c < len(row) else "")) for c in cols_to_check)
+                # 規則二比對
+                if is_dual:
+                    if col2 == "none":
+                        match2 = True
                     else:
-                        # 欄位比對當作正規表達式（以 target_val 做為 pattern）
-                        try:
-                            t_regex = re.compile(target_val)
-                            is_match = any(bool(t_regex.search(row[c] if c < len(row) else "")) for c in cols_to_check)
-                        except re.error:
-                            is_match = False
+                        match2 = self.check_row_match(
+                            row, col2,
+                            rule2.get("compare_method"),
+                            rule2.get("compare_target"),
+                            rule2.get("compare_value"),
+                            regex_pattern2
+                        )
+                    
+                    op = self.filter_config.get("op", "AND")
+                    if op == "AND":
+                        is_match = match1 and match2
+                    else: # OR
+                        is_match = match1 or match2
+                else:
+                    is_match = match1
 
                 if is_match:
                     matched_indices.append(i)
