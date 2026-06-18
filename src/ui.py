@@ -135,8 +135,8 @@ class MainWindow(QMainWindow):
         self.sidebar_stacked.addWidget(self.translation_panel)
         self.sidebar_stacked.addWidget(self.edit_panel)
         
-        sidebar_layout.addWidget(self.sidebar_stacked)
-        sidebar_layout.addStretch()
+        sidebar_layout.addWidget(self.sidebar_stacked, stretch=1)
+
 
         left_layout.addWidget(self.sidebar)
 

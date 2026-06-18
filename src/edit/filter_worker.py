@@ -81,13 +81,13 @@ class FilterWorker(QThread):
         elif compare_method == "包含":
             is_match = any(target_val in (row[c] if c < len(row) else "") for c in cols_to_check)
         elif compare_method == "未包含":
-            # 「未包含」：所有欄位皆不包含 target_val (AND 邏輯)
+            # 所有欄位皆不包含 target_val (AND 邏輯)
             is_match = all(target_val not in (row[c] if c < len(row) else "") for c in cols_to_check)
         elif compare_method == "正規表達式":
             if compare_target == "manual" and regex_pattern:
                 is_match = any(bool(regex_pattern.search(row[c] if c < len(row) else "")) for c in cols_to_check)
             else:
-                # 欄位比對當作正規表達式（以 target_val 做為 pattern）
+                # 欄位比對當作正規表達式
                 try:
                     t_regex = re.compile(target_val)
                     is_match = any(bool(t_regex.search(row[c] if c < len(row) else "")) for c in cols_to_check)
@@ -102,7 +102,6 @@ class FilterWorker(QThread):
     def is_belong_match(self, text, target, sub_value):
         if target == "語系":
             if sub_value == "中文":
-                # 含有任何漢字，且不含日文假名
                 if not any('\u4e00' <= c <= '\u9fff' for c in text):
                     return False
                 if any('\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff' for c in text):
@@ -116,14 +115,13 @@ class FilterWorker(QThread):
                     return False
                 # 使用 OpenCC
                 if self.cc_s2t:
-                    # 部分符合即可：只要含有一個中文字元，且該字元在 s2t 轉換後保持不變
                     for c in text:
                         if '\u4e00' <= c <= '\u9fff':
                             if self.cc_s2t.convert(c) == c:
                                 return True
                     return False
                 else:
-                    # 降級備用：使用 big5 編碼檢查
+                    # big5 檢查
                     for c in text:
                         if '\u4e00' <= c <= '\u9fff':
                             try:
@@ -146,7 +144,7 @@ class FilterWorker(QThread):
                                 return True
                     return False
                 else:
-                    # 降級備用：使用 gb2312 編碼檢查
+                    # gb2312 檢查
                     for c in text:
                         if '\u4e00' <= c <= '\u9fff':
                             try:
@@ -157,14 +155,12 @@ class FilterWorker(QThread):
                     return False
                     
             elif sub_value == "日文(專字)":
-                # 假名，日文特有符號/疊字，或日文特有漢字（無法編碼為 big5 且無法編碼為 gb2312）
                 for c in text:
                     if '\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff':
                         return True
                     if c in ('\u3005', '\u3006', '\u3012', '\u303b', '\u303d', '\u3004'):  # 々, 〆, 〒, 〻, 〽, 〄
                         return True
                     if '\u4e00' <= c <= '\u9fff':
-                        # 雙重編碼失敗檢查
                         try:
                             c.encode('big5')
                             has_big5 = True
@@ -180,13 +176,11 @@ class FilterWorker(QThread):
                 return False
                 
             elif sub_value == "日文(通用)":
-                # if 含日文專字：return true
                 if self.is_belong_match(text, "語系", "日文(專字)"):
                     return True
-                # else if 不含漢字：return false
                 if not any('\u4e00' <= c <= '\u9fff' for c in text):
                     return False
-                # else 採用欄位字串拆解法匹配日文全漢字字典
+                # 字典匹配
                 kanji_blocks = re.findall(r'[\u4e00-\u9fff]+', text)
                 for block in kanji_blocks:
                     L = len(block)
@@ -229,7 +223,6 @@ class FilterWorker(QThread):
             elif sub_value == "多國語言":
                 return any(c.isnumeric() for c in text)
         elif target == "純數字":
-            # 必須完全符合
             if sub_value == "半形":
                 return bool(re.match(r'^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$', text))
             elif sub_value == "全半形":
@@ -238,7 +231,6 @@ class FilterWorker(QThread):
             elif sub_value == "多國語言":
                 if not text:
                     return False
-                # 標準化全形控制字元
                 norm = text.translate(str.maketrans({
                     '＋': '+', '－': '-', '．': '.',
                     'ｅ': 'e', 'Ｅ': 'E'
@@ -286,7 +278,6 @@ class FilterWorker(QThread):
                     return True
                 
         elif target == "文數字(無符號)":
-            # 必須完全符合
             if not text:
                 return False
             if sub_value == "半形":
@@ -310,7 +301,6 @@ class FilterWorker(QThread):
                 return True
                 
         elif target == "僅符號":
-            # 必須完全符合 (不含文數字，可含空白)
             if not text:
                 return False
             if sub_value == "半形":
@@ -331,45 +321,61 @@ class FilterWorker(QThread):
                 
         return False
 
+    def eval_logic_tree(self, node, rule_results):
+        if not node:
+            return True
+        if node.op_type == "LEAF":
+            idx = node.leaf_idx - 1
+            if idx < len(rule_results):
+                return rule_results[idx]
+            return False
+        elif node.op_type == "AND":
+            return all(self.eval_logic_tree(c, rule_results) for c in node.children)
+        elif node.op_type == "OR":
+            return any(self.eval_logic_tree(c, rule_results) for c in node.children)
+        return False
+
     def run(self):
         start_time = time.time()
         matched_indices = []
         
         try:
+            from edit import logic_tree
+            
             total_rows = len(self.all_rows)
             end_bound = self.end_row if self.end_row is not None else total_rows
             end_bound = min(end_bound, total_rows)
             
-            is_dual = self.filter_config.get("is_dual", False)
-            rule1 = self.filter_config.get("rule1", {})
-            rule2 = self.filter_config.get("rule2", {})
+            rules_cfg = self.filter_config.get("rules", [])
+            lt_cfg = self.filter_config.get("logic_tree")
+            tree = logic_tree.deserialize_tree(lt_cfg)
             
-            col1 = rule1.get("compare_col", "none")
-            col2 = rule2.get("compare_col", "none") if is_dual else "none"
-            
-            # 若為「不過濾」，回傳 None 交給 Model 處理
-            if col1 == "none" and col2 == "none":
+            # 若無規則或無邏輯樹，直接不進行過濾 (回傳 None)
+            if not rules_cfg or not tree:
+                self.filter_completed.emit(None, time.time() - start_time)
+                return
+                
+            # 若所有規則都是 "none" (不過濾)，亦不進行過濾
+            if all(r.get("compare_col") == "none" for r in rules_cfg):
                 self.filter_completed.emit(None, time.time() - start_time)
                 return
 
             # 正規表達式預先編譯
-            regex_pattern1 = None
-            if col1 != "none":
-                if rule1.get("compare_method") == "正規表達式" and rule1.get("compare_target") == "manual":
+            regex_patterns = []
+            for j, r_cfg in enumerate(rules_cfg):
+                col = r_cfg.get("compare_col", "none")
+                method = r_cfg.get("compare_method")
+                target = r_cfg.get("compare_target")
+                val = r_cfg.get("compare_value", "")
+                
+                pat = None
+                if col != "none" and method == "正規表達式" and target == "manual":
                     try:
-                        regex_pattern1 = re.compile(rule1.get("compare_value", ""))
+                        pat = re.compile(val)
                     except re.error as e:
-                        self.filter_error.emit(f"規則一正規表達式語法錯誤: {e}")
+                        self.filter_error.emit(f"規則 #{j+1} 正規表達式語法錯誤: {e}")
                         return
-
-            regex_pattern2 = None
-            if is_dual and col2 != "none":
-                if rule2.get("compare_method") == "正規表達式" and rule2.get("compare_target") == "manual":
-                    try:
-                        regex_pattern2 = re.compile(rule2.get("compare_value", ""))
-                    except re.error as e:
-                        self.filter_error.emit(f"規則二正規表達式語法錯誤: {e}")
-                        return
+                regex_patterns.append(pat)
 
             for i, row in enumerate(self.all_rows):
                 if self._is_cancelled:
@@ -389,40 +395,24 @@ class FilterWorker(QThread):
                 if not (actual_start <= r_num <= end_bound):
                     continue
                 
-                # 規則一比對
-                if col1 == "none":
-                    match1 = True
-                else:
-                    match1 = self.check_row_match(
-                        row, col1,
-                        rule1.get("compare_method"),
-                        rule1.get("compare_target"),
-                        rule1.get("compare_value"),
-                        regex_pattern1
-                    )
-                
-                # 規則二比對
-                if is_dual:
-                    if col2 == "none":
-                        match2 = True
+                # 求解各單一規則結果
+                rule_results = []
+                for j, r_cfg in enumerate(rules_cfg):
+                    col = r_cfg.get("compare_col", "none")
+                    if col == "none":
+                        rule_results.append(True)
                     else:
-                        match2 = self.check_row_match(
-                            row, col2,
-                            rule2.get("compare_method"),
-                            rule2.get("compare_target"),
-                            rule2.get("compare_value"),
-                            regex_pattern2
+                        match_res = self.check_row_match(
+                            row, col,
+                            r_cfg.get("compare_method"),
+                            r_cfg.get("compare_target"),
+                            r_cfg.get("compare_value"),
+                            regex_patterns[j]
                         )
-                    
-                    op = self.filter_config.get("op", "AND")
-                    if op == "AND":
-                        is_match = match1 and match2
-                    else: # OR
-                        is_match = match1 or match2
-                else:
-                    is_match = match1
-
-                if is_match:
+                        rule_results.append(match_res)
+                
+                # 遞迴運算 AST 邏輯樹
+                if self.eval_logic_tree(tree, rule_results):
                     matched_indices.append(i)
 
             self.progress_updated.emit(total_rows, total_rows)
