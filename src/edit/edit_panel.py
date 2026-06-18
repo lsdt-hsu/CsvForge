@@ -433,9 +433,14 @@ class EditPanel(BasePanel):
         # 將 controls_container 設為 stretch=1，使其佔滿除主標題外的整個側邊欄高度，避免被底部壓縮
         layout.addWidget(self.controls_container, stretch=1)
 
+        # 建立一個動態佔位 Spacer，當 controls_container 隱藏時顯示，用以將「尚未載入資料」推至上方
+        self.empty_spacer = QWidget()
+        layout.addWidget(self.empty_spacer, stretch=1)
+
         # 初始化隱藏主容器
         self.lbl_no_data.setVisible(True)
         self.controls_container.setVisible(False)
+        self.empty_spacer.setVisible(True)
 
         # 初始化第一條規則與邏輯樹
         self.reset_panel()
@@ -450,6 +455,7 @@ class EditPanel(BasePanel):
     def reset_panel(self):
         self.lbl_no_data.setVisible(True)
         self.controls_container.setVisible(False)
+        self.empty_spacer.setVisible(True)
 
         # 清空規則佈局
         self.clear_layout(self.rule_list_layout)
@@ -569,6 +575,7 @@ class EditPanel(BasePanel):
     def update_column_dropdowns(self, num_cols, headers=None):
         self.lbl_no_data.setVisible(False)
         self.controls_container.setVisible(True)
+        self.empty_spacer.setVisible(False)
 
         self.num_cols = num_cols
         self.headers = headers
