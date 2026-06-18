@@ -68,6 +68,8 @@ class EditPanel(BasePanel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.num_cols = 0
+        self.headers = None
         self.init_ui()
 
     def init_ui(self):
@@ -117,7 +119,8 @@ class EditPanel(BasePanel):
         self.lbl_compare_method = QLabel("比對方式：")
         self.lbl_compare_method.setFixedWidth(75)
         self.cmb_compare_method = QComboBox()
-        self.cmb_compare_method.addItems(["完全符合", "包含", "未包含", "正規表達式"])
+        self.cmb_compare_method.addItems(["完全符合", "包含", "未包含", "正規表達式", "屬於", "不屬於"])
+        self.cmb_compare_method.currentIndexChanged.connect(self.on_compare_method_changed)
         
         row2_layout = QHBoxLayout()
         row2_layout.setContentsMargins(0, 0, 0, 0)
@@ -149,6 +152,16 @@ class EditPanel(BasePanel):
         self.txt_compare_value.setPlaceholderText("輸入比對值或正規表達式")
         value_layout.addWidget(self.txt_compare_value)
         self.filter_options_layout.addWidget(self.value_container)
+
+        # 4-2. 屬於子項目下拉選單 (採用內縮佈局且無 label)
+        self.belong_container = QWidget()
+        belong_layout = QHBoxLayout(self.belong_container)
+        belong_layout.setContentsMargins(20, 0, 0, 0)  # 內縮 20 像素
+        belong_layout.setSpacing(0)
+        self.cmb_belong_value = QComboBox()
+        belong_layout.addWidget(self.cmb_belong_value)
+        self.filter_options_layout.addWidget(self.belong_container)
+        self.belong_container.setVisible(False)
 
         controls_layout.addWidget(self.filter_options_widget)
 
@@ -236,7 +249,8 @@ class EditPanel(BasePanel):
         self.lbl_compare_method2 = QLabel("比對方式：")
         self.lbl_compare_method2.setFixedWidth(75)
         self.cmb_compare_method2 = QComboBox()
-        self.cmb_compare_method2.addItems(["完全符合", "包含", "未包含", "正規表達式"])
+        self.cmb_compare_method2.addItems(["完全符合", "包含", "未包含", "正規表達式", "屬於", "不屬於"])
+        self.cmb_compare_method2.currentIndexChanged.connect(self.on_compare_method2_changed)
         
         row2_layout2 = QHBoxLayout()
         row2_layout2.setContentsMargins(0, 0, 0, 0)
@@ -269,6 +283,16 @@ class EditPanel(BasePanel):
         value_layout2.addWidget(self.txt_compare_value2)
         self.filter_options_layout2.addWidget(self.value_container2)
 
+        # 屬於子項目二下拉選單 (採用內縮佈局且無 label)
+        self.belong_container2 = QWidget()
+        belong_layout2 = QHBoxLayout(self.belong_container2)
+        belong_layout2.setContentsMargins(20, 0, 0, 0)  # 內縮 20 像素
+        belong_layout2.setSpacing(0)
+        self.cmb_belong_value2 = QComboBox()
+        belong_layout2.addWidget(self.cmb_belong_value2)
+        self.filter_options_layout2.addWidget(self.belong_container2)
+        self.belong_container2.setVisible(False)
+
         second_rule_layout.addWidget(self.filter_options_widget2)
         controls_layout.addWidget(self.second_rule_container)
 
@@ -298,8 +322,8 @@ class EditPanel(BasePanel):
             self.filter_options_widget.setVisible(False)
         else:
             self.filter_options_widget.setVisible(True)
-            # 根據比對目標決定輸入框是否顯示
-            self.on_compare_target_changed(self.cmb_compare_target.currentIndex())
+            # 根據比對目標決定輸入框與屬於選單是否顯示
+            self.update_belong_visibility(self.cmb_compare_method, self.cmb_compare_target, self.value_container, self.belong_container, self.cmb_belong_value)
 
     def reset_panel(self):
         self.lbl_no_data.setVisible(True)
@@ -310,6 +334,10 @@ class EditPanel(BasePanel):
         self.cmb_compare_target.blockSignals(True)
         self.cmb_compare_col2.blockSignals(True)
         self.cmb_compare_target2.blockSignals(True)
+        self.cmb_compare_method.blockSignals(True)
+        self.cmb_compare_method2.blockSignals(True)
+        self.cmb_belong_value.blockSignals(True)
+        self.cmb_belong_value2.blockSignals(True)
         
         self.cmb_compare_col.clear()
         self.cmb_compare_col.addItem("不過濾", "none")
@@ -330,6 +358,12 @@ class EditPanel(BasePanel):
         self.cmb_compare_target2.clear()
         self.cmb_compare_target2.addItem("手動輸入", "manual")
         self.cmb_compare_target2.setCurrentIndex(0)
+
+        self.cmb_compare_method.setCurrentIndex(0)
+        self.cmb_compare_method2.setCurrentIndex(0)
+        
+        self.cmb_belong_value.clear()
+        self.cmb_belong_value2.clear()
         
         self.txt_compare_value.clear()
         self.txt_compare_value2.clear()
@@ -338,6 +372,10 @@ class EditPanel(BasePanel):
         self.cmb_compare_target.blockSignals(False)
         self.cmb_compare_col2.blockSignals(False)
         self.cmb_compare_target2.blockSignals(False)
+        self.cmb_compare_method.blockSignals(False)
+        self.cmb_compare_method2.blockSignals(False)
+        self.cmb_belong_value.blockSignals(False)
+        self.cmb_belong_value2.blockSignals(False)
         
         # 預設回歸單規則狀態
         self.set_dual_state(False)
@@ -348,11 +386,7 @@ class EditPanel(BasePanel):
         self.on_compare_col2_changed(0)
 
     def on_compare_target_changed(self, idx):
-        target_type = self.cmb_compare_target.currentData()
-        if target_type == "manual":
-            self.value_container.setVisible(True)
-        else:
-            self.value_container.setVisible(False)
+        self.update_belong_visibility(self.cmb_compare_method, self.cmb_compare_target, self.value_container, self.belong_container, self.cmb_belong_value)
 
     def on_compare_col2_changed(self, idx):
         col_type = self.cmb_compare_col2.currentData()
@@ -360,14 +394,10 @@ class EditPanel(BasePanel):
             self.filter_options_widget2.setVisible(False)
         else:
             self.filter_options_widget2.setVisible(True)
-            self.on_compare_target2_changed(self.cmb_compare_target2.currentIndex())
+            self.update_belong_visibility(self.cmb_compare_method2, self.cmb_compare_target2, self.value_container2, self.belong_container2, self.cmb_belong_value2)
 
     def on_compare_target2_changed(self, idx):
-        target_type = self.cmb_compare_target2.currentData()
-        if target_type == "manual":
-            self.value_container2.setVisible(True)
-        else:
-            self.value_container2.setVisible(False)
+        self.update_belong_visibility(self.cmb_compare_method2, self.cmb_compare_target2, self.value_container2, self.belong_container2, self.cmb_belong_value2)
 
     def on_toggle_rule_clicked(self):
         self.set_dual_state(not self.is_dual)
@@ -390,11 +420,29 @@ class EditPanel(BasePanel):
         self.lbl_no_data.setVisible(False)
         self.controls_container.setVisible(True)
 
+        self.num_cols = num_cols
+        self.headers = headers
+
         # 記下目前選取的狀態，以便重整時儘量保留
         old_col_idx = self.cmb_compare_col.currentIndex()
+        old_method_idx = self.cmb_compare_method.currentIndex()
         old_target_idx = self.cmb_compare_target.currentIndex()
+        old_belong_idx = self.cmb_belong_value.currentIndex()
+        
         old_col2_idx = self.cmb_compare_col2.currentIndex()
+        old_method2_idx = self.cmb_compare_method2.currentIndex()
         old_target2_idx = self.cmb_compare_target2.currentIndex()
+        old_belong2_idx = self.cmb_belong_value2.currentIndex()
+
+        # 暫時阻擋訊號
+        self.cmb_compare_col.blockSignals(True)
+        self.cmb_compare_method.blockSignals(True)
+        self.cmb_compare_target.blockSignals(True)
+        self.cmb_belong_value.blockSignals(True)
+        self.cmb_compare_col2.blockSignals(True)
+        self.cmb_compare_method2.blockSignals(True)
+        self.cmb_compare_target2.blockSignals(True)
+        self.cmb_belong_value2.blockSignals(True)
 
         # 1. 重整比對欄位一
         self.cmb_compare_col.clear()
@@ -405,14 +453,7 @@ class EditPanel(BasePanel):
             text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
             self.cmb_compare_col.addItem(text, i)  # userData contains 0-based index
 
-        # 2. 重整比對目標一
-        self.cmb_compare_target.clear()
-        self.cmb_compare_target.addItem("手動輸入", "manual")
-        for i in range(num_cols):
-            text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
-            self.cmb_compare_target.addItem(text, i)  # userData contains 0-based index
-
-        # 3. 重整比對欄位二
+        # 2. 重整比對欄位二
         self.cmb_compare_col2.clear()
         self.cmb_compare_col2.addItem("不過濾", "none")
         self.cmb_compare_col2.addItem("所有欄位", "all")
@@ -421,54 +462,92 @@ class EditPanel(BasePanel):
             text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
             self.cmb_compare_col2.addItem(text, i)  # userData contains 0-based index
 
-        # 4. 重整比對目標二
-        self.cmb_compare_target2.clear()
-        self.cmb_compare_target2.addItem("手動輸入", "manual")
-        for i in range(num_cols):
-            text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
-            self.cmb_compare_target2.addItem(text, i)  # userData contains 0-based index
-
-        # 還原或重設選取狀態
-        if old_col_idx < self.cmb_compare_col.count():
-            self.cmb_compare_col.setCurrentIndex(old_col_idx)
+        # 還原比對方式
+        if old_method_idx < self.cmb_compare_method.count():
+            self.cmb_compare_method.setCurrentIndex(old_method_idx)
         else:
-            self.cmb_compare_col.setCurrentIndex(0)
+            self.cmb_compare_method.setCurrentIndex(0)
+            
+        if old_method2_idx < self.cmb_compare_method2.count():
+            self.cmb_compare_method2.setCurrentIndex(old_method2_idx)
+        else:
+            self.cmb_compare_method2.setCurrentIndex(0)
 
+        # 更新比對目標的選項（依據目前比對方式）
+        self.update_target_options(self.cmb_compare_method, self.cmb_compare_target, num_cols, headers)
+        self.update_target_options(self.cmb_compare_method2, self.cmb_compare_target2, num_cols, headers)
+
+        # 還原比對目標的選擇
         if old_target_idx < self.cmb_compare_target.count():
             self.cmb_compare_target.setCurrentIndex(old_target_idx)
         else:
             self.cmb_compare_target.setCurrentIndex(0)
-
-        if old_col2_idx < self.cmb_compare_col2.count():
-            self.cmb_compare_col2.setCurrentIndex(old_col2_idx)
-        else:
-            self.cmb_compare_col2.setCurrentIndex(0)
-
+            
         if old_target2_idx < self.cmb_compare_target2.count():
             self.cmb_compare_target2.setCurrentIndex(old_target2_idx)
         else:
             self.cmb_compare_target2.setCurrentIndex(0)
 
+        # 更新屬於下拉選單的選項與顯示狀態
+        self.update_belong_visibility(self.cmb_compare_method, self.cmb_compare_target, self.value_container, self.belong_container, self.cmb_belong_value)
+        self.update_belong_visibility(self.cmb_compare_method2, self.cmb_compare_target2, self.value_container2, self.belong_container2, self.cmb_belong_value2)
+
+        # 還原屬於子選項選擇
+        if old_belong_idx < self.cmb_belong_value.count():
+            self.cmb_belong_value.setCurrentIndex(old_belong_idx)
+        if old_belong2_idx < self.cmb_belong_value2.count():
+            self.cmb_belong_value2.setCurrentIndex(old_belong2_idx)
+
+        # 還原比對欄位選擇
+        if old_col_idx < self.cmb_compare_col.count():
+            self.cmb_compare_col.setCurrentIndex(old_col_idx)
+        else:
+            self.cmb_compare_col.setCurrentIndex(0)
+            
+        if old_col2_idx < self.cmb_compare_col2.count():
+            self.cmb_compare_col2.setCurrentIndex(old_col2_idx)
+        else:
+            self.cmb_compare_col2.setCurrentIndex(0)
+
+        # 解除訊號阻擋
+        self.cmb_compare_col.blockSignals(False)
+        self.cmb_compare_method.blockSignals(False)
+        self.cmb_compare_target.blockSignals(False)
+        self.cmb_belong_value.blockSignals(False)
+        self.cmb_compare_col2.blockSignals(False)
+        self.cmb_compare_method2.blockSignals(False)
+        self.cmb_compare_target2.blockSignals(False)
+        self.cmb_belong_value2.blockSignals(False)
+        
+        # 手動觸發 visibility 的更新
+        self.on_compare_col_changed(self.cmb_compare_col.currentIndex())
+        self.on_compare_col2_changed(self.cmb_compare_col2.currentIndex())
+
     def on_filter_clicked(self):
         compare_col = self.cmb_compare_col.currentData()
         compare_method = self.cmb_compare_method.currentText()
         compare_target = self.cmb_compare_target.currentData()
-        compare_value = self.txt_compare_value.text()
+        
+        if compare_method in ("屬於", "不屬於"):
+            compare_value = self.cmb_belong_value.currentText()
+        else:
+            compare_value = self.txt_compare_value.text()
 
         # 驗證規則一
         if compare_col != "none":
-            if compare_target == "manual":
-                if compare_method == "正規表達式":
-                    import re
-                    try:
-                        re.compile(compare_value)
-                    except re.error as e:
-                        QMessageBox.warning(self, "錯誤", f"規則一正規表達式語法錯誤: {e}")
+            if compare_method not in ("屬於", "不屬於"):
+                if compare_target == "manual":
+                    if compare_method == "正規表達式":
+                        import re
+                        try:
+                            re.compile(compare_value)
+                        except re.error as e:
+                            QMessageBox.warning(self, "錯誤", f"規則一正規表達式語法錯誤: {e}")
+                            return
+                else:
+                    if compare_col == compare_target:
+                        QMessageBox.warning(self, "錯誤", "規則一：欄位比對必須選擇不同的欄位。")
                         return
-            else:
-                if compare_col == compare_target:
-                    QMessageBox.warning(self, "錯誤", "規則一：欄位比對必須選擇不同的欄位。")
-                    return
 
         # 取得與驗證規則二
         compare_col2 = "none"
@@ -480,21 +559,26 @@ class EditPanel(BasePanel):
             compare_col2 = self.cmb_compare_col2.currentData()
             compare_method2 = self.cmb_compare_method2.currentText()
             compare_target2 = self.cmb_compare_target2.currentData()
-            compare_value2 = self.txt_compare_value2.text()
+            
+            if compare_method2 in ("屬於", "不屬於"):
+                compare_value2 = self.cmb_belong_value2.currentText()
+            else:
+                compare_value2 = self.txt_compare_value2.text()
 
             if compare_col2 != "none":
-                if compare_target2 == "manual":
-                    if compare_method2 == "正規表達式":
-                        import re
-                        try:
-                            re.compile(compare_value2)
-                        except re.error as e:
-                            QMessageBox.warning(self, "錯誤", f"規則二正規表達式語法錯誤: {e}")
+                if compare_method2 not in ("屬於", "不屬於"):
+                    if compare_target2 == "manual":
+                        if compare_method2 == "正規表達式":
+                            import re
+                            try:
+                                re.compile(compare_value2)
+                            except re.error as e:
+                                QMessageBox.warning(self, "錯誤", f"規則二正規表達式語法錯誤: {e}")
+                                return
+                    else:
+                        if compare_col2 == compare_target2:
+                            QMessageBox.warning(self, "錯誤", "規則二：欄位比對必須選擇不同的欄位。")
                             return
-                else:
-                    if compare_col2 == compare_target2:
-                        QMessageBox.warning(self, "錯誤", "規則二：欄位比對必須選擇不同的欄位。")
-                        return
 
         filter_config = {
             "is_dual": self.is_dual,
@@ -534,41 +618,59 @@ class EditPanel(BasePanel):
         self.cmb_compare_col.blockSignals(True)
         self.cmb_compare_method.blockSignals(True)
         self.cmb_compare_target.blockSignals(True)
+        self.cmb_belong_value.blockSignals(True)
         self.cmb_compare_col2.blockSignals(True)
         self.cmb_compare_method2.blockSignals(True)
         self.cmb_compare_target2.blockSignals(True)
+        self.cmb_belong_value2.blockSignals(True)
         
         # 讀取規則一的值
         col1 = self.cmb_compare_col.currentIndex()
         method1 = self.cmb_compare_method.currentIndex()
+        method1_text = self.cmb_compare_method.currentText()
         target1 = self.cmb_compare_target.currentIndex()
         val1 = self.txt_compare_value.text()
+        belong1_idx = self.cmb_belong_value.currentIndex()
         
         # 讀取規則二的值
         col2 = self.cmb_compare_col2.currentIndex()
         method2 = self.cmb_compare_method2.currentIndex()
+        method2_text = self.cmb_compare_method2.currentText()
         target2 = self.cmb_compare_target2.currentIndex()
         val2 = self.txt_compare_value2.text()
+        belong2_idx = self.cmb_belong_value2.currentIndex()
         
         # 將規則一設定為規則二的值
         self.cmb_compare_col.setCurrentIndex(col2)
         self.cmb_compare_method.setCurrentIndex(method2)
+        self.update_target_options(self.cmb_compare_method, self.cmb_compare_target, self.num_cols, self.headers)
         self.cmb_compare_target.setCurrentIndex(target2)
-        self.txt_compare_value.setText(val2)
+        self.update_belong_visibility(self.cmb_compare_method, self.cmb_compare_target, self.value_container, self.belong_container, self.cmb_belong_value)
+        if method2_text in ("屬於", "不屬於"):
+            self.cmb_belong_value.setCurrentIndex(belong2_idx)
+        else:
+            self.txt_compare_value.setText(val2)
         
         # 將規則二設定為規則一的值
         self.cmb_compare_col2.setCurrentIndex(col1)
         self.cmb_compare_method2.setCurrentIndex(method1)
+        self.update_target_options(self.cmb_compare_method2, self.cmb_compare_target2, self.num_cols, self.headers)
         self.cmb_compare_target2.setCurrentIndex(target1)
-        self.txt_compare_value2.setText(val1)
+        self.update_belong_visibility(self.cmb_compare_method2, self.cmb_compare_target2, self.value_container2, self.belong_container2, self.cmb_belong_value2)
+        if method1_text in ("屬於", "不屬於"):
+            self.cmb_belong_value2.setCurrentIndex(belong1_idx)
+        else:
+            self.txt_compare_value2.setText(val1)
         
         # 解除訊號阻擋
         self.cmb_compare_col.blockSignals(False)
         self.cmb_compare_method.blockSignals(False)
         self.cmb_compare_target.blockSignals(False)
+        self.cmb_belong_value.blockSignals(False)
         self.cmb_compare_col2.blockSignals(False)
         self.cmb_compare_method2.blockSignals(False)
         self.cmb_compare_target2.blockSignals(False)
+        self.cmb_belong_value2.blockSignals(False)
         
         # 手動觸發一次顯示/隱藏更新
         self.on_compare_col_changed(self.cmb_compare_col.currentIndex())
@@ -582,13 +684,15 @@ class EditPanel(BasePanel):
                 "compare_col": self.cmb_compare_col.currentIndex(),
                 "compare_method": self.cmb_compare_method.currentIndex(),
                 "compare_target": self.cmb_compare_target.currentIndex(),
-                "compare_value": self.txt_compare_value.text()
+                "compare_value": self.cmb_belong_value.currentText() if self.cmb_compare_method.currentText() in ("屬於", "不屬於") else self.txt_compare_value.text(),
+                "belong_value_idx": self.cmb_belong_value.currentIndex()
             },
             "rule2": {
                 "compare_col": self.cmb_compare_col2.currentIndex(),
                 "compare_method": self.cmb_compare_method2.currentIndex(),
                 "compare_target": self.cmb_compare_target2.currentIndex(),
-                "compare_value": self.txt_compare_value2.text()
+                "compare_value": self.cmb_belong_value2.currentText() if self.cmb_compare_method2.currentText() in ("屬於", "不屬於") else self.txt_compare_value2.text(),
+                "belong_value_idx": self.cmb_belong_value2.currentIndex()
             }
         }
 
@@ -605,25 +709,71 @@ class EditPanel(BasePanel):
         else:
             self.rbtn_or.setChecked(True)
 
+        # 暫時阻擋訊號
+        self.cmb_compare_col.blockSignals(True)
+        self.cmb_compare_method.blockSignals(True)
+        self.cmb_compare_target.blockSignals(True)
+        self.cmb_belong_value.blockSignals(True)
+        self.cmb_compare_col2.blockSignals(True)
+        self.cmb_compare_method2.blockSignals(True)
+        self.cmb_compare_target2.blockSignals(True)
+        self.cmb_belong_value2.blockSignals(True)
+
         rule1 = config.get("rule1", {})
         if "compare_col" in rule1:
             self.cmb_compare_col.setCurrentIndex(rule1["compare_col"])
         if "compare_method" in rule1:
             self.cmb_compare_method.setCurrentIndex(rule1["compare_method"])
+        
+        # 依據恢復的比對方式更新比對目標的下拉選單選項
+        self.update_target_options(self.cmb_compare_method, self.cmb_compare_target, self.num_cols, self.headers)
+        
         if "compare_target" in rule1:
             self.cmb_compare_target.setCurrentIndex(rule1["compare_target"])
-        if "compare_value" in rule1:
-            self.txt_compare_value.setText(rule1["compare_value"])
+            
+        # 更新屬於下拉選單的選項與顯示狀態
+        self.update_belong_visibility(self.cmb_compare_method, self.cmb_compare_target, self.value_container, self.belong_container, self.cmb_belong_value)
+        
+        if self.cmb_compare_method.currentText() in ("屬於", "不屬於"):
+            if "belong_value_idx" in rule1:
+                self.cmb_belong_value.setCurrentIndex(rule1["belong_value_idx"])
+        else:
+            if "compare_value" in rule1:
+                self.txt_compare_value.setText(rule1["compare_value"])
 
         rule2 = config.get("rule2", {})
         if "compare_col" in rule2:
             self.cmb_compare_col2.setCurrentIndex(rule2["compare_col"])
         if "compare_method" in rule2:
             self.cmb_compare_method2.setCurrentIndex(rule2["compare_method"])
+            
+        self.update_target_options(self.cmb_compare_method2, self.cmb_compare_target2, self.num_cols, self.headers)
+            
         if "compare_target" in rule2:
             self.cmb_compare_target2.setCurrentIndex(rule2["compare_target"])
-        if "compare_value" in rule2:
-            self.txt_compare_value2.setText(rule2["compare_value"])
+            
+        self.update_belong_visibility(self.cmb_compare_method2, self.cmb_compare_target2, self.value_container2, self.belong_container2, self.cmb_belong_value2)
+        
+        if self.cmb_compare_method2.currentText() in ("屬於", "不屬於"):
+            if "belong_value_idx" in rule2:
+                self.cmb_belong_value2.setCurrentIndex(rule2["belong_value_idx"])
+        else:
+            if "compare_value" in rule2:
+                self.txt_compare_value2.setText(rule2["compare_value"])
+
+        # 解除訊號阻擋
+        self.cmb_compare_col.blockSignals(False)
+        self.cmb_compare_method.blockSignals(False)
+        self.cmb_compare_target.blockSignals(False)
+        self.cmb_belong_value.blockSignals(False)
+        self.cmb_compare_col2.blockSignals(False)
+        self.cmb_compare_method2.blockSignals(False)
+        self.cmb_compare_target2.blockSignals(False)
+        self.cmb_belong_value2.blockSignals(False)
+        
+        # 手動觸發一次顯示/隱藏更新
+        self.on_compare_col_changed(self.cmb_compare_col.currentIndex())
+        self.on_compare_col2_changed(self.cmb_compare_col2.currentIndex())
 
     def get_start_button_text(self, state: str) -> str:
         if state == "critical":
@@ -637,3 +787,53 @@ class EditPanel(BasePanel):
             main_window.cancel_task()
         else:
             main_window.start_task()
+
+    # ----------------- 新增輔助方法 -----------------
+    def on_compare_method_changed(self, idx):
+        self.update_target_options(self.cmb_compare_method, self.cmb_compare_target, self.num_cols, self.headers)
+        self.update_belong_visibility(self.cmb_compare_method, self.cmb_compare_target, self.value_container, self.belong_container, self.cmb_belong_value)
+
+    def on_compare_method2_changed(self, idx):
+        self.update_target_options(self.cmb_compare_method2, self.cmb_compare_target2, self.num_cols, self.headers)
+        self.update_belong_visibility(self.cmb_compare_method2, self.cmb_compare_target2, self.value_container2, self.belong_container2, self.cmb_belong_value2)
+
+    def update_target_options(self, cmb_method, cmb_target, num_cols, headers=None):
+        cmb_target.blockSignals(True)
+        cmb_target.clear()
+        method = cmb_method.currentText()
+        if method in ("屬於", "不屬於"):
+            cmb_target.addItem("語系", "語系")
+            cmb_target.addItem("含數字", "含數字")
+            cmb_target.addItem("純數字", "純數字")
+            cmb_target.addItem("文數字(無符號)", "文數字(無符號)")
+            cmb_target.addItem("僅符號", "僅符號")
+        else:
+            cmb_target.addItem("手動輸入", "manual")
+            for i in range(num_cols):
+                text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
+                cmb_target.addItem(text, i)
+        cmb_target.blockSignals(False)
+
+    def update_belong_visibility(self, cmb_method, cmb_target, value_container, belong_container, cmb_belong):
+        method = cmb_method.currentText()
+        if method in ("屬於", "不屬於"):
+            value_container.setVisible(False)
+            belong_container.setVisible(True)
+            
+            target = cmb_target.currentData()
+            cmb_belong.blockSignals(True)
+            cmb_belong.clear()
+            if target == "語系":
+                cmb_belong.addItems(["中文", "繁體中文", "簡體中文", "日文(通用)", "日文(專字)", "韓文", "英文", "拉丁語系", "其他語系"])
+            elif target in ("含數字", "純數字"):
+                cmb_belong.addItems(["半形", "全半形", "多國語言"])
+            elif target in ("文數字(無符號)", "僅符號"):
+                cmb_belong.addItems(["半形", "全半形"])
+            cmb_belong.blockSignals(False)
+        else:
+            belong_container.setVisible(False)
+            target = cmb_target.currentData()
+            if target == "manual":
+                value_container.setVisible(True)
+            else:
+                value_container.setVisible(False)

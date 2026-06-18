@@ -1,6 +1,25 @@
 import re
 import time
+import unicodedata
 from PyQt6.QtCore import QThread, pyqtSignal
+
+# 全角數字/符號轉換表
+FULL_TO_HALF_MAP = {
+    '０': '0', '１': '1', '２': '2', '３': '3', '４': '4',
+    '５': '5', '６': '6', '７': '7', '８': '8', '９': '9',
+    '．': '.', '＋': '+', '－': '-', 'ｅ': 'e', 'Ｅ': 'E',
+    ' ': ' ', '　': ' '  # 全形空格
+}
+FULL_TO_HALF_TRANS = str.maketrans(FULL_TO_HALF_MAP)
+
+# 常用日文全漢字字典
+JAPANESE_KANJI_WORDS = {
+    "東京", "京都", "大阪", "無料", "割引", "新幹線", "非常口", "切符", "交番", 
+    "案内", "名簿", "消去", "確認", "返信", "送信", "受信", "設定", "登録", 
+    "取消", "終了", "開始", "新規", "更新", "変更", "削除", "印刷", "保存",
+    "読込", "書込", "編集", "検索", "置換", "選擇", "全選", "移動", "複製",
+    "貼付", "挿入", "追加", "作成", "開発", "設計", "計画", "実行", "停止"
+}
 
 class FilterWorker(QThread):
     progress_updated = pyqtSignal(int, int)
@@ -21,6 +40,15 @@ class FilterWorker(QThread):
         
         self._is_cancelled = False
 
+        # 初始化 OpenCC 轉換器 (離線字典載入)
+        try:
+            from opencc import OpenCC
+            self.cc_t2s = OpenCC('t2s')
+            self.cc_s2t = OpenCC('s2t')
+        except Exception:
+            self.cc_t2s = None
+            self.cc_s2t = None
+
     def cancel(self):
         self._is_cancelled = True
 
@@ -37,7 +65,9 @@ class FilterWorker(QThread):
             cols_to_check = [compare_col]
 
         # 決定比對目標值
-        if compare_target == "manual":
+        if compare_method in ("屬於", "不屬於"):
+            target_val = compare_value
+        elif compare_target == "manual":
             target_val = compare_value
         else:
             # 特定欄位的值 (整數)
@@ -63,8 +93,243 @@ class FilterWorker(QThread):
                     is_match = any(bool(t_regex.search(row[c] if c < len(row) else "")) for c in cols_to_check)
                 except re.error:
                     is_match = False
+        elif compare_method in ("屬於", "不屬於"):
+            is_belong = any(self.is_belong_match(row[c] if c < len(row) else "", compare_target, target_val) for c in cols_to_check)
+            is_match = not is_belong if compare_method == "不屬於" else is_belong
                     
         return is_match
+
+    def is_belong_match(self, text, target, sub_value):
+        if target == "語系":
+            if sub_value == "中文":
+                # 含有任何漢字，且不含日文假名
+                if not any('\u4e00' <= c <= '\u9fff' for c in text):
+                    return False
+                if any('\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff' for c in text):
+                    return False
+                return True
+                
+            elif sub_value == "繁體中文":
+                if not any('\u4e00' <= c <= '\u9fff' for c in text):
+                    return False
+                if any('\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff' for c in text):
+                    return False
+                # 使用 OpenCC
+                if self.cc_s2t:
+                    # 部分符合即可：只要含有一個中文字元，且該字元在 s2t 轉換後保持不變
+                    for c in text:
+                        if '\u4e00' <= c <= '\u9fff':
+                            if self.cc_s2t.convert(c) == c:
+                                return True
+                    return False
+                else:
+                    # 降級備用：使用 big5 編碼檢查
+                    for c in text:
+                        if '\u4e00' <= c <= '\u9fff':
+                            try:
+                                c.encode('big5')
+                                return True
+                            except UnicodeEncodeError:
+                                pass
+                    return False
+                    
+            elif sub_value == "簡體中文":
+                if not any('\u4e00' <= c <= '\u9fff' for c in text):
+                    return False
+                if any('\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff' for c in text):
+                    return False
+                # 使用 OpenCC
+                if self.cc_t2s:
+                    for c in text:
+                        if '\u4e00' <= c <= '\u9fff':
+                            if self.cc_t2s.convert(c) == c:
+                                return True
+                    return False
+                else:
+                    # 降級備用：使用 gb2312 編碼檢查
+                    for c in text:
+                        if '\u4e00' <= c <= '\u9fff':
+                            try:
+                                c.encode('gb2312')
+                                return True
+                            except UnicodeEncodeError:
+                                pass
+                    return False
+                    
+            elif sub_value == "日文(專字)":
+                # 假名，日文特有符號/疊字，或日文特有漢字（無法編碼為 big5 且無法編碼為 gb2312）
+                for c in text:
+                    if '\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff':
+                        return True
+                    if c in ('\u3005', '\u3006', '\u3012', '\u303b', '\u303d', '\u3004'):  # 々, 〆, 〒, 〻, 〽, 〄
+                        return True
+                    if '\u4e00' <= c <= '\u9fff':
+                        # 雙重編碼失敗檢查
+                        try:
+                            c.encode('big5')
+                            has_big5 = True
+                        except UnicodeEncodeError:
+                            has_big5 = False
+                        try:
+                            c.encode('gb2312')
+                            has_gb2312 = True
+                        except UnicodeEncodeError:
+                            has_gb2312 = False
+                        if not has_big5 and not has_gb2312:
+                            return True
+                return False
+                
+            elif sub_value == "日文(通用)":
+                # if 含日文專字：return true
+                if self.is_belong_match(text, "語系", "日文(專字)"):
+                    return True
+                # else if 不含漢字：return false
+                if not any('\u4e00' <= c <= '\u9fff' for c in text):
+                    return False
+                # else 採用欄位字串拆解法匹配日文全漢字字典
+                kanji_blocks = re.findall(r'[\u4e00-\u9fff]+', text)
+                for block in kanji_blocks:
+                    L = len(block)
+                    for length in range(2, min(5, L + 1)):
+                        for start in range(L - length + 1):
+                            substr = block[start:start+length]
+                            if substr in JAPANESE_KANJI_WORDS:
+                                return True
+                return False
+                
+            elif sub_value == "韓文":
+                return any('\uac00' <= c <= '\ud7af' or '\u1100' <= c <= '\u11ff' or '\u3130' <= c <= '\u318f' for c in text)
+                
+            elif sub_value == "英文":
+                return any('a' <= c <= 'z' or 'A' <= c <= 'Z' for c in text)
+                
+            elif sub_value == "拉丁語系":
+                return any(('\u0000' <= c <= '\u007f' and ('a' <= c <= 'z' or 'A' <= c <= 'Z')) or
+                           '\u0080' <= c <= '\u00ff' or
+                           '\u0100' <= c <= '\u017f' or
+                           '\u0180' <= c <= '\u024f' for c in text)
+                           
+            elif sub_value == "其他語系":
+                for c in text:
+                    cat = unicodedata.category(c)
+                    if cat.startswith('L'):
+                        is_latin = ('\u0000' <= c <= '\u024f')
+                        is_cjk = ('\u4e00' <= c <= '\u9fff')
+                        is_kana = ('\u3040' <= c <= '\u30ff')
+                        is_hangul = ('\uac00' <= c <= '\ud7af' or '\u1100' <= c <= '\u11ff' or '\u3130' <= c <= '\u318f')
+                        if not (is_latin or is_cjk or is_kana or is_hangul):
+                            return True
+                return False
+                
+        elif target == "含數字":
+            if sub_value == "半形":
+                return any('0' <= c <= '9' for c in text)
+            elif sub_value == "全半形":
+                return any('0' <= c <= '9' or '０' <= c <= '９' for c in text)
+            elif sub_value == "多國語言":
+                return any(c.isnumeric() for c in text)
+        elif target == "純數字":
+            # 必須完全符合
+            if sub_value == "半形":
+                return bool(re.match(r'^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$', text))
+            elif sub_value == "全半形":
+                converted = text.translate(FULL_TO_HALF_TRANS)
+                return bool(re.match(r'^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$', converted))
+            elif sub_value == "多國語言":
+                if not text:
+                    return False
+                # 標準化全形控制字元
+                norm = text.translate(str.maketrans({
+                    '＋': '+', '－': '-', '．': '.',
+                    'ｅ': 'e', 'Ｅ': 'E'
+                }))
+                if 'e' in norm or 'E' in norm:
+                    parts = re.split(r'[eE]', norm, maxsplit=1)
+                    if len(parts) != 2:
+                        return False
+                    base, exp = parts[0], parts[1]
+                    if not exp:
+                        return False
+                    if exp.startswith('+') or exp.startswith('-'):
+                        exp = exp[1:]
+                    if not exp or not all(c.isnumeric() for c in exp):
+                        return False
+                    if not base:
+                        return False
+                    if base.startswith('+') or base.startswith('-'):
+                        base = base[1:]
+                    if not base:
+                        return False
+                    if '.' in base:
+                        subparts = base.split('.', 1)
+                        joined = subparts[0] + subparts[1]
+                        if not joined or not all(c.isnumeric() for c in joined):
+                            return False
+                    else:
+                        if not all(c.isnumeric() for c in base):
+                            return False
+                    return True
+                else:
+                    val = norm
+                    if val.startswith('+') or val.startswith('-'):
+                        val = val[1:]
+                    if not val:
+                        return False
+                    if '.' in val:
+                        subparts = val.split('.', 1)
+                        joined = subparts[0] + subparts[1]
+                        if not joined or not all(c.isnumeric() for c in joined):
+                            return False
+                    else:
+                        if not all(c.isnumeric() for c in val):
+                            return False
+                    return True
+                
+        elif target == "文數字(無符號)":
+            # 必須完全符合
+            if not text:
+                return False
+            if sub_value == "半形":
+                for c in text:
+                    cat = unicodedata.category(c)
+                    is_alnum = cat.startswith('L') or cat.startswith('N')
+                    is_space = (c == ' ')
+                    if not (is_alnum or is_space):
+                        return False
+                    w = unicodedata.east_asian_width(c)
+                    if w in ('W', 'F'):
+                        return False
+                return True
+            elif sub_value == "全半形":
+                for c in text:
+                    cat = unicodedata.category(c)
+                    is_alnum = cat.startswith('L') or cat.startswith('N')
+                    is_space = (c in (' ', '\u3000'))
+                    if not (is_alnum or is_space):
+                        return False
+                return True
+                
+        elif target == "僅符號":
+            # 必須完全符合 (不含文數字，可含空白)
+            if not text:
+                return False
+            if sub_value == "半形":
+                for c in text:
+                    cat = unicodedata.category(c)
+                    if cat.startswith('L') or cat.startswith('N'):
+                        return False
+                    w = unicodedata.east_asian_width(c)
+                    if w in ('W', 'F'):
+                        return False
+                return True
+            elif sub_value == "全半形":
+                for c in text:
+                    cat = unicodedata.category(c)
+                    if cat.startswith('L') or cat.startswith('N'):
+                        return False
+                return True
+                
+        return False
 
     def run(self):
         start_time = time.time()
