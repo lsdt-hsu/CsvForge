@@ -130,6 +130,7 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerM
         self.sidebar_stacked = QStackedWidget()
 
         self.translation_panel = TranslationPanel()
+        self.translation_panel.btn_start.clicked.connect(self.on_start_button_clicked)
         self.edit_panel = EditPanel()
         self.edit_panel.request_filter.connect(self.start_filtering)
 

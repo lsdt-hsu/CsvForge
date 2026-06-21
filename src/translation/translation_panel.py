@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton
 from PyQt6.QtCore import Qt
 from base_panel import BasePanel
 
@@ -12,7 +12,7 @@ class TranslationPanel(BasePanel):
         layout.setSpacing(8)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        lbl_sec = QLabel("翻譯設定")
+        lbl_sec = QLabel("翻譯")
         lbl_sec.setObjectName("sectionHeader")
         layout.addWidget(lbl_sec)
 
@@ -70,6 +70,12 @@ class TranslationPanel(BasePanel):
         grid.addWidget(self.slider_batch_size, 4, 1)
 
         layout.addLayout(grid)
+
+        self.btn_start = QPushButton("開始翻譯")
+        self.btn_start.setObjectName("btnStart")
+        self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
+        layout.addWidget(self.btn_start)
+
         layout.addStretch()
 
     def update_batch_label(self, val):

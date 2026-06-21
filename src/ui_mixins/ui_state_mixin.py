@@ -59,6 +59,8 @@ class UiStateMixin:
 
         if enabled:
             self.btn_start.setEnabled(True)
+            if hasattr(self.translation_panel, "btn_start"):
+                self.translation_panel.btn_start.setEnabled(True)
             self.update_start_button_ui()
 
     def switch_sidebar_tab(self: "MainWindow", tab_name: str) -> None:
@@ -127,16 +129,27 @@ class UiStateMixin:
         panel = self.get_active_panel()
         text = panel.get_start_button_text(state)
         self.btn_start.setText(text)
+        if hasattr(self.translation_panel, "btn_start"):
+            self.translation_panel.btn_start.setText(text)
 
         if state == "disabled":
             self.btn_start.setEnabled(False)
             self.btn_start.setStyleSheet("background-color: #24283b; color: #565f89;")
+            if hasattr(self.translation_panel, "btn_start"):
+                self.translation_panel.btn_start.setEnabled(False)
+                self.translation_panel.btn_start.setStyleSheet("background-color: #24283b; color: #565f89;")
         elif state == "critical":
             self.btn_start.setEnabled(True)
             self.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
+            if hasattr(self.translation_panel, "btn_start"):
+                self.translation_panel.btn_start.setEnabled(True)
+                self.translation_panel.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
         else:  # normal
             self.btn_start.setEnabled(True)
             self.btn_start.setStyleSheet("")  # 恢復 QSS 原生樣式
+            if hasattr(self.translation_panel, "btn_start"):
+                self.translation_panel.btn_start.setEnabled(True)
+                self.translation_panel.btn_start.setStyleSheet("")  # 恢復 QSS 原生樣式
 
     def on_start_button_clicked(self: "MainWindow") -> None:
         state = self.get_start_button_state()
