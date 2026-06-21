@@ -24,10 +24,10 @@ class WorkerMixin:
 
     def start_load_task(self: "MainWindow") -> None:
         # 讀取通用設定值
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
-        start_row = self.txt_start_row.text().strip()
-        end_row = self.txt_end_row.text().strip()
+        src_path = self.context.source_path
+        out_path = self.context.output_path
+        start_row = self.context.start_row
+        end_row = self.context.end_row
 
         from data_editor.edit_worker import CSVEditWorker
         worker_instance = CSVEditWorker(
@@ -69,18 +69,18 @@ class WorkerMixin:
 
     def start_translation_task(self: "MainWindow") -> None:
         # 檢查點：來源與輸出不為空且相同
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
+        src_path = self.context.source_path
+        out_path = self.context.output_path
         if src_path and out_path and src_path == out_path:
             QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
             return
 
-        start_row = self.txt_start_row.text().strip()
-        end_row = self.txt_end_row.text().strip()
+        start_row = self.context.start_row
+        end_row = self.context.end_row
 
         from translation.translation_worker import CSVTranslatorWorker
-        src_col = self.txt_src_col.text().strip()
-        tgt_col = self.txt_tgt_col.text().strip()
+        src_col = self.context.source_col
+        tgt_col = self.context.target_col
         src_lang = self.translation_panel.get_src_lang()
         tgt_lang = self.translation_panel.get_tgt_lang()
         batch_interval = self.translation_panel.get_batch_interval()
@@ -183,17 +183,17 @@ class WorkerMixin:
             if isinstance(self.worker, CSVEditWorker) and hasattr(self.worker, "loaded_rows"):
                 start_row = 1
                 try:
-                    start_row = int(self.txt_start_row.text())
+                    start_row = int(self.context.start_row)
                 except ValueError:
                     pass
                 end_row = None
-                if self.txt_end_row.text().strip():
+                if self.context.end_row:
                     try:
-                        end_row = int(self.txt_end_row.text())
+                        end_row = int(self.context.end_row)
                     except ValueError:
                         pass
 
-                src_path = self.txt_src_path.text().strip()
+                src_path = self.context.source_path
                 self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row, file_path=src_path)
                 self.edit_content_panel.set_delimiter(getattr(self.worker, "delimiter", ","))
 

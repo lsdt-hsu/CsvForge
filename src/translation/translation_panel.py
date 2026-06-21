@@ -3,8 +3,8 @@ from PyQt6.QtCore import Qt
 from base_panel import BasePanel
 
 class TranslationPanel(BasePanel):
-    def __init__(self, parent=None):
-        super().__init__(parent, title_text="翻譯", require_data_loading=True)
+    def __init__(self, parent=None, context=None):
+        super().__init__(parent, title_text="翻譯", require_data_loading=True, context=context)
         self.init_ui()
 
     def init_ui(self):

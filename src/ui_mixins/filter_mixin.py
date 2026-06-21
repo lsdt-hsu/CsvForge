@@ -30,26 +30,26 @@ class FilterMixin:
 
         start_row = 1
         try:
-            start_row = int(self.txt_start_row.text())
+            start_row = int(self.context.start_row)
         except ValueError:
             pass
 
         end_row = None
-        if self.txt_end_row.text().strip():
+        if self.context.end_row:
             try:
-                end_row = int(self.txt_end_row.text())
+                end_row = int(self.context.end_row)
             except ValueError:
                 pass
 
         src_col = 1
         try:
-            src_col = int(self.txt_src_col.text())
+            src_col = int(self.context.source_col)
         except ValueError:
             pass
 
         tgt_col = 1
         try:
-            tgt_col = int(self.txt_tgt_col.text())
+            tgt_col = int(self.context.target_col)
         except ValueError:
             pass
 

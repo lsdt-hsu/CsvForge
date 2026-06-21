@@ -128,14 +128,17 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerM
         # 堆疊式容器 (QStackedWidget)
         self.sidebar_stacked = QStackedWidget()
 
-        self.translation_panel = TranslationPanel()
+        from base_panel import AppContext
+        self.context = AppContext(self)
+
+        self.translation_panel = TranslationPanel(context=self.context)
         self.translation_panel.btn_start.clicked.connect(self.on_start_button_clicked)
         self.translation_panel.request_lock_ui.connect(self.lock_ui_from_panel)
         self.translation_panel.progress_updated.connect(self.on_panel_progress)
         self.translation_panel.status_updated.connect(self.on_panel_status)
         self.translation_panel.log_emitted.connect(self.on_panel_log)
 
-        self.edit_panel = EditPanel()
+        self.edit_panel = EditPanel(context=self.context)
         self.edit_panel.request_filter.connect(self.start_filtering)
         self.edit_panel.request_lock_ui.connect(self.lock_ui_from_panel)
         self.edit_panel.progress_updated.connect(self.on_panel_progress)

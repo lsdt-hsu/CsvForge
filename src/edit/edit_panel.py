@@ -335,8 +335,8 @@ class RuleWidget(QWidget):
 class EditPanel(BasePanel):
     request_filter = pyqtSignal(dict)
 
-    def __init__(self, parent=None):
-        super().__init__(parent, title_text="編輯過濾", require_data_loading=True)
+    def __init__(self, parent=None, context=None):
+        super().__init__(parent, title_text="編輯過濾", require_data_loading=True, context=context)
         self.num_cols = 0
         self.headers = None
         

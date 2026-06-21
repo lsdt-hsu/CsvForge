@@ -1,14 +1,69 @@
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal
 
+class AppContext:
+    """
+    AppContext — 封裝主畫面的動態設定與狀態，提供子面板唯讀存取。
+    """
+    def __init__(self, main_window):
+        self._win = main_window
+
+    @property
+    def source_path(self) -> str:
+        return self._win.txt_src_path.text().strip()
+
+    @property
+    def output_path(self) -> str:
+        return self._win.txt_out_path.text().strip()
+
+    @property
+    def start_row(self) -> str:
+        return self._win.txt_start_row.text().strip()
+
+    @property
+    def end_row(self) -> str:
+        return self._win.txt_end_row.text().strip()
+
+    @property
+    def source_col(self) -> str:
+        return self._win.txt_src_col.text().strip()
+
+    @property
+    def target_col(self) -> str:
+        return self._win.txt_tgt_col.text().strip()
+
+    @property
+    def is_first_row_header(self) -> bool:
+        if hasattr(self._win, "edit_content_panel"):
+            return self._win.edit_content_panel.is_first_row_header()
+        return False
+
+    @property
+    def is_modified(self) -> bool:
+        if hasattr(self._win, "edit_content_panel"):
+            return getattr(self._win.edit_content_panel, "is_modified", False)
+        return False
+
+    @property
+    def is_ui_locked(self) -> bool:
+        return getattr(self._win, "_ui_locked", False)
+
+    @property
+    def is_data_loaded(self) -> bool:
+        if hasattr(self._win, "edit_content_panel"):
+            return len(self._win.edit_content_panel.get_all_rows()) > 0
+        return False
+
+
 class BasePanel(QFrame):
     request_lock_ui = pyqtSignal(bool)
     progress_updated = pyqtSignal(int, int)
     status_updated = pyqtSignal(str)
     log_emitted = pyqtSignal(str, str)
 
-    def __init__(self, parent=None, title_text="", require_data_loading=True):
+    def __init__(self, parent=None, title_text="", require_data_loading=True, context: AppContext = None):
         super().__init__(parent)
+        self.context = context
         self.setObjectName("grpFrame")
         self.require_data_loading = require_data_loading
         
