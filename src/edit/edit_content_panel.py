@@ -1,9 +1,10 @@
+import os
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QLabel, QCheckBox, QTableView,
-    QStyledItemDelegate, QStyle, QStyleOptionViewItem
+    QStyledItemDelegate, QStyle, QStyleOptionViewItem, QPushButton
 )
-from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex
-from PyQt6.QtGui import QFontMetrics
+from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSize, pyqtSignal
+from PyQt6.QtGui import QFontMetrics, QIcon
 from base_panel import BasePanel
 
 PREVIEW_DEFAULT_SECTION_SIZE = 110
@@ -135,10 +136,14 @@ class CSVTableModel(QAbstractTableModel):
         return None
 
 class EditContentPanel(BasePanel):
+    request_save = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("rightFrame")
         self.setMinimumHeight(200)
+        self.is_modified = False
+        self.delimiter = ","
         self.init_ui()
 
     def init_ui(self):
@@ -170,6 +175,18 @@ class EditContentPanel(BasePanel):
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         header_layout.addWidget(self.lbl_status)
 
+        # 存檔按鈕
+        self.btn_save = QPushButton()
+        self.btn_save.setObjectName("btnSaveData")
+        self.btn_save.setFixedSize(30, 30)
+        save_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "save.png")
+        self.btn_save.setIcon(QIcon(save_icon_path))
+        self.btn_save.setIconSize(QSize(20, 20))
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_save.setEnabled(False)
+        self.btn_save.clicked.connect(self.request_save.emit)
+        header_layout.addWidget(self.btn_save)
+
         layout.addWidget(header_widget)
 
         # 使用 QTableView 支援大數據虛擬滾動
@@ -183,7 +200,14 @@ class EditContentPanel(BasePanel):
         self.table_view.setModel(self.table_model)
         self.table_view.setItemDelegate(CsvTableDelegate(self.table_view))
         
+        # 監聽資料異動
+        self.table_model.dataChanged.connect(lambda: self.set_modified(True))
+        
         layout.addWidget(self.table_view)
+
+    def set_modified(self, modified):
+        self.is_modified = modified
+        self.btn_save.setEnabled(modified)
 
     def on_header_checkbox_changed(self, state):
         self.table_model.set_is_header(self.chk_first_row_header.isChecked())
@@ -198,7 +222,8 @@ class EditContentPanel(BasePanel):
         )
         
         end_row_val = end_row if end_row is not None else len(all_rows)
-        self.lbl_status.setText(f"已載入資料 (共 {len(all_rows)} 行，顯示第 {start_row} 至 {end_row_val} 行)")
+        self.lbl_status.setText(f"{start_row} - {end_row_val} of {len(all_rows)}")
+        self.set_modified(False)
         self.resize_columns_fast()
 
     def resize_columns_fast(self):
@@ -240,3 +265,4 @@ class EditContentPanel(BasePanel):
     def clear(self):
         self.table_model.set_data([], 1, None, False)
         self.lbl_status.setText("尚未載入編輯資料")
+        self.set_modified(False)

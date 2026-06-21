@@ -18,6 +18,8 @@ class BaseCSVWorker(QThread):
         self.end_row = end_row
         self._is_paused = False
         self._is_cancelled = False
+        self.encoding = None
+        self.delimiter = ","
 
     def pause(self):
         self._is_paused = True
@@ -34,10 +36,10 @@ class BaseCSVWorker(QThread):
         回傳: (encoding, delimiter)
         """
         self.log_emitted.emit("INFO", "正在檢測檔案編碼與格式...")
-        encoding = detect_encoding(self.source_path)
-        delimiter = detect_delimiter(self.source_path, encoding)
-        self.log_emitted.emit("INFO", f"檢測到檔案編碼: {encoding}，分隔符: '{delimiter}'")
-        return encoding, delimiter
+        self.encoding = detect_encoding(self.source_path)
+        self.delimiter = detect_delimiter(self.source_path, self.encoding)
+        self.log_emitted.emit("INFO", f"檢測到檔案編碼: {self.encoding}，分隔符: '{self.delimiter}'")
+        return self.encoding, self.delimiter
 
     def count_total_rows(self, encoding, delimiter):
         """

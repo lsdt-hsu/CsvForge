@@ -354,6 +354,7 @@ class MainWindow(QMainWindow):
         self.preview_panel.preview_loaded.connect(self.on_preview_loaded)
 
         self.edit_content_panel = EditContentPanel()
+        self.edit_content_panel.request_save.connect(self.save_edit_data)
 
         self.content_stack.addWidget(self.preview_panel)
         self.content_stack.addWidget(self.edit_content_panel)
@@ -546,17 +547,21 @@ class MainWindow(QMainWindow):
             background-color: #414868;
         }
 
-        QPushButton#btnSwap, QPushButton#btnSwapRules {
+        QPushButton#btnSwap, QPushButton#btnSwapRules, QPushButton#btnSaveData {
             background-color: #3b4261;
             border: none;
             border-radius: 6px;
             padding: 0px;
         }
-        QPushButton#btnSwap:hover, QPushButton#btnSwapRules:hover {
+        QPushButton#btnSwap:hover, QPushButton#btnSwapRules:hover, QPushButton#btnSaveData:hover {
             background-color: #414868;
         }
-        QPushButton#btnSwap:pressed, QPushButton#btnSwapRules:pressed {
+        QPushButton#btnSwap:pressed, QPushButton#btnSwapRules:pressed, QPushButton#btnSaveData:pressed {
             background-color: #2e3c64;
+        }
+        QPushButton#btnSaveData:disabled {
+            background-color: #1c1d27;
+            border: 1px dashed #2f3047;
         }
 
 
@@ -911,6 +916,7 @@ class MainWindow(QMainWindow):
                         pass
                 
                 self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row)
+                self.edit_content_panel.delimiter = getattr(self.worker, "delimiter", ",")
                 self.content_stack.setCurrentWidget(self.edit_content_panel)
                 
                 # 更新欄位下拉選單
@@ -939,6 +945,41 @@ class MainWindow(QMainWindow):
             
         title, msg = self.worker.get_error_message(err_msg)
         QMessageBox.critical(self, title, msg)
+
+    def save_edit_data(self):
+        out_path = self.txt_out_path.text().strip()
+        if not out_path:
+            QMessageBox.warning(self, "錯誤", "請指定輸出 CSV 檔案路徑！")
+            return
+
+        # 檢查點：來源檔案與輸出檔案相同
+        src_path = self.txt_src_path.text().strip()
+        if src_path and out_path and src_path == out_path:
+            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法存檔！請變更輸出路徑。")
+            return
+
+        all_rows = self.edit_content_panel.table_model.all_rows
+        if not all_rows:
+            QMessageBox.warning(self, "錯誤", "沒有資料可儲存。")
+            return
+
+        delimiter = getattr(self.edit_content_panel, "delimiter", ",")
+
+        try:
+            out_dir = os.path.dirname(out_path)
+            if out_dir and not os.path.exists(out_dir):
+                os.makedirs(out_dir, exist_ok=True)
+
+            with open(out_path, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f, delimiter=delimiter)
+                writer.writerows(all_rows)
+
+            self.edit_content_panel.set_modified(False)
+            self.append_log("SUCCESS", f"編輯資料存檔成功！已寫入至：{out_path}")
+            QMessageBox.information(self, "成功", f"存檔成功！\n檔案已儲存至：\n{out_path}")
+        except Exception as e:
+            self.append_log("ERROR", f"存檔失敗：{str(e)}")
+            QMessageBox.critical(self, "存檔失敗", f"存檔失敗：\n{str(e)}")
 
     def start_filtering(self, filter_config):
         rows = self.edit_content_panel.table_model.all_rows
