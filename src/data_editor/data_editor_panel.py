@@ -156,6 +156,7 @@ class DataEditorPanel(BasePanel):
       - request_save：使用者點擊存檔按鈕時發射
     """
     request_save = pyqtSignal()
+    header_state_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent, require_data_loading=False)
@@ -256,8 +257,10 @@ class DataEditorPanel(BasePanel):
         self.btn_save.setEnabled(modified)
 
     def on_header_checkbox_changed(self, state):
-        self.table_model.set_is_header(self.chk_first_row_header.isChecked())
+        is_checked = self.chk_first_row_header.isChecked()
+        self.table_model.set_is_header(is_checked)
         self.resize_columns_fast()
+        self.header_state_changed.emit(is_checked)
 
     def load_data(self, all_rows, start_row, end_row, file_path=None):
         self.table_model.set_data(

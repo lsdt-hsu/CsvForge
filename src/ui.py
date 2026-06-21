@@ -354,6 +354,7 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerM
         # 內容面板
         self.edit_content_panel = DataEditorPanel()
         self.edit_content_panel.request_save.connect(self.save_edit_data)
+        self.edit_content_panel.header_state_changed.connect(self.on_header_state_changed)
 
         self.grp_status = self._build_status_group()
         self.grp_status.setMinimumHeight(140)
@@ -666,6 +667,14 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerM
         }
         """
         self.setStyleSheet(qss)
+
+    def on_header_state_changed(self, is_hdr: bool) -> None:
+        """當『第一行為標題』狀態改變時，更新編輯過濾面板的比對欄位與比對目標下拉選單。"""
+        all_rows = self.edit_content_panel.get_all_rows()
+        if all_rows:
+            num_cols = max(len(r) for r in all_rows)
+            headers = all_rows[0] if is_hdr else None
+            self.edit_panel.update_column_dropdowns(num_cols, headers)
 
     # ── 視窗關閉事件 ─────────────────────────────────────────────────────────
 

@@ -422,6 +422,8 @@ class EditPanel(BasePanel):
 
     def reset_panel(self):
         super().reset_panel()
+        self.num_cols = 0
+        self.headers = None
 
         # 清空規則佈局
         self.clear_layout(self.rule_list_layout)
