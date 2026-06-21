@@ -1,21 +1,13 @@
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget
 from PyQt6.QtCore import Qt
 from base_panel import BasePanel
 
 class TranslationPanel(BasePanel):
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent, title_text="翻譯", require_data_loading=True)
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        lbl_sec = QLabel("翻譯")
-        lbl_sec.setObjectName("sectionHeader")
-        layout.addWidget(lbl_sec)
-
         grid = QGridLayout()
         grid.setSpacing(10)
 
@@ -69,14 +61,12 @@ class TranslationPanel(BasePanel):
         grid.addWidget(self.lbl_batch_size_title, 4, 0)
         grid.addWidget(self.slider_batch_size, 4, 1)
 
-        layout.addLayout(grid)
+        self.controls_layout.addLayout(grid)
+        self.controls_layout.addStretch()
 
         self.btn_start = QPushButton("開始翻譯")
-        self.btn_start.setObjectName("btnStart")
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
-        layout.addWidget(self.btn_start)
-
-        layout.addStretch()
+        self.controls_layout.addWidget(self.btn_start)
 
     def update_batch_label(self, val):
         self.lbl_batch_title.setText(f"批次間隔：{val} 秒")

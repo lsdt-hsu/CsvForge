@@ -168,7 +168,9 @@ class WorkerMixin:
             self.task_status_str = "已取消"
             self.update_status_summary()
             title, msg = self.worker.get_cancel_message(out_path)
-            QMessageBox.information(self, title, msg)
+            from data_editor.edit_worker import CSVEditWorker
+            if not isinstance(self.worker, CSVEditWorker):
+                QMessageBox.information(self, title, msg)
         else:
             self.task_status_str = "完成"
             self.update_status_summary()
@@ -195,16 +197,18 @@ class WorkerMixin:
                 total_rows = len(self.worker.loaded_rows)
                 self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
 
-                # 更新過濾面板欄位下拉選單
+                # 更新過濾面板與翻譯面板控制項
                 loaded_rows = self.worker.loaded_rows
                 if loaded_rows:
                     num_cols = max(len(r) for r in loaded_rows)
                     is_hdr = self.edit_content_panel.is_first_row_header()
                     headers = loaded_rows[0] if is_hdr else None
                     self.edit_panel.update_column_dropdowns(num_cols, headers)
+                    self.translation_panel.show_controls()
 
-            title, msg = self.worker.get_success_message(out_path)
-            QMessageBox.information(self, title, msg)
+            if not isinstance(self.worker, CSVEditWorker):
+                title, msg = self.worker.get_success_message(out_path)
+                QMessageBox.information(self, title, msg)
 
     def on_worker_error(self: "MainWindow", err_msg: str) -> None:
         self.timer.stop()

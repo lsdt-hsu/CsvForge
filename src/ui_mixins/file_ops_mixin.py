@@ -70,6 +70,7 @@ class FileOpsMixin:
         self.txt_end_row.setPlaceholderText("預設至檔尾")
         self.edit_content_panel.clear()
         self.edit_panel.reset_panel()
+        self.translation_panel.reset_panel()
         if self.worker and hasattr(self.worker, "loaded_rows"):
             self.worker.loaded_rows = []
 

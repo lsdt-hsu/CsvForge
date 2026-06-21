@@ -336,7 +336,7 @@ class EditPanel(BasePanel):
     request_filter = pyqtSignal(dict)
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent, title_text="編輯過濾", require_data_loading=True)
         self.num_cols = 0
         self.headers = None
         
@@ -348,26 +348,6 @@ class EditPanel(BasePanel):
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        lbl_sec = QLabel("編輯過濾")
-        lbl_sec.setObjectName("sectionHeader")
-        layout.addWidget(lbl_sec)
-
-        # 尚未載入資料提示標籤
-        self.lbl_no_data = QLabel("尚未載入資料")
-        self.lbl_no_data.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.lbl_no_data.setStyleSheet("color: #565f89; font-style: italic; margin-top: 5px;")
-        layout.addWidget(self.lbl_no_data)
-
-        # 建立主要控制項容器
-        self.controls_container = QWidget()
-        controls_layout = QVBoxLayout(self.controls_container)
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(10)
-
         # 1. 建立 QScrollArea 以支援規則列表與新增按鈕在超出高度時滾動，絕不壓縮 UI
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -411,36 +391,24 @@ class EditPanel(BasePanel):
         self.scroll_area.setWidget(self.scroll_content)
         
         # 將 QScrollArea 加到控制項佈局中，設定 stretch=1 使其佔滿剩餘可用空間
-        controls_layout.addWidget(self.scroll_area, stretch=1)
+        self.controls_layout.addWidget(self.scroll_area, stretch=1)
 
         # 2. 開始過濾按鈕 (固定於下方，不隨滾動區捲動)
         self.btn_start_filter = QPushButton("開始過濾")
         self.btn_start_filter.clicked.connect(self.on_filter_clicked)
-        controls_layout.addWidget(self.btn_start_filter)
+        self.controls_layout.addWidget(self.btn_start_filter)
 
         # 3. 當前規則邏輯編輯框 (固定於下方，不隨滾動區捲動)
         self.lbl_expr_title = QLabel("當前規則邏輯 (可編輯)：")
         self.lbl_expr_title.setStyleSheet("font-weight: bold; color: #565f89; margin-top: 5px;")
-        controls_layout.addWidget(self.lbl_expr_title)
+        self.controls_layout.addWidget(self.lbl_expr_title)
 
         self.txt_expression = CustomTextEdit()
         self.txt_expression.setPlaceholderText("例如: #1 AND (#2 OR #3)")
         self.txt_expression.setFixedHeight(45)
         self.txt_expression.setAcceptRichText(False)
         self.txt_expression.focus_out_signal.connect(self.on_expression_focus_out)
-        controls_layout.addWidget(self.txt_expression)
-
-        # 將 controls_container 設為 stretch=1，使其佔滿除主標題外的整個側邊欄高度，避免被底部壓縮
-        layout.addWidget(self.controls_container, stretch=1)
-
-        # 建立一個動態佔位 Spacer，當 controls_container 隱藏時顯示，用以將「尚未載入資料」推至上方
-        self.empty_spacer = QWidget()
-        layout.addWidget(self.empty_spacer, stretch=1)
-
-        # 初始化隱藏主容器
-        self.lbl_no_data.setVisible(True)
-        self.controls_container.setVisible(False)
-        self.empty_spacer.setVisible(True)
+        self.controls_layout.addWidget(self.txt_expression)
 
         # 初始化第一條規則與邏輯樹
         self.reset_panel()
@@ -453,9 +421,7 @@ class EditPanel(BasePanel):
                 child.widget().deleteLater()
 
     def reset_panel(self):
-        self.lbl_no_data.setVisible(True)
-        self.controls_container.setVisible(False)
-        self.empty_spacer.setVisible(True)
+        super().reset_panel()
 
         # 清空規則佈局
         self.clear_layout(self.rule_list_layout)
@@ -573,9 +539,7 @@ class EditPanel(BasePanel):
             self.expression_is_valid = False
 
     def update_column_dropdowns(self, num_cols, headers=None):
-        self.lbl_no_data.setVisible(False)
-        self.controls_container.setVisible(True)
-        self.empty_spacer.setVisible(False)
+        self.show_controls()
 
         self.num_cols = num_cols
         self.headers = headers

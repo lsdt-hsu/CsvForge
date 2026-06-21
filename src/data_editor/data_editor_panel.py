@@ -158,7 +158,7 @@ class DataEditorPanel(BasePanel):
     request_save = pyqtSignal()
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent, require_data_loading=False)
         self.setObjectName("rightFrame")
         self.setMinimumHeight(200)
         self.is_modified = False
@@ -166,7 +166,7 @@ class DataEditorPanel(BasePanel):
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
+        layout = self.controls_layout
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(8)
 
