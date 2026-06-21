@@ -90,15 +90,10 @@ class UiStateMixin:
                 self.sidebar_stacked.setCurrentWidget(self.translation_panel)
                 self.btn_translate.setProperty("active", True)
                 self.btn_edit.setProperty("active", False)
-                self.content_stack.setCurrentWidget(self.preview_panel)
             elif tab_name == "edit":
                 self.sidebar_stacked.setCurrentWidget(self.edit_panel)
                 self.btn_translate.setProperty("active", False)
                 self.btn_edit.setProperty("active", True)
-                if self.edit_content_panel.has_data():
-                    self.content_stack.setCurrentWidget(self.edit_content_panel)
-                else:
-                    self.content_stack.setCurrentWidget(self.preview_panel)
 
         # 刷新按鈕樣式
         self.btn_translate.style().polish(self.btn_translate)

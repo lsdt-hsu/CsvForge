@@ -74,7 +74,7 @@ class SettingsMixin:
                     "collapsed": not self.files_content_widget.isVisible(),
                 },
                 "preview": {
-                    "first_row_header": self.preview_panel.is_first_row_header(),
+                    "first_row_header": self.edit_content_panel.is_first_row_header(),
                 },
             },
         }
@@ -161,7 +161,6 @@ class SettingsMixin:
 
                 preview_cfg = p_data.get("preview", {})
                 is_hdr = preview_cfg.get("first_row_header", False)
-                self.preview_panel.set_first_row_header(is_hdr)
                 self.edit_content_panel.set_first_row_header(is_hdr)
 
             self.update_start_button_ui()
@@ -190,11 +189,11 @@ class SettingsMixin:
             if len(sizes) > 1:
                 total_h = sum(sizes)
                 status_h = max(140, self.status_expanded_height)
-                preview_h = max(200, total_h - status_h)
-                if preview_h < 200:
-                    preview_h = 200
+                editor_h = max(200, total_h - status_h)
+                if editor_h < 200:
+                    editor_h = 200
                     status_h = max(140, total_h - 200)
-                self.right_splitter.setSizes([preview_h, status_h])
+                self.right_splitter.setSizes([editor_h, status_h])
         else:
             sizes = self.right_splitter.sizes()
             if len(sizes) > 1 and sizes[1] > 100:
@@ -240,16 +239,16 @@ class SettingsMixin:
             self.grp_status.setMinimumHeight(140)
             self.grp_status.setMaximumHeight(16777215)
             status_h = max(140, self.status_expanded_height)
-            preview_h = max(200, available_h - status_h)
-            if preview_h < 200:
-                preview_h = 200
+            editor_h = max(200, available_h - status_h)
+            if editor_h < 200:
+                editor_h = 200
                 status_h = max(140, available_h - 200)
-            self.right_splitter.setSizes([preview_h, status_h])
+            self.right_splitter.setSizes([editor_h, status_h])
         else:
             header_h = self.status_header_widget.sizeHint().height() + 30
             if header_h < 50:
                 header_h = 50
             self.grp_status.setMinimumHeight(0)
             self.grp_status.setMaximumHeight(header_h)
-            preview_h = max(200, available_h - header_h)
-            self.right_splitter.setSizes([preview_h, header_h])
+            editor_h = max(200, available_h - header_h)
+            self.right_splitter.setSizes([editor_h, header_h])

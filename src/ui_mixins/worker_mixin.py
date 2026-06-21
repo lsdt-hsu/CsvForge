@@ -187,9 +187,13 @@ class WorkerMixin:
                     except ValueError:
                         pass
 
-                self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row)
+                src_path = self.txt_src_path.text().strip()
+                self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row, file_path=src_path)
                 self.edit_content_panel.set_delimiter(getattr(self.worker, "delimiter", ","))
-                self.content_stack.setCurrentWidget(self.edit_content_panel)
+
+                # 更新結束行號 Placeholder
+                total_rows = len(self.worker.loaded_rows)
+                self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
 
                 # 更新過濾面板欄位下拉選單
                 loaded_rows = self.worker.loaded_rows

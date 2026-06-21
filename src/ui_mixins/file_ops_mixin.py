@@ -67,25 +67,11 @@ class FileOpsMixin:
             self.txt_out_path.setText(file_path)
 
     def on_source_file_changed(self: "MainWindow", file_path: str) -> None:
-        if not file_path.strip() or not os.path.exists(file_path):
-            self.preview_panel.clear_preview()
-            self.txt_end_row.setPlaceholderText("預設至檔尾")
-            self.edit_content_panel.clear()
-            self.edit_panel.reset_panel()
-            if self.worker and hasattr(self.worker, "loaded_rows"):
-                self.worker.loaded_rows = []
-            self.content_stack.setCurrentWidget(self.preview_panel)
-            return
-
-        self.preview_panel.load_preview(file_path)
+        self.txt_end_row.setPlaceholderText("預設至檔尾")
         self.edit_content_panel.clear()
         self.edit_panel.reset_panel()
         if self.worker and hasattr(self.worker, "loaded_rows"):
             self.worker.loaded_rows = []
-        self.content_stack.setCurrentWidget(self.preview_panel)
-
-    def on_preview_loaded(self: "MainWindow", total_rows: int) -> None:
-        self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
 
     def save_edit_data(self: "MainWindow") -> None:
         out_path = self.txt_out_path.text().strip()

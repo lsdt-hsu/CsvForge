@@ -189,7 +189,7 @@ class DataEditorPanel(BasePanel):
 
         header_layout.addStretch()
 
-        self.lbl_status = QLabel("尚未載入編輯資料")
+        self.lbl_status = QLabel("尚未載入資料")
         self.lbl_status.setObjectName("previewStatus")
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         header_layout.addWidget(self.lbl_status)
@@ -259,7 +259,7 @@ class DataEditorPanel(BasePanel):
         self.table_model.set_is_header(self.chk_first_row_header.isChecked())
         self.resize_columns_fast()
 
-    def load_data(self, all_rows, start_row, end_row):
+    def load_data(self, all_rows, start_row, end_row, file_path=None):
         self.table_model.set_data(
             all_rows, 
             start_row, 
@@ -268,7 +268,14 @@ class DataEditorPanel(BasePanel):
         )
         
         end_row_val = end_row if end_row is not None else len(all_rows)
-        self.lbl_status.setText(f"{start_row} - {end_row_val} of {len(all_rows)}")
+        
+        prefix = ""
+        if file_path:
+            base_name = os.path.basename(file_path)
+            main_name, _ = os.path.splitext(base_name)
+            prefix = f"{main_name}: "
+            
+        self.lbl_status.setText(f"{prefix}{start_row} - {end_row_val} of {len(all_rows)}")
         self.set_modified(False)
         self.resize_columns_fast()
 
@@ -310,5 +317,5 @@ class DataEditorPanel(BasePanel):
 
     def clear(self):
         self.table_model.set_data([], 1, None, False)
-        self.lbl_status.setText("尚未載入編輯資料")
+        self.lbl_status.setText("尚未載入資料")
         self.set_modified(False)

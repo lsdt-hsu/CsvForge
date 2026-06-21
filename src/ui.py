@@ -13,7 +13,6 @@ from PyQt6.QtGui import QIntValidator, QIcon
 from translation.translation_panel import TranslationPanel
 from edit.edit_panel import EditPanel
 from settings_manager import SettingsManager
-from preview.preview_panel import PreviewPanel
 from data_editor.data_editor_panel import DataEditorPanel
 from ui_constants import (
     WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT,
@@ -352,34 +351,14 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerM
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
         self.right_splitter.setObjectName("rightSplitter")
 
-        # 內容堆疊器
-        self.content_stack = QStackedWidget()
-
-        self.preview_panel = PreviewPanel()
-        self.preview_panel.preview_loaded.connect(self.on_preview_loaded)
-
+        # 內容面板
         self.edit_content_panel = DataEditorPanel()
         self.edit_content_panel.request_save.connect(self.save_edit_data)
-
-        self.content_stack.addWidget(self.preview_panel)
-        self.content_stack.addWidget(self.edit_content_panel)
-
-        # 雙向同步「第一行為標題」核取方塊
-        self.preview_panel.chk_first_row_header.clicked.connect(
-            lambda: self.edit_content_panel.chk_first_row_header.setChecked(
-                self.preview_panel.chk_first_row_header.isChecked()
-            )
-        )
-        self.edit_content_panel.chk_first_row_header.clicked.connect(
-            lambda: self.preview_panel.chk_first_row_header.setChecked(
-                self.edit_content_panel.chk_first_row_header.isChecked()
-            )
-        )
 
         self.grp_status = self._build_status_group()
         self.grp_status.setMinimumHeight(140)
 
-        self.right_splitter.addWidget(self.content_stack)
+        self.right_splitter.addWidget(self.edit_content_panel)
         self.right_splitter.addWidget(self.grp_status)
         self.right_splitter.setStretchFactor(0, 1)
         self.right_splitter.setStretchFactor(1, 0)
