@@ -22,17 +22,16 @@ from ui_constants import (
     INPUT_START_ROW_MAX_WIDTH, INPUT_END_ROW_MAX_WIDTH, INPUT_COL_MAX_WIDTH,
     SWAP_ICON_SIZE,
 )
-from ui_mixins import UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerMixin
+from ui_mixins import UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin
 
 
-class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerMixin, QMainWindow):
+class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin, QMainWindow):
     """
     主視窗：負責 UI 佈局建構與初始化。
     各項業務邏輯透過 Mixin 繼承組合：
       UiStateMixin    — 日誌、控制項啟停、分頁切換、按鈕狀態
       FileOpsMixin    — 檔案操作與存檔
       SettingsMixin   — 設定持久化與 Splitter 管理
-      FilterMixin     — 過濾協調
       WorkerMixin     — Worker 生命週期管理
     """
 
@@ -137,13 +136,14 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerM
         self.translation_panel.progress_updated.connect(self.on_panel_progress)
         self.translation_panel.status_updated.connect(self.on_panel_status)
         self.translation_panel.log_emitted.connect(self.on_panel_log)
+        self.translation_panel.request_start_worker.connect(self.on_request_start_worker)
 
         self.edit_panel = EditPanel(context=self.context)
-        self.edit_panel.request_filter.connect(self.start_filtering)
         self.edit_panel.request_lock_ui.connect(self.lock_ui_from_panel)
         self.edit_panel.progress_updated.connect(self.on_panel_progress)
         self.edit_panel.status_updated.connect(self.on_panel_status)
         self.edit_panel.log_emitted.connect(self.on_panel_log)
+        self.edit_panel.request_start_worker.connect(self.on_request_start_worker)
 
         self.sidebar_stacked.addWidget(self.translation_panel)
         self.sidebar_stacked.addWidget(self.edit_panel)
@@ -364,9 +364,10 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerM
         self.right_splitter.setObjectName("rightSplitter")
 
         # 內容面板
-        self.edit_content_panel = DataEditorPanel()
+        self.edit_content_panel = DataEditorPanel(context=self.context)
         self.edit_content_panel.request_save.connect(self.save_edit_data)
         self.edit_content_panel.header_state_changed.connect(self.on_header_state_changed)
+        self.edit_content_panel.request_start_worker.connect(self.on_request_start_worker)
 
         self.grp_status = self._build_status_group()
         self.grp_status.setMinimumHeight(140)

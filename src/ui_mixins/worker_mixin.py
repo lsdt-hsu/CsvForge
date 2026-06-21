@@ -22,27 +22,7 @@ if TYPE_CHECKING:
 
 class WorkerMixin:
 
-    def start_load_task(self: "MainWindow") -> None:
-        # 讀取通用設定值
-        src_path = self.context.source_path
-        out_path = self.context.output_path
-        start_row = self.context.start_row
-        end_row = self.context.end_row
-
-        from data_editor.edit_worker import CSVEditWorker
-        worker_instance = CSVEditWorker(
-            source_path=src_path,
-            output_path=out_path,
-            start_row=start_row,
-            end_row=end_row
-        )
-
-        # 多態輸入驗證
-        is_valid, err_msg = worker_instance.validate_inputs()
-        if not is_valid:
-            QMessageBox.warning(self, "輸入錯誤", err_msg)
-            return
-
+    def on_request_start_worker(self: "MainWindow", worker_instance) -> None:
         self.worker = worker_instance
 
         # 重置 UI 顯示狀態
@@ -51,91 +31,59 @@ class WorkerMixin:
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0/0")
         self.elapsed_time_str = "00:00:00"
-        self.task_status_str = "載入中..."
-        self.update_status_summary()
 
-        self.start_time = time.time()
-        self.timer.start(1000)
-
-        active_panel = self.get_active_panel()
-        self.worker.progress_updated.connect(active_panel.update_progress)
-        self.worker.log_emitted.connect(active_panel.write_log)
-        self.worker.finished_successfully.connect(self.on_worker_success)
-        self.worker.finished_with_error.connect(self.on_worker_error)
-
-        self.worker.start()
-
-        active_panel.lock_ui(True)
-
-    def start_translation_task(self: "MainWindow") -> None:
-        # 檢查點：來源與輸出不為空且相同
-        src_path = self.context.source_path
-        out_path = self.context.output_path
-        if src_path and out_path and src_path == out_path:
-            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
-            return
-
-        start_row = self.context.start_row
-        end_row = self.context.end_row
-
+        # 根據 Worker 型別設定狀態文字
         from translation.translation_worker import CSVTranslatorWorker
-        src_col = self.context.source_col
-        tgt_col = self.context.target_col
-        src_lang = self.translation_panel.get_src_lang()
-        tgt_lang = self.translation_panel.get_tgt_lang()
-        batch_interval = self.translation_panel.get_batch_interval()
-        single_interval = self.translation_panel.get_single_interval()
-        batch_size = self.translation_panel.get_batch_size()
+        from data_editor.edit_worker import CSVEditWorker
+        from edit.filter_worker import FilterWorker
 
-        worker_instance = CSVTranslatorWorker(
-            source_path=src_path,
-            output_path=out_path,
-            start_row=start_row,
-            end_row=end_row,
-            source_col=src_col,
-            target_col=tgt_col,
-            source_lang=src_lang,
-            target_lang=tgt_lang,
-            batch_interval=batch_interval,
-            single_interval=single_interval,
-            batch_size=batch_size
-        )
+        if isinstance(worker_instance, CSVEditWorker):
+            self.task_status_str = "載入中..."
+        elif isinstance(worker_instance, CSVTranslatorWorker):
+            self.task_status_str = "翻譯中..."
+        elif isinstance(worker_instance, FilterWorker):
+            self.task_status_str = "過濾中..."
+            self.edit_panel.update_status("過濾中...")
+            self.edit_panel.write_log("INFO", "開始執行 CSV 資料過濾...")
+            
+            rows_count = len(self.context.all_rows)
+            self.progress_bar.setRange(0, rows_count)
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat(f"0/{rows_count}")
+        else:
+            self.task_status_str = "執行中..."
 
-        # 多態輸入驗證
-        is_valid, err_msg = worker_instance.validate_inputs()
-        if not is_valid:
-            QMessageBox.warning(self, "輸入錯誤", err_msg)
-            return
-
-        self.worker = worker_instance
-
-        # 重置 UI 顯示狀態
-        self.txt_log.clear()
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("0/0")
-        self.elapsed_time_str = "00:00:00"
-        self.task_status_str = "翻譯中..."
         self.update_status_summary()
 
         self.start_time = time.time()
         self.timer.start(1000)
 
         active_panel = self.get_active_panel()
-        self.worker.progress_updated.connect(active_panel.update_progress)
-        self.worker.log_emitted.connect(active_panel.write_log)
-        if hasattr(self.worker, "status_updated"):
-            self.worker.status_updated.connect(active_panel.update_status)
-        self.worker.finished_successfully.connect(self.on_worker_success)
-        self.worker.finished_with_error.connect(self.on_worker_error)
 
-        self.worker.start()
+        # 連接共同訊號
+        if hasattr(worker_instance, "progress_updated"):
+            worker_instance.progress_updated.connect(active_panel.update_progress)
+        if hasattr(worker_instance, "log_emitted"):
+            worker_instance.log_emitted.connect(active_panel.write_log)
+        if hasattr(worker_instance, "status_updated"):
+            worker_instance.status_updated.connect(active_panel.update_status)
+
+        # 針對不同 Worker 綁定完成/錯誤回呼
+        if isinstance(worker_instance, FilterWorker):
+            worker_instance.filter_completed.connect(self.on_filter_completed)
+            worker_instance.filter_error.connect(self.on_filter_error)
+        else:
+            worker_instance.finished_successfully.connect(self.on_worker_success)
+            worker_instance.finished_with_error.connect(self.on_worker_error)
+
+        worker_instance.start()
 
         # 防止系統休眠（僅翻譯任務）
-        from utils import prevent_sleep
-        self._worker_sleep_prevented = prevent_sleep(True)
-        if self._worker_sleep_prevented:
-            self.append_log("INFO", "已成功通知系統在翻譯期間不要進入休眠狀態。")
+        if isinstance(worker_instance, CSVTranslatorWorker):
+            from utils import prevent_sleep
+            self._worker_sleep_prevented = prevent_sleep(True)
+            if self._worker_sleep_prevented:
+                self.append_log("INFO", "已成功通知系統在翻譯期間不要進入休眠狀態。")
 
         active_panel.lock_ui(True)
 
@@ -236,3 +184,17 @@ class WorkerMixin:
             self.update_status_summary()
             self.worker.cancel()
             self.update_start_button_ui()
+
+    def on_filter_completed(self: "MainWindow", matched_indices, elapsed_time: float) -> None:
+        self.timer.stop()
+        self.edit_content_panel.apply_filter(matched_indices)
+        self.edit_panel.lock_ui(False)
+        self.edit_panel.update_status("完成")
+        self.edit_panel.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
+
+    def on_filter_error(self: "MainWindow", err_msg: str) -> None:
+        self.timer.stop()
+        self.edit_panel.lock_ui(False)
+        self.edit_panel.update_status("錯誤")
+        self.edit_panel.write_log("ERROR", f"過濾錯誤：{err_msg}")
+        QMessageBox.critical(self, "過濾錯誤", err_msg)

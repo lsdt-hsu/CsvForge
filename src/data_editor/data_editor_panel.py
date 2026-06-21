@@ -159,8 +159,8 @@ class DataEditorPanel(BasePanel):
     request_save = pyqtSignal()
     header_state_changed = pyqtSignal(bool)
 
-    def __init__(self, parent=None):
-        super().__init__(parent, require_data_loading=False)
+    def __init__(self, parent=None, context=None):
+        super().__init__(parent, require_data_loading=False, context=context)
         self.setObjectName("rightFrame")
         self.setMinimumHeight(200)
         self.is_modified = False
@@ -337,3 +337,28 @@ class DataEditorPanel(BasePanel):
                     QAbstractItemView.EditTrigger.EditKeyPressed | 
                     QAbstractItemView.EditTrigger.AnyKeyPressed
                 )
+
+    def start_load_task(self):
+        from PyQt6.QtWidgets import QMessageBox
+        from data_editor.edit_worker import CSVEditWorker
+
+        # 讀取通用設定值
+        src_path = self.context.source_path
+        out_path = self.context.output_path
+        start_row = self.context.start_row
+        end_row = self.context.end_row
+
+        worker_instance = CSVEditWorker(
+            source_path=src_path,
+            output_path=out_path,
+            start_row=start_row,
+            end_row=end_row
+        )
+
+        # 多態輸入驗證
+        is_valid, err_msg = worker_instance.validate_inputs()
+        if not is_valid:
+            QMessageBox.warning(self, "輸入錯誤", err_msg)
+            return
+
+        self.request_start_worker.emit(worker_instance)

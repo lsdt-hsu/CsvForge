@@ -201,12 +201,12 @@ class UiStateMixin:
             if state == "critical":
                 self.cancel_task()
             else:
-                self.start_translation_task()
+                self.translation_panel.start_translation_task()
         else:
             if state == "critical":
                 self.cancel_task()
             else:
-                self.start_load_task()
+                self.edit_content_panel.start_load_task()
 
     def lock_ui_from_panel(self: "MainWindow", lock: bool) -> None:
         self.set_ui_enabled(not lock)

@@ -149,3 +149,46 @@ class TranslationPanel(BasePanel):
             self.set_src_lang(config["src_lang"])
         if "tgt_lang" in config:
             self.set_tgt_lang(config["tgt_lang"])
+
+    def start_translation_task(self):
+        from PyQt6.QtWidgets import QMessageBox
+        from translation.translation_worker import CSVTranslatorWorker
+
+        # 檢查點：來源與輸出不為空且相同
+        src_path = self.context.source_path
+        out_path = self.context.output_path
+        if src_path and out_path and src_path == out_path:
+            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
+            return
+
+        start_row = self.context.start_row
+        end_row = self.context.end_row
+        src_col = self.context.source_col
+        tgt_col = self.context.target_col
+        src_lang = self.get_src_lang()
+        tgt_lang = self.get_tgt_lang()
+        batch_interval = self.get_batch_interval()
+        single_interval = self.get_single_interval()
+        batch_size = self.get_batch_size()
+
+        worker_instance = CSVTranslatorWorker(
+            source_path=src_path,
+            output_path=out_path,
+            start_row=start_row,
+            end_row=end_row,
+            source_col=src_col,
+            target_col=tgt_col,
+            source_lang=src_lang,
+            target_lang=tgt_lang,
+            batch_interval=batch_interval,
+            single_interval=single_interval,
+            batch_size=batch_size
+        )
+
+        # 多態輸入驗證
+        is_valid, err_msg = worker_instance.validate_inputs()
+        if not is_valid:
+            QMessageBox.warning(self, "輸入錯誤", err_msg)
+            return
+
+        self.request_start_worker.emit(worker_instance)

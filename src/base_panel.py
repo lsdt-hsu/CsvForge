@@ -54,12 +54,19 @@ class AppContext:
             return len(self._win.edit_content_panel.get_all_rows()) > 0
         return False
 
+    @property
+    def all_rows(self) -> list:
+        if hasattr(self._win, "edit_content_panel"):
+            return self._win.edit_content_panel.get_all_rows()
+        return []
+
 
 class BasePanel(QFrame):
     request_lock_ui = pyqtSignal(bool)
     progress_updated = pyqtSignal(int, int)
     status_updated = pyqtSignal(str)
     log_emitted = pyqtSignal(str, str)
+    request_start_worker = pyqtSignal(object)
 
     def __init__(self, parent=None, title_text="", require_data_loading=True, context: AppContext = None):
         super().__init__(parent)

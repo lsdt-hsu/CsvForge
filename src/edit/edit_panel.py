@@ -577,12 +577,56 @@ class EditPanel(BasePanel):
                             QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：欄位比對不可選擇相同的欄位。")
                             return
 
-        # 3. 組裝發射過濾參數
+        # 3. 組裝過濾參數並建立 FilterWorker
         filter_config = {
             "rules": [r.get_config() for r in self.rules],
             "logic_tree": logic_tree.serialize_tree(self.logic_tree)
         }
-        self.request_filter.emit(filter_config)
+
+        rows = self.context.all_rows
+        if not rows:
+            QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
+            return
+
+        start_row = 1
+        try:
+            start_row = int(self.context.start_row)
+        except ValueError:
+            pass
+
+        end_row = None
+        if self.context.end_row:
+            try:
+                end_row = int(self.context.end_row)
+            except ValueError:
+                pass
+
+        src_col = 1
+        try:
+            src_col = int(self.context.source_col)
+        except ValueError:
+            pass
+
+        tgt_col = 1
+        try:
+            tgt_col = int(self.context.target_col)
+        except ValueError:
+            pass
+
+        is_header = self.context.is_first_row_header
+
+        from edit.filter_worker import FilterWorker
+        worker_instance = FilterWorker(
+            all_rows=rows,
+            start_row=start_row,
+            end_row=end_row,
+            is_header=is_header,
+            src_col=src_col,
+            tgt_col=tgt_col,
+            filter_config=filter_config,
+            parent=self.window()
+        )
+        self.request_start_worker.emit(worker_instance)
 
     def set_enabled(self, enabled):
         self.btn_add_rule.setEnabled(enabled)
