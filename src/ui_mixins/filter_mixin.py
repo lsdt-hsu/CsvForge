@@ -10,10 +10,11 @@ FilterMixin — 過濾協調
 """
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QMessageBox, QProgressDialog
+from PyQt6.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
     from ui import MainWindow
@@ -56,12 +57,18 @@ class FilterMixin:
 
         from edit.filter_worker import FilterWorker
 
-        self._filter_progress = QProgressDialog("正在執行過濾...", "取消", 0, len(rows), self)
-        self._filter_progress.setWindowTitle("請稍候")
-        self._filter_progress.setWindowModality(Qt.WindowModality.WindowModal)
-        self._filter_progress.setAutoClose(False)
-        self._filter_progress.setAutoReset(False)
-        self._filter_progress.show()
+        self.edit_panel.lock_ui(True)
+        self.edit_panel.update_status("過濾中...")
+        self.edit_panel.write_log("INFO", "開始執行 CSV 資料過濾...")
+
+        self.progress_bar.setRange(0, len(rows))
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat(f"0/{len(rows)}")
+        self.elapsed_time_str = "00:00:00"
+        self.update_status_summary()
+
+        self.start_time = time.time()
+        self.timer.start(1000)
 
         self._filter_worker = FilterWorker(
             all_rows=rows,
@@ -73,27 +80,21 @@ class FilterMixin:
             filter_config=filter_config,
             parent=self
         )
-        self._filter_progress.canceled.connect(self._filter_worker.cancel)
-        self._filter_worker.progress_updated.connect(self._filter_progress.setValue)
+        self._filter_worker.progress_updated.connect(self.edit_panel.update_progress)
         self._filter_worker.filter_completed.connect(self.on_filter_completed)
         self._filter_worker.filter_error.connect(self.on_filter_error)
         self._filter_worker.start()
 
     def on_filter_completed(self: "MainWindow", matched_indices, elapsed_time: float) -> None:
+        self.timer.stop()
         self.edit_content_panel.apply_filter(matched_indices)
-
-        def close_dialog() -> None:
-            if getattr(self, "_filter_progress", None):
-                self._filter_progress.close()
-                self._filter_progress = None
-
-        if elapsed_time < 0.7:
-            QTimer.singleShot(int((0.7 - elapsed_time) * 1000), close_dialog)
-        else:
-            close_dialog()
+        self.edit_panel.lock_ui(False)
+        self.edit_panel.update_status("完成")
+        self.edit_panel.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
 
     def on_filter_error(self: "MainWindow", err_msg: str) -> None:
-        if getattr(self, "_filter_progress", None):
-            self._filter_progress.close()
-            self._filter_progress = None
+        self.timer.stop()
+        self.edit_panel.lock_ui(False)
+        self.edit_panel.update_status("錯誤")
+        self.edit_panel.write_log("ERROR", f"過濾錯誤：{err_msg}")
         QMessageBox.critical(self, "過濾錯誤", err_msg)

@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 
 class UiStateMixin:
 
+    @property
+    def is_ui_locked(self: "MainWindow") -> bool:
+        return getattr(self, "_ui_locked", False)
+
     def append_log(self: "MainWindow", level: str, message: str) -> None:
         color_map = {
             "INFO": "#c0caf5",
@@ -48,18 +52,47 @@ class UiStateMixin:
             end_cursor.removeSelectedText()
 
     def set_ui_enabled(self: "MainWindow", enabled: bool) -> None:
+        self._ui_locked = not enabled
+
+        # 來源與輸出 CSV 編輯與瀏覽
         self.txt_src_path.setEnabled(enabled)
         self.txt_out_path.setEnabled(enabled)
+        if hasattr(self, "btn_src_browse"):
+            self.btn_src_browse.setEnabled(enabled)
+        if hasattr(self, "btn_out_browse"):
+            self.btn_out_browse.setEnabled(enabled)
+        if hasattr(self, "btn_swap"):
+            self.btn_swap.setEnabled(enabled)
+
+        # 編輯參數
         self.txt_start_row.setEnabled(enabled)
         self.txt_end_row.setEnabled(enabled)
         self.txt_src_col.setEnabled(enabled)
         self.txt_tgt_col.setEnabled(enabled)
+
+        # 功能面板
         self.translation_panel.set_enabled(enabled)
         self.edit_panel.set_enabled(enabled)
+
+        # 第一行為標題與存檔按鈕 (在 DataEditorPanel 內)
+        if hasattr(self, "edit_content_panel"):
+            self.edit_content_panel.chk_first_row_header.setEnabled(enabled)
+            self.edit_content_panel.btn_save.setEnabled(enabled and self.edit_content_panel.is_modified)
+            # 禁止/允許編輯 TableView
+            self.edit_content_panel.set_table_editable(enabled)
+
+        # 切換功能面板按鈕
+        if hasattr(self, "btn_translate"):
+            self.btn_translate.setEnabled(enabled)
+        if hasattr(self, "btn_edit"):
+            self.btn_edit.setEnabled(enabled)
 
         self.update_start_button_ui()
 
     def switch_sidebar_tab(self: "MainWindow", tab_name: str) -> None:
+        if self.is_ui_locked:
+            return
+
         is_task_running = self.worker is not None and self.worker.isRunning()
 
         # 判斷點選的是否為當前活躍的分頁
@@ -174,3 +207,16 @@ class UiStateMixin:
                 self.cancel_task()
             else:
                 self.start_load_task()
+
+    def lock_ui_from_panel(self: "MainWindow", lock: bool) -> None:
+        self.set_ui_enabled(not lock)
+
+    def on_panel_progress(self: "MainWindow", current: int, total: int) -> None:
+        self.on_worker_progress(current, total)
+
+    def on_panel_status(self: "MainWindow", status: str) -> None:
+        self.task_status_str = status
+        self.update_status_summary()
+
+    def on_panel_log(self: "MainWindow", level: str, message: str) -> None:
+        self.append_log(level, message)

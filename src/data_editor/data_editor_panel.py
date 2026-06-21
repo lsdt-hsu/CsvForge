@@ -1,7 +1,8 @@
 import os
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QLabel, QCheckBox, QTableView,
-    QStyledItemDelegate, QStyle, QStyleOptionViewItem, QPushButton
+    QStyledItemDelegate, QStyle, QStyleOptionViewItem, QPushButton,
+    QAbstractItemView
 )
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSize, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QIcon
@@ -322,3 +323,17 @@ class DataEditorPanel(BasePanel):
         self.table_model.set_data([], 1, None, False)
         self.lbl_status.setText("尚未載入資料")
         self.set_modified(False)
+
+    def set_table_editable(self, editable: bool):
+        if not editable:
+            self._orig_edit_triggers = self.table_view.editTriggers()
+            self.table_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        else:
+            if hasattr(self, "_orig_edit_triggers"):
+                self.table_view.setEditTriggers(self._orig_edit_triggers)
+            else:
+                self.table_view.setEditTriggers(
+                    QAbstractItemView.EditTrigger.DoubleClicked | 
+                    QAbstractItemView.EditTrigger.EditKeyPressed | 
+                    QAbstractItemView.EditTrigger.AnyKeyPressed
+                )

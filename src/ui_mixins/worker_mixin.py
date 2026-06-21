@@ -57,14 +57,15 @@ class WorkerMixin:
         self.start_time = time.time()
         self.timer.start(1000)
 
-        self.worker.progress_updated.connect(self.on_worker_progress)
-        self.worker.log_emitted.connect(self.append_log)
+        active_panel = self.get_active_panel()
+        self.worker.progress_updated.connect(active_panel.update_progress)
+        self.worker.log_emitted.connect(active_panel.write_log)
         self.worker.finished_successfully.connect(self.on_worker_success)
         self.worker.finished_with_error.connect(self.on_worker_error)
 
         self.worker.start()
 
-        self.set_ui_enabled(False)
+        active_panel.lock_ui(True)
 
     def start_translation_task(self: "MainWindow") -> None:
         # 檢查點：來源與輸出不為空且相同
@@ -120,8 +121,11 @@ class WorkerMixin:
         self.start_time = time.time()
         self.timer.start(1000)
 
-        self.worker.progress_updated.connect(self.on_worker_progress)
-        self.worker.log_emitted.connect(self.append_log)
+        active_panel = self.get_active_panel()
+        self.worker.progress_updated.connect(active_panel.update_progress)
+        self.worker.log_emitted.connect(active_panel.write_log)
+        if hasattr(self.worker, "status_updated"):
+            self.worker.status_updated.connect(active_panel.update_status)
         self.worker.finished_successfully.connect(self.on_worker_success)
         self.worker.finished_with_error.connect(self.on_worker_error)
 
@@ -133,7 +137,7 @@ class WorkerMixin:
         if self._worker_sleep_prevented:
             self.append_log("INFO", "已成功通知系統在翻譯期間不要進入休眠狀態。")
 
-        self.set_ui_enabled(False)
+        active_panel.lock_ui(True)
 
     def update_status_summary(self: "MainWindow") -> None:
         self.lbl_status_summary.setText(
@@ -155,7 +159,7 @@ class WorkerMixin:
 
     def on_worker_success(self: "MainWindow", out_path: str) -> None:
         self.timer.stop()
-        self.set_ui_enabled(True)
+        self.get_active_panel().lock_ui(False)
 
         # 恢復系統休眠
         if getattr(self, "_worker_sleep_prevented", False):
@@ -214,7 +218,7 @@ class WorkerMixin:
         self.timer.stop()
         self.task_status_str = "錯誤"
         self.update_status_summary()
-        self.set_ui_enabled(True)
+        self.get_active_panel().lock_ui(False)
 
         # 恢復系統休眠
         if getattr(self, "_worker_sleep_prevented", False):

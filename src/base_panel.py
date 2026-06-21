@@ -1,7 +1,12 @@
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 
 class BasePanel(QFrame):
+    request_lock_ui = pyqtSignal(bool)
+    progress_updated = pyqtSignal(int, int)
+    status_updated = pyqtSignal(str)
+    log_emitted = pyqtSignal(str, str)
+
     def __init__(self, parent=None, title_text="", require_data_loading=True):
         super().__init__(parent)
         self.setObjectName("grpFrame")
@@ -60,3 +65,15 @@ class BasePanel(QFrame):
 
     def set_config(self, config: dict):
         pass
+
+    def lock_ui(self, lock: bool):
+        self.request_lock_ui.emit(lock)
+
+    def update_progress(self, current: int, total: int):
+        self.progress_updated.emit(current, total)
+
+    def update_status(self, status: str):
+        self.status_updated.emit(status)
+
+    def write_log(self, level: str, message: str):
+        self.log_emitted.emit(level, message)
