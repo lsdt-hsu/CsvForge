@@ -136,7 +136,25 @@ class CSVTableModel(QAbstractTableModel):
                 
         return None
 
-class EditContentPanel(BasePanel):
+class DataEditorPanel(BasePanel):
+    """
+    資料編輯面板：顯示並允許使用者直接在 Table 中編輯 CSV 資料。
+
+    公開介面（供主視窗與其他元件使用）：
+      - load_data(all_rows, start_row, end_row)
+      - clear()
+      - get_all_rows() -> list
+      - has_data() -> bool
+      - apply_filter(indices: list | None)
+      - get_delimiter() -> str
+      - set_delimiter(delimiter: str)
+      - is_first_row_header() -> bool
+      - set_first_row_header(checked: bool)
+      - set_modified(modified: bool)
+
+    Signals：
+      - request_save：使用者點擊存檔按鈕時發射
+    """
     request_save = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -144,7 +162,7 @@ class EditContentPanel(BasePanel):
         self.setObjectName("rightFrame")
         self.setMinimumHeight(200)
         self.is_modified = False
-        self.delimiter = ","
+        self._delimiter = ","
         self.init_ui()
 
     def init_ui(self):
@@ -205,6 +223,33 @@ class EditContentPanel(BasePanel):
         self.table_model.dataChanged.connect(lambda: self.set_modified(True))
         
         layout.addWidget(self.table_view)
+
+    # ── 公開介面方法 ──────────────────────────────────────────────────────────
+
+    def get_all_rows(self) -> list:
+        """取得目前在記憶體中的全部 CSV 二維陣列（未經過濾的原始資料）。"""
+        return self.table_model.all_rows
+
+    def has_data(self) -> bool:
+        """判斷面板是否已載入 CSV 資料。"""
+        return bool(self.table_model.all_rows)
+
+    def apply_filter(self, indices):
+        """
+        套用過濾結果至資料表。
+        :param indices: 符合過濾條件的 0-based 行索引列表；傳入 None 表示清除過濾。
+        """
+        self.table_model.set_filtered_indices(indices)
+
+    def get_delimiter(self) -> str:
+        """取得當前使用的 CSV 分隔符。"""
+        return self._delimiter
+
+    def set_delimiter(self, delimiter: str):
+        """設定 CSV 分隔符（通常在資料載入後由主視窗呼叫）。"""
+        self._delimiter = delimiter
+
+    # ── 內部控制方法 ──────────────────────────────────────────────────────────
 
     def set_modified(self, modified):
         self.is_modified = modified

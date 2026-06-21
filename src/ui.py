@@ -15,10 +15,10 @@ from PyQt6.QtGui import QIntValidator, QFont, QIcon
 from translation.translation_worker import CSVTranslatorWorker
 from translation.translation_panel import TranslationPanel
 from edit.edit_panel import EditPanel
-from edit.edit_worker import CSVEditWorker
+from data_editor.edit_worker import CSVEditWorker
 from settings_manager import SettingsManager
 from preview.preview_panel import PreviewPanel
-from edit.edit_content_panel import EditContentPanel
+from data_editor.data_editor_panel import DataEditorPanel
 
 # UI 佈局常數
 WINDOW_DEFAULT_WIDTH = 1100
@@ -353,7 +353,7 @@ class MainWindow(QMainWindow):
         self.preview_panel = PreviewPanel()
         self.preview_panel.preview_loaded.connect(self.on_preview_loaded)
 
-        self.edit_content_panel = EditContentPanel()
+        self.edit_content_panel = DataEditorPanel()
         self.edit_content_panel.request_save.connect(self.save_edit_data)
 
         self.content_stack.addWidget(self.preview_panel)
@@ -916,7 +916,7 @@ class MainWindow(QMainWindow):
                         pass
                 
                 self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row)
-                self.edit_content_panel.delimiter = getattr(self.worker, "delimiter", ",")
+                self.edit_content_panel.set_delimiter(getattr(self.worker, "delimiter", ","))
                 self.content_stack.setCurrentWidget(self.edit_content_panel)
                 
                 # 更新欄位下拉選單
@@ -958,12 +958,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法存檔！請變更輸出路徑。")
             return
 
-        all_rows = self.edit_content_panel.table_model.all_rows
+        all_rows = self.edit_content_panel.get_all_rows()
         if not all_rows:
             QMessageBox.warning(self, "錯誤", "沒有資料可儲存。")
             return
 
-        delimiter = getattr(self.edit_content_panel, "delimiter", ",")
+        delimiter = self.edit_content_panel.get_delimiter()
 
         try:
             out_dir = os.path.dirname(out_path)
@@ -982,7 +982,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "存檔失敗", f"存檔失敗：\n{str(e)}")
 
     def start_filtering(self, filter_config):
-        rows = self.edit_content_panel.table_model.all_rows
+        rows = self.edit_content_panel.get_all_rows()
         if not rows:
             QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
             return
@@ -1039,7 +1039,7 @@ class MainWindow(QMainWindow):
         self.filter_worker.start()
 
     def on_filter_completed(self, matched_indices, elapsed_time):
-        self.edit_content_panel.table_model.set_filtered_indices(matched_indices)
+        self.edit_content_panel.apply_filter(matched_indices)
         
         def close_dialog():
             if hasattr(self, "filter_progress") and self.filter_progress:
@@ -1107,7 +1107,7 @@ class MainWindow(QMainWindow):
                 self.sidebar_stacked.setCurrentWidget(self.edit_panel)
                 self.btn_translate.setProperty("active", False)
                 self.btn_edit.setProperty("active", True)
-                if self.edit_content_panel.table_model.all_rows:
+                if self.edit_content_panel.has_data():
                     self.content_stack.setCurrentWidget(self.edit_content_panel)
                 else:
                     self.content_stack.setCurrentWidget(self.preview_panel)
