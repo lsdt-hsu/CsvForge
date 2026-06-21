@@ -1,73 +1,70 @@
 import os
 import sys
-import time
-import csv
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QLabel, QLineEdit, QPushButton, QComboBox,
-    QTableWidget, QTableWidgetItem, QProgressBar, QTextEdit,
-    QFileDialog, QMessageBox, QFrame, QHeaderView, QStackedWidget,
+    QLabel, QLineEdit, QPushButton, QComboBox,
+    QProgressBar, QTextEdit,
+    QFileDialog, QMessageBox, QFrame, QStackedWidget,
     QSplitter
 )
-from PyQt6.QtCore import Qt, QTimer, QSettings, QSize
-from PyQt6.QtGui import QIntValidator, QFont, QIcon
+from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtGui import QIntValidator, QIcon
 
-from translation.translation_worker import CSVTranslatorWorker
 from translation.translation_panel import TranslationPanel
 from edit.edit_panel import EditPanel
-from data_editor.edit_worker import CSVEditWorker
 from settings_manager import SettingsManager
 from preview.preview_panel import PreviewPanel
 from data_editor.data_editor_panel import DataEditorPanel
-
-# UI 佈局常數
-WINDOW_DEFAULT_WIDTH = 1100
-WINDOW_DEFAULT_HEIGHT = 750
-WINDOW_MIN_WIDTH = 950
-WINDOW_MIN_HEIGHT = 600
-
-SIDEBAR_FULL_WIDTH = 341
-SIDEBAR_MIN_WIDTH = 60
-SIDEBAR_WIDTH = 280
-ACTIVITY_BAR_WIDTH = 60
-
-#
-
-PROGRESS_BAR_WIDTH = 150
-START_BUTTON_MIN_WIDTH = 150
-
-INPUT_START_ROW_MAX_WIDTH = 80
-INPUT_END_ROW_MAX_WIDTH = 100
-INPUT_COL_MAX_WIDTH = 60
-
-SWAP_BUTTON_SIZE = 32
-SWAP_ICON_SIZE = 20
+from ui_constants import (
+    WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT,
+    WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT,
+    SIDEBAR_FULL_WIDTH, SIDEBAR_WIDTH, ACTIVITY_BAR_WIDTH,
+    PROGRESS_BAR_WIDTH, START_BUTTON_MIN_WIDTH,
+    INPUT_START_ROW_MAX_WIDTH, INPUT_END_ROW_MAX_WIDTH, INPUT_COL_MAX_WIDTH,
+    SWAP_ICON_SIZE,
+)
+from ui_mixins import UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerMixin
 
 
+class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerMixin, QMainWindow):
+    """
+    主視窗：負責 UI 佈局建構與初始化。
+    各項業務邏輯透過 Mixin 繼承組合：
+      UiStateMixin    — 日誌、控制項啟停、分頁切換、按鈕狀態
+      FileOpsMixin    — 檔案操作與存檔
+      SettingsMixin   — 設定持久化與 Splitter 管理
+      FilterMixin     — 過濾協調
+      WorkerMixin     — Worker 生命週期管理
+    """
 
-# 恢復視窗幾何狀態
-class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.worker = None
         self.start_time = 0
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_elapsed_time)
-        self.settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json")
+        self.settings_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json"
+        )
         self.settings_manager = SettingsManager(self.settings_path)
-        
+
         self.status_expanded = True
         self.status_expanded_height = 250
         self.settings_restored = False
-        
+
+        # WorkerMixin 私有狀態
+        self._worker_sleep_prevented = False
+
         self.init_ui()
         self.restore_settings()
+
+    # ── 左側面板建構 ──────────────────────────────────────────────────────────
 
     def _build_left_panel(self):
         self.left_container = QFrame()
         self.left_container.setObjectName("leftContainer")
         self.left_container.setFixedWidth(SIDEBAR_FULL_WIDTH)
-        
+
         left_layout = QHBoxLayout(self.left_container)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
@@ -76,14 +73,16 @@ class MainWindow(QMainWindow):
         self.activity_bar = QWidget()
         self.activity_bar.setObjectName("activityBarWidget")
         self.activity_bar.setFixedWidth(ACTIVITY_BAR_WIDTH)
-        
+
         activity_layout = QVBoxLayout(self.activity_bar)
         activity_layout.setContentsMargins(10, 15, 10, 15)
         activity_layout.setSpacing(10)
         activity_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        
+
         # 翻譯按鈕
-        translate_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "translate.png")
+        translate_icon_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "translate.png"
+        )
         self.btn_translate = QPushButton()
         self.btn_translate.setObjectName("btnActivityTranslate")
         self.btn_translate.setFixedSize(40, 40)
@@ -95,7 +94,9 @@ class MainWindow(QMainWindow):
         activity_layout.addWidget(self.btn_translate)
 
         # 編輯按鈕
-        edit_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "edit.png")
+        edit_icon_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "edit.png"
+        )
         self.btn_edit = QPushButton()
         self.btn_edit.setObjectName("btnActivityEdit")
         self.btn_edit.setFixedSize(40, 40)
@@ -105,9 +106,9 @@ class MainWindow(QMainWindow):
         self.btn_edit.clicked.connect(lambda: self.switch_sidebar_tab("edit"))
         self.btn_edit.setProperty("active", False)
         activity_layout.addWidget(self.btn_edit)
-        
+
         activity_layout.addStretch()
-        
+
         left_layout.addWidget(self.activity_bar)
 
         # 2. 垂直分割線 (QWidget)
@@ -120,25 +121,26 @@ class MainWindow(QMainWindow):
         self.sidebar = QWidget()
         self.sidebar.setObjectName("leftSidebarWidget")
         self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
-        
+
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(15, 15, 15, 15)
         sidebar_layout.setSpacing(15)
 
         # 堆疊式容器 (QStackedWidget)
         self.sidebar_stacked = QStackedWidget()
-        
+
         self.translation_panel = TranslationPanel()
         self.edit_panel = EditPanel()
         self.edit_panel.request_filter.connect(self.start_filtering)
-        
+
         self.sidebar_stacked.addWidget(self.translation_panel)
         self.sidebar_stacked.addWidget(self.edit_panel)
-        
+
         sidebar_layout.addWidget(self.sidebar_stacked, stretch=1)
 
-
         left_layout.addWidget(self.sidebar)
+
+    # ── 右側上半部：輸入與輸出面板 ───────────────────────────────────────────
 
     def _build_files_group(self):
         grp_files = QFrame()
@@ -147,30 +149,29 @@ class MainWindow(QMainWindow):
         grp_files_layout.setContentsMargins(15, 12, 15, 12)
         grp_files_layout.setSpacing(10)
 
-        # 標題與段落標頭列
+        # 標題與展開/收合列
         title_row_widget = QWidget()
         title_row_widget.setObjectName("titleRowWidget")
         title_layout = QHBoxLayout(title_row_widget)
         title_layout.setContentsMargins(0, 0, 0, 0)
         title_layout.setSpacing(10)
-        
-        # 展開/收合按鈕
+
         self.btn_toggle_files = QPushButton("▲")
         self.btn_toggle_files.setObjectName("btnToggleFiles")
         self.btn_toggle_files.setFixedSize(20, 20)
         self.btn_toggle_files.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_toggle_files.clicked.connect(self.toggle_files_panel)
         title_layout.addWidget(self.btn_toggle_files, alignment=Qt.AlignmentFlag.AlignVCenter)
-        
+
         lbl_files_sec = QLabel("輸入與輸出")
         lbl_files_sec.setObjectName("sectionHeader")
         title_layout.addWidget(lbl_files_sec, alignment=Qt.AlignmentFlag.AlignVCenter)
-        
+
         title_layout.addStretch()
-        
+
         grp_files_layout.addWidget(title_row_widget)
 
-        # 建立內容容器
+        # 內容容器
         self.files_content_widget = QWidget()
         self.files_content_widget.setObjectName("filesContentWidget")
         files_content_layout = QVBoxLayout(self.files_content_widget)
@@ -199,7 +200,9 @@ class MainWindow(QMainWindow):
         self.btn_swap = QPushButton()
         self.btn_swap.setObjectName("btnSwap")
         self.btn_swap.setFixedSize(30, 30)
-        swap_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "swap.png")
+        swap_icon_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "swap.png"
+        )
         self.btn_swap.setIcon(QIcon(swap_icon_path))
         self.btn_swap.setIconSize(QSize(SWAP_ICON_SIZE, SWAP_ICON_SIZE))
         self.btn_swap.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -221,7 +224,7 @@ class MainWindow(QMainWindow):
 
         files_content_layout.addLayout(row1_layout)
 
-        # 第二列：起始/結束行號、來源/目標列號與開始翻譯按鈕
+        # 第二列：行號、欄號與開始按鈕
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(15)
 
@@ -266,6 +269,7 @@ class MainWindow(QMainWindow):
         grp_files_layout.addWidget(self.files_content_widget)
         return grp_files
 
+    # ── 右側下半部：執行狀態與日誌面板 ─────────────────────────────────────
 
     def _build_status_group(self):
         grp_status = QFrame()
@@ -274,14 +278,13 @@ class MainWindow(QMainWindow):
         grp_status_layout.setContentsMargins(15, 15, 15, 15)
         grp_status_layout.setSpacing(8)
 
-        # 狀態與日誌標頭列
+        # 狀態標頭列
         self.status_header_widget = QWidget()
         self.status_header_widget.setObjectName("statusHeaderWidget")
         status_header_layout = QHBoxLayout(self.status_header_widget)
         status_header_layout.setContentsMargins(0, 0, 0, 0)
         status_header_layout.setSpacing(15)
 
-        # 展開/收合按鈕
         self.btn_toggle_status = QPushButton("▲")
         self.btn_toggle_status.setObjectName("btnToggleStatus")
         self.btn_toggle_status.setFixedSize(20, 20)
@@ -295,13 +298,13 @@ class MainWindow(QMainWindow):
 
         status_header_layout.addStretch()
 
-        # 狀態訊息：僅顯示已用時間與狀態
+        # 狀態摘要（已用時間 + 狀態）
         self.elapsed_time_str = "00:00:00"
         self.task_status_str = "就緒"
         self.lbl_status_summary = QLabel("已用時間：00:00:00 | 狀態：就緒")
         status_header_layout.addWidget(self.lbl_status_summary, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        # 進度條：顯示 n/m (筆數)
+        # 進度條
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedWidth(PROGRESS_BAR_WIDTH)
         self.progress_bar.setValue(0)
@@ -317,37 +320,37 @@ class MainWindow(QMainWindow):
         grp_status_layout.addWidget(self.txt_log)
         return grp_status
 
+    # ── 主視窗初始化 ─────────────────────────────────────────────────────────
+
     def init_ui(self):
         self.setWindowTitle("CsvTranslator - CSV 批次翻譯工具")
         self.resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
         self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
-        
-        # 主視窗佈局設定
+
         main_widget = QWidget()
         main_widget.setObjectName("mainContainer")
         self.setCentralWidget(main_widget)
-        
+
         main_layout = QHBoxLayout(main_widget)
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
 
-        # ----------------- 左側大容器：合併活動列與設定欄 -----------------
+        # 左側大容器：活動列 + 側邊欄
         self._build_left_panel()
         main_layout.addWidget(self.left_container)
 
-        # ----------------- 右側面板：控制主區域與日誌 -----------------
+        # 右側面板
         right_panel = QVBoxLayout()
         right_panel.setSpacing(15)
 
-        # 輸入與輸出面板
         self.grp_files = self._build_files_group()
         right_panel.addWidget(self.grp_files)
 
-        # 來源檔案預覽與日誌面板採用 QSplitter 垂直排列
+        # 來源預覽與日誌面板採用 QSplitter 垂直排列
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
         self.right_splitter.setObjectName("rightSplitter")
 
-        # 建立內容堆疊器與預覽、編輯面板
+        # 內容堆疊器
         self.content_stack = QStackedWidget()
 
         self.preview_panel = PreviewPanel()
@@ -359,12 +362,16 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.preview_panel)
         self.content_stack.addWidget(self.edit_content_panel)
 
-        # 雙向同步「第一行為標題」核取方塊的 clicked 訊號
+        # 雙向同步「第一行為標題」核取方塊
         self.preview_panel.chk_first_row_header.clicked.connect(
-            lambda: self.edit_content_panel.chk_first_row_header.setChecked(self.preview_panel.chk_first_row_header.isChecked())
+            lambda: self.edit_content_panel.chk_first_row_header.setChecked(
+                self.preview_panel.chk_first_row_header.isChecked()
+            )
         )
         self.edit_content_panel.chk_first_row_header.clicked.connect(
-            lambda: self.preview_panel.chk_first_row_header.setChecked(self.preview_panel.chk_first_row_header.isChecked())
+            lambda: self.preview_panel.chk_first_row_header.setChecked(
+                self.edit_content_panel.chk_first_row_header.isChecked()
+            )
         )
 
         self.grp_status = self._build_status_group()
@@ -372,19 +379,16 @@ class MainWindow(QMainWindow):
 
         self.right_splitter.addWidget(self.content_stack)
         self.right_splitter.addWidget(self.grp_status)
-
-        # Stretch factor: preview panel is 1, status panel is 0 (keeps status height stable on resize)
         self.right_splitter.setStretchFactor(0, 1)
         self.right_splitter.setStretchFactor(1, 0)
-        
         self.right_splitter.splitterMoved.connect(self.on_splitter_moved)
 
         right_panel.addWidget(self.right_splitter)
-
         main_layout.addLayout(right_panel, stretch=1)
 
-        # 載入 QSS 樣式設定
         self.apply_style()
+
+    # ── QSS 樣式 ─────────────────────────────────────────────────────────────
 
     def apply_style(self):
         qss = """
@@ -564,8 +568,6 @@ class MainWindow(QMainWindow):
             border: 1px dashed #2f3047;
         }
 
-
-
         /* 表格樣式 */
         QTableWidget, QTableView {
             background-color: #16161e;
@@ -573,7 +575,7 @@ class MainWindow(QMainWindow):
             border: 1px solid #2f3047;
             gridline-color: #232433;
             border-radius: 8px;
-            outline: none; /* 移除選取格時的焦點虛線框 */
+            outline: none;
         }
         QTableWidget::item, QTableView::item {
             padding: 5px;
@@ -587,7 +589,7 @@ class MainWindow(QMainWindow):
         QAbstractItemView QLineEdit {
             background-color: #16161e;
             color: #c0caf5;
-            border: none; /* 編輯時不顯示編輯框外線 */
+            border: none;
             border-radius: 0px;
             padding: 0px;
             margin: 0px;
@@ -684,707 +686,14 @@ class MainWindow(QMainWindow):
         """
         self.setStyleSheet(qss)
 
-    # ----------------- 事件與邏輯處理函數 -----------------
-    def swap_csv_paths(self):
-        src = self.txt_src_path.text()
-        out = self.txt_out_path.text()
-        self.txt_src_path.setText(out)
-        self.txt_out_path.setText(src)
-
-    def browse_source_file(self):
-        current_src = self.txt_src_path.text().strip()
-        initial_path = current_src if current_src else os.path.expanduser("~")
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "選擇來源 CSV 檔案", initial_path, "CSV 檔案 (*.csv);;所有檔案 (*)"
-        )
-        if file_path:
-            # 檢查點：瀏覽來源檔案與輸出檔案相同
-            current_out = self.txt_out_path.text().strip()
-            if current_out and file_path == current_out:
-                QMessageBox.warning(self, "路徑重複", "選擇的來源 CSV 檔案不能與輸出 CSV 檔案路徑相同！請重新選擇。")
-                return # 放棄本次選擇結果
-            
-            self.txt_src_path.setText(file_path)
-            # 自動推導輸出檔案路徑
-            if not self.txt_out_path.text().strip():
-                dir_name, file_name = os.path.split(file_path)
-                name, ext = os.path.splitext(file_name)
-                default_out = os.path.join(dir_name, f"{name}_translated{ext}")
-                self.txt_out_path.setText(default_out)
-
-    def browse_output_file(self):
-        current_out = self.txt_out_path.text().strip()
-        initial_path = current_out if current_out else os.path.expanduser("~")
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "選擇儲存輸出 CSV 檔案", initial_path, "CSV 檔案 (*.csv);;所有檔案 (*)"
-        )
-        if file_path:
-            # 檢查點：瀏覽輸出檔案與來源檔案相同
-            current_src = self.txt_src_path.text().strip()
-            if current_src and file_path == current_src:
-                QMessageBox.warning(self, "路徑重複", "選擇的輸出 CSV 檔案不能與來源 CSV 檔案路徑相同！請重新選擇。")
-                return # 放棄本次選擇結果
-                
-            self.txt_out_path.setText(file_path)
-
-    def on_source_file_changed(self, file_path):
-        if not file_path.strip() or not os.path.exists(file_path):
-            self.preview_panel.clear_preview()
-            self.txt_end_row.setPlaceholderText("預設至檔尾")
-            self.edit_content_panel.clear()
-            self.edit_panel.reset_panel()
-            if self.worker and hasattr(self.worker, "loaded_rows"):
-                self.worker.loaded_rows = []
-            self.content_stack.setCurrentWidget(self.preview_panel)
-            return
-        
-        self.preview_panel.load_preview(file_path)
-        self.edit_content_panel.clear()
-        self.edit_panel.reset_panel()
-        if self.worker and hasattr(self.worker, "loaded_rows"):
-            self.worker.loaded_rows = []
-        self.content_stack.setCurrentWidget(self.preview_panel)
-
-    def on_preview_loaded(self, total_rows):
-        self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
-
-    def append_log(self, level, message):
-        color_map = {
-            "INFO": "#c0caf5",       # 一般日誌
-            "SUCCESS": "#9ece6a",    # 成功
-            "WARNING": "#e0af68",    # 警告
-            "ERROR": "#f7768e"       # 錯誤
-        }
-        color = color_map.get(level, "#c0caf5")
-        timestamp = time.strftime("[%H:%M:%S]")
-        log_html = f'<font color="#565f89">{timestamp}</font> <font color="{color}">[{level}] {message}</font>'
-        
-        # 將新日誌插入至日誌最上方 (倒序)
-        cursor = self.txt_log.textCursor()
-        cursor.movePosition(cursor.MoveOperation.Start)
-        cursor.insertHtml(log_html)
-        cursor.insertBlock()
-        
-        # 將新日誌插入至日誌最上方 (倒序)
-        if self.txt_log.document().blockCount() > 10001:
-            end_cursor = self.txt_log.textCursor()
-            end_cursor.movePosition(end_cursor.MoveOperation.End)
-            end_cursor.movePosition(end_cursor.MoveOperation.PreviousBlock, end_cursor.MoveMode.KeepAnchor)
-            end_cursor.removeSelectedText()
-
-    def start_task(self):
-        # 檢查點：開始任務時來源與輸出不為空且相同
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
-        if src_path and out_path and src_path == out_path:
-            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
-            return
-
-        # 判斷當前活躍的分頁
-        active_tab = "translate"
-        if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
-            active_tab = "edit"
-
-        # 讀取通用設定值（以原始字串傳遞給 Worker，由 Worker 進行多態驗證與轉型）
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
-        start_row = self.txt_start_row.text().strip()
-        end_row = self.txt_end_row.text().strip()
-
-        # 根據活躍分頁初始化背景工作器實例
-        if active_tab == "translate":
-            src_col = self.txt_src_col.text().strip()
-            tgt_col = self.txt_tgt_col.text().strip()
-            src_lang = self.translation_panel.get_src_lang()
-            tgt_lang = self.translation_panel.get_tgt_lang()
-            batch_interval = self.translation_panel.get_batch_interval()
-            single_interval = self.translation_panel.get_single_interval()
-            batch_size = self.translation_panel.get_batch_size()
-            
-            worker_instance = CSVTranslatorWorker(
-                source_path=src_path,
-                output_path=out_path,
-                start_row=start_row,
-                end_row=end_row,
-                source_col=src_col,
-                target_col=tgt_col,
-                source_lang=src_lang,
-                target_lang=tgt_lang,
-                batch_interval=batch_interval,
-                single_interval=single_interval,
-                batch_size=batch_size
-            )
-        else:
-            worker_instance = CSVEditWorker(
-                source_path=src_path,
-                output_path=out_path,
-                start_row=start_row,
-                end_row=end_row
-            )
-
-        # 呼叫工作器進行多態輸入驗證
-        is_valid, err_msg = worker_instance.validate_inputs()
-        if not is_valid:
-            QMessageBox.warning(self, "輸入錯誤", err_msg)
-            return
-
-        # 驗證成功，設定工作器屬性
-        self.worker = worker_instance
-
-        # 清空舊 UI 顯示狀態
-        self.txt_log.clear()
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("0/0")
-        self.elapsed_time_str = "00:00:00"
-        self.task_status_str = "翻譯中..." if active_tab == "translate" else "編輯中..."
-        self.update_status_summary()
-        
-        # 記錄開始時間
-        self.start_time = time.time()
-        self.timer.start(1000)
-
-        self.worker.progress_updated.connect(self.on_worker_progress)
-        self.worker.log_emitted.connect(self.append_log)
-        self.worker.finished_successfully.connect(self.on_worker_success)
-        self.worker.finished_with_error.connect(self.on_worker_error)
-        
-        self.worker.start()
-
-        # 如果是翻譯工作，防止系統進入休眠
-        if active_tab == "translate":
-            from utils import prevent_sleep
-            self.sleep_prevented = prevent_sleep(True)
-            if self.sleep_prevented:
-                self.append_log("INFO", "已成功通知系統在翻譯期間不要進入休眠狀態。")
-
-        # 改變開始按鈕狀態與啟用狀態
-        self.set_ui_enabled(False)
-        self.update_start_button_ui()
-
-    def update_status_summary(self):
-        self.lbl_status_summary.setText(f"已用時間：{self.elapsed_time_str} | 狀態：{self.task_status_str}")
-
-    def on_worker_progress(self, current, total):
-        self.progress_bar.setRange(0, total)
-        self.progress_bar.setValue(current)
-        self.progress_bar.setFormat(f"{current}/{total}")
-
-    def update_elapsed_time(self):
-        elapsed = int(time.time() - self.start_time)
-        hrs = elapsed // 3600
-        mins = (elapsed % 3600) // 60
-        secs = elapsed % 60
-        self.elapsed_time_str = f"{hrs:02d}:{mins:02d}:{secs:02d}"
-        self.update_status_summary()
-
-    def on_worker_success(self, out_path):
-        self.timer.stop()
-        self.set_ui_enabled(True)
-        
-        # 恢復系統休眠設定
-        if getattr(self, "sleep_prevented", False):
-            from utils import prevent_sleep
-            prevent_sleep(False)
-            self.sleep_prevented = False
-            self.append_log("INFO", "已恢復系統正常休眠設定。")
-        if self.worker and self.worker._is_cancelled:
-            self.task_status_str = "已取消"
-            self.update_status_summary()
-            title, msg = self.worker.get_cancel_message(out_path)
-            QMessageBox.information(self, title, msg)
-        else:
-            self.task_status_str = "完成"
-            self.update_status_summary()
-            
-            # 判斷當前是否為編輯分頁
-            active_tab = "translate"
-            if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
-                active_tab = "edit"
-                
-            if active_tab == "edit" and hasattr(self.worker, "loaded_rows"):
-                start_row = 1
-                try:
-                    start_row = int(self.txt_start_row.text())
-                except ValueError:
-                    pass
-                end_row = None
-                if self.txt_end_row.text().strip():
-                    try:
-                        end_row = int(self.txt_end_row.text())
-                    except ValueError:
-                        pass
-                
-                self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row)
-                self.edit_content_panel.set_delimiter(getattr(self.worker, "delimiter", ","))
-                self.content_stack.setCurrentWidget(self.edit_content_panel)
-                
-                # 更新欄位下拉選單
-                loaded_rows = self.worker.loaded_rows
-                if loaded_rows:
-                    num_cols = max(len(r) for r in loaded_rows)
-                    is_hdr = self.edit_content_panel.is_first_row_header()
-                    headers = loaded_rows[0] if is_hdr else None
-                    self.edit_panel.update_column_dropdowns(num_cols, headers)
-                
-            title, msg = self.worker.get_success_message(out_path)
-            QMessageBox.information(self, title, msg)
-
-    def on_worker_error(self, err_msg):
-        self.timer.stop()
-        self.task_status_str = "錯誤"
-        self.update_status_summary()
-        self.set_ui_enabled(True)
-        
-        # 恢復系統休眠設定
-        if getattr(self, "sleep_prevented", False):
-            from utils import prevent_sleep
-            prevent_sleep(False)
-            self.sleep_prevented = False
-            self.append_log("INFO", "已恢復系統正常休眠設定。")
-            
-        title, msg = self.worker.get_error_message(err_msg)
-        QMessageBox.critical(self, title, msg)
-
-    def save_edit_data(self):
-        out_path = self.txt_out_path.text().strip()
-        if not out_path:
-            QMessageBox.warning(self, "錯誤", "請指定輸出 CSV 檔案路徑！")
-            return
-
-        # 檢查點：來源檔案與輸出檔案相同
-        src_path = self.txt_src_path.text().strip()
-        if src_path and out_path and src_path == out_path:
-            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法存檔！請變更輸出路徑。")
-            return
-
-        all_rows = self.edit_content_panel.get_all_rows()
-        if not all_rows:
-            QMessageBox.warning(self, "錯誤", "沒有資料可儲存。")
-            return
-
-        delimiter = self.edit_content_panel.get_delimiter()
-
-        try:
-            out_dir = os.path.dirname(out_path)
-            if out_dir and not os.path.exists(out_dir):
-                os.makedirs(out_dir, exist_ok=True)
-
-            with open(out_path, 'w', encoding='utf-8-sig', newline='') as f:
-                writer = csv.writer(f, delimiter=delimiter)
-                writer.writerows(all_rows)
-
-            self.edit_content_panel.set_modified(False)
-            self.append_log("SUCCESS", f"編輯資料存檔成功！已寫入至：{out_path}")
-            QMessageBox.information(self, "成功", f"存檔成功！\n檔案已儲存至：\n{out_path}")
-        except Exception as e:
-            self.append_log("ERROR", f"存檔失敗：{str(e)}")
-            QMessageBox.critical(self, "存檔失敗", f"存檔失敗：\n{str(e)}")
-
-    def start_filtering(self, filter_config):
-        rows = self.edit_content_panel.get_all_rows()
-        if not rows:
-            QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
-            return
-            
-        start_row = 1
-        try:
-            start_row = int(self.txt_start_row.text())
-        except ValueError:
-            pass
-        end_row = None
-        if self.txt_end_row.text().strip():
-            try:
-                end_row = int(self.txt_end_row.text())
-            except ValueError:
-                pass
-                
-        src_col = 1
-        try:
-            src_col = int(self.txt_src_col.text())
-        except ValueError:
-            pass
-        tgt_col = 1
-        try:
-            tgt_col = int(self.txt_tgt_col.text())
-        except ValueError:
-            pass
-            
-        is_header = self.edit_content_panel.is_first_row_header()
-        
-        from edit.filter_worker import FilterWorker
-        from PyQt6.QtWidgets import QProgressDialog
-        
-        self.filter_progress = QProgressDialog("正在執行過濾...", "取消", 0, len(rows), self)
-        self.filter_progress.setWindowTitle("請稍候")
-        self.filter_progress.setWindowModality(Qt.WindowModality.WindowModal)
-        self.filter_progress.setAutoClose(False)
-        self.filter_progress.setAutoReset(False)
-        self.filter_progress.show()
-        
-        self.filter_worker = FilterWorker(
-            all_rows=rows,
-            start_row=start_row,
-            end_row=end_row,
-            is_header=is_header,
-            src_col=src_col,
-            tgt_col=tgt_col,
-            filter_config=filter_config,
-            parent=self
-        )
-        self.filter_progress.canceled.connect(self.filter_worker.cancel)
-        self.filter_worker.progress_updated.connect(self.filter_progress.setValue)
-        self.filter_worker.filter_completed.connect(self.on_filter_completed)
-        self.filter_worker.filter_error.connect(self.on_filter_error)
-        self.filter_worker.start()
-
-    def on_filter_completed(self, matched_indices, elapsed_time):
-        self.edit_content_panel.apply_filter(matched_indices)
-        
-        def close_dialog():
-            if hasattr(self, "filter_progress") and self.filter_progress:
-                self.filter_progress.close()
-                self.filter_progress = None
-                
-        if elapsed_time < 0.7:
-            QTimer.singleShot(int((0.7 - elapsed_time) * 1000), close_dialog)
-        else:
-            close_dialog()
-
-    def on_filter_error(self, err_msg):
-        if hasattr(self, "filter_progress") and self.filter_progress:
-            self.filter_progress.close()
-            self.filter_progress = None
-        QMessageBox.critical(self, "過濾錯誤", err_msg)
-
-    def set_ui_enabled(self, enabled):
-        self.txt_src_path.setEnabled(enabled)
-        self.txt_out_path.setEnabled(enabled)
-        self.txt_start_row.setEnabled(enabled)
-        self.txt_end_row.setEnabled(enabled)
-        self.txt_src_col.setEnabled(enabled)
-        self.txt_tgt_col.setEnabled(enabled)
-        self.translation_panel.set_enabled(enabled)
-        self.edit_panel.set_enabled(enabled)
-        
-        if enabled:
-            self.btn_start.setEnabled(True)
-            self.update_start_button_ui()
-
-    def switch_sidebar_tab(self, tab_name):
-        is_task_running = self.worker is not None and self.worker.isRunning()
-
-        # 判斷點選的是否為當前活躍的分頁
-        is_same_tab = False
-        if tab_name == "translate" and self.sidebar_stacked.currentWidget() == self.translation_panel:
-            is_same_tab = True
-        elif tab_name == "edit" and self.sidebar_stacked.currentWidget() == self.edit_panel:
-            is_same_tab = True
-
-        # 如果任務正在處理中，禁止切換到其他功能面板，僅允許收合/展開當前面板
-        if is_task_running and not is_same_tab:
-            return
-
-        if self.sidebar.isVisible() and is_same_tab:
-            # 收合
-            self.sidebar.setVisible(False)
-            self.v_line.setVisible(False)
-            self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
-            self.btn_translate.setProperty("active", False)
-            self.btn_edit.setProperty("active", False)
-        else:
-            # 展開並切換
-            self.sidebar.setVisible(True)
-            self.v_line.setVisible(True)
-            self.left_container.setFixedWidth(SIDEBAR_FULL_WIDTH)
-            
-            if tab_name == "translate":
-                self.sidebar_stacked.setCurrentWidget(self.translation_panel)
-                self.btn_translate.setProperty("active", True)
-                self.btn_edit.setProperty("active", False)
-                self.content_stack.setCurrentWidget(self.preview_panel)
-            elif tab_name == "edit":
-                self.sidebar_stacked.setCurrentWidget(self.edit_panel)
-                self.btn_translate.setProperty("active", False)
-                self.btn_edit.setProperty("active", True)
-                if self.edit_content_panel.has_data():
-                    self.content_stack.setCurrentWidget(self.edit_content_panel)
-                else:
-                    self.content_stack.setCurrentWidget(self.preview_panel)
-                
-        # 刷新按鈕樣式
-        self.btn_translate.style().polish(self.btn_translate)
-        self.btn_edit.style().polish(self.btn_edit)
-        
-        # 更新開始按鈕狀態字樣
-        self.update_start_button_ui()
-        
-        # 切換面板後立即儲存狀態
-        self.save_settings()
-
-    def save_settings(self):
-        # 視窗幾何位置與大小文字化儲存
-        is_max = self.isMaximized()
-        geom = self.normalGeometry() if is_max else self.geometry()
-        
-        # 組合 Active Tab 狀態
-        if not self.sidebar.isVisible():
-            active_tab = "hidden"
-        elif self.sidebar_stacked.currentWidget() == self.translation_panel:
-            active_tab = "translate"
-        else:
-            active_tab = "edit"
-
-        # 確保在儲存前更新最新狀態面板的展開高度
-        if self.status_expanded:
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1:
-                self.status_expanded_height = sizes[1]
-
-        data = {
-            "window": {
-                "x": geom.x(),
-                "y": geom.y(),
-                "width": geom.width(),
-                "height": geom.height(),
-                "is_maximized": is_max
-            },
-            "main": {
-                "source_path": self.txt_src_path.text().strip(),
-                "output_path": self.txt_out_path.text().strip(),
-                "start_row": self.txt_start_row.text(),
-                "end_row": self.txt_end_row.text(),
-                "src_col": self.txt_src_col.text(),
-                "tgt_col": self.txt_tgt_col.text(),
-                "active_tab": active_tab
-            },
-            "panels": {
-                "translate": self.translation_panel.get_config(),
-                "edit": self.edit_panel.get_config(),
-                "status": {
-                    "expanded_height": self.status_expanded_height,
-                    "collapsed": not self.status_expanded
-                },
-                "files": {
-                    "collapsed": not self.files_content_widget.isVisible()
-                },
-                "preview": {
-                    "first_row_header": self.preview_panel.is_first_row_header()
-                }
-            }
-        }
-        self.settings_manager.save(data)
-
-    def restore_settings(self):
-        data = self.settings_manager.load()
-        if not data:
-            return
-            
-        try:
-            # 1. 恢復視窗幾何大小與位置
-            if "window" in data:
-                w_data = data["window"]
-                x = w_data.get("x", 100)
-                y = w_data.get("y", 100)
-                width = w_data.get("width", WINDOW_DEFAULT_WIDTH)
-                height = w_data.get("height", WINDOW_DEFAULT_HEIGHT)
-                self.setGeometry(x, y, width, height)
-                if w_data.get("is_maximized", False):
-                    self.showMaximized()
-            
-            # 2. 恢復主程式欄位與狀態
-            if "main" in data:
-                m_data = data["main"]
-                self.txt_src_path.setText(m_data.get("source_path", ""))
-                self.txt_out_path.setText(m_data.get("output_path", ""))
-                
-                # 檢查點：開啟程式時兩者不為空且內容相同
-                src_path = self.txt_src_path.text().strip()
-                out_path = self.txt_out_path.text().strip()
-                if src_path and out_path and src_path == out_path:
-                    QMessageBox.warning(self, "路徑重複", "偵測到儲存的來源 CSV 與輸出 CSV 路徑相同！已自動清空輸出路徑以防檔案毀損。")
-                    self.txt_out_path.clear()
-                    
-                self.txt_start_row.setText(m_data.get("start_row", "2"))
-                self.txt_end_row.setText(m_data.get("end_row", ""))
-                self.txt_src_col.setText(m_data.get("src_col", "1"))
-                self.txt_tgt_col.setText(m_data.get("tgt_col", "2"))
-                
-                # 恢復活躍面板
-                active_tab = m_data.get("active_tab", "translate")
-                if active_tab == "hidden":
-                    self.sidebar.setVisible(False)
-                    self.v_line.setVisible(False)
-                    self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
-                    self.btn_translate.setProperty("active", False)
-                    self.btn_edit.setProperty("active", False)
-                else:
-                    self.switch_sidebar_tab(active_tab)
-
-            # 3. 分配並恢復面板專屬組態區段
-            if "panels" in data:
-                p_data = data["panels"]
-                self.translation_panel.set_config(p_data.get("translate", {}))
-                self.edit_panel.set_config(p_data.get("edit", {}))
-                
-                # 恢復展開與折疊設定
-                status_cfg = p_data.get("status", {})
-                self.status_expanded_height = status_cfg.get("expanded_height", 250)
-                status_collapsed = status_cfg.get("collapsed", False)
-                self.status_expanded = not status_collapsed
-                self.btn_toggle_status.setText("▲" if self.status_expanded else "▼")
-                self.txt_log.setVisible(self.status_expanded)
-                if not self.status_expanded:
-                    self.grp_status.setMinimumHeight(0)
-                    self.grp_status.setMaximumHeight(50)
-                else:
-                    self.grp_status.setMinimumHeight(140)
-                    self.grp_status.setMaximumHeight(16777215)
-                
-                files_cfg = p_data.get("files", {})
-                files_collapsed = files_cfg.get("collapsed", False)
-                if files_collapsed:
-                    self.files_content_widget.setVisible(False)
-                    self.btn_toggle_files.setText("▼")
-                else:
-                    self.files_content_widget.setVisible(True)
-                    self.btn_toggle_files.setText("▲")
-                
-                # 恢復預覽設定
-                preview_cfg = p_data.get("preview", {})
-                is_hdr = preview_cfg.get("first_row_header", False)
-                self.preview_panel.set_first_row_header(is_hdr)
-                self.edit_content_panel.set_first_row_header(is_hdr)
-            
-            # 恢復設定後更新開始按鈕狀態字樣
-            self.update_start_button_ui()
-        except Exception:
-            pass
-
-    def toggle_files_panel(self):
-        collapsed = self.files_content_widget.isVisible()
-        self.files_content_widget.setVisible(not collapsed)
-        self.btn_toggle_files.setText("▼" if collapsed else "▲")
-        self.save_settings()
-
-    def toggle_status_panel(self):
-        self.status_expanded = not self.status_expanded
-        self.txt_log.setVisible(self.status_expanded)
-        self.btn_toggle_status.setText("▲" if self.status_expanded else "▼")
-        
-        if self.status_expanded:
-            self.grp_status.setMinimumHeight(140)
-            self.grp_status.setMaximumHeight(16777215)
-            
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1:
-                total_h = sum(sizes)
-                status_h = max(140, self.status_expanded_height)
-                preview_h = max(200, total_h - status_h)
-                if preview_h < 200:
-                    preview_h = 200
-                    status_h = max(140, total_h - 200)
-                self.right_splitter.setSizes([preview_h, status_h])
-        else:
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1 and sizes[1] > 100:
-                self.status_expanded_height = sizes[1]
-                
-            header_h = self.status_header_widget.sizeHint().height() + 30
-            if header_h < 50:
-                header_h = 50
-                
-            self.grp_status.setMinimumHeight(0)
-            self.grp_status.setMaximumHeight(header_h)
-            
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1:
-                total_h = sum(sizes)
-                self.right_splitter.setSizes([total_h - header_h, header_h])
-                
-        self.save_settings()
-
-    def on_splitter_moved(self, pos, index):
-        if self.status_expanded:
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1:
-                self.status_expanded_height = sizes[1]
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        if not self.settings_restored:
-            self.settings_restored = True
-            QTimer.singleShot(0, self.apply_splitter_sizes)
-
-    def apply_splitter_sizes(self):
-        total_h = self.right_splitter.height()
-        handle_w = self.right_splitter.handleWidth()
-        available_h = total_h - handle_w
-        
-        if self.status_expanded:
-            self.grp_status.setMinimumHeight(140)
-            self.grp_status.setMaximumHeight(16777215)
-            status_h = max(140, self.status_expanded_height)
-            preview_h = max(200, available_h - status_h)
-            if preview_h < 200:
-                preview_h = 200
-                status_h = max(140, available_h - 200)
-            self.right_splitter.setSizes([preview_h, status_h])
-        else:
-            header_h = self.status_header_widget.sizeHint().height() + 30
-            if header_h < 50:
-                header_h = 50
-            self.grp_status.setMinimumHeight(0)
-            self.grp_status.setMaximumHeight(header_h)
-            preview_h = max(200, available_h - header_h)
-            self.right_splitter.setSizes([preview_h, header_h])
-
-    def get_active_panel(self):
-        if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
-            return self.edit_panel
-        return self.translation_panel
-
-    def get_start_button_state(self) -> str:
-        if self.worker is not None and self.worker.isRunning():
-            if self.worker._is_cancelled:
-                return "disabled"
-            else:
-                return "critical"
-        return "normal"
-
-    def update_start_button_ui(self):
-        state = self.get_start_button_state()
-        panel = self.get_active_panel()
-        text = panel.get_start_button_text(state)
-        self.btn_start.setText(text)
-        
-        if state == "disabled":
-            self.btn_start.setEnabled(False)
-            self.btn_start.setStyleSheet("background-color: #24283b; color: #565f89;")
-        elif state == "critical":
-            self.btn_start.setEnabled(True)
-            self.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
-        else: # normal
-            self.btn_start.setEnabled(True)
-            self.btn_start.setStyleSheet("") # 恢復 QSS 原生樣式
-
-    def on_start_button_clicked(self):
-        state = self.get_start_button_state()
-        if state == "disabled":
-            return
-        panel = self.get_active_panel()
-        panel.handle_start_button_click(self, state)
-
-    def cancel_task(self):
-        if self.worker:
-            self.task_status_str = "正在中斷工作..."
-            self.update_status_summary()
-            self.worker.cancel()
-            self.update_start_button_ui()
+    # ── 視窗關閉事件 ─────────────────────────────────────────────────────────
 
     def closeEvent(self, event):
-        if getattr(self, "sleep_prevented", False):
+        """Qt 事件覆寫：視窗關閉時恢復系統休眠設定並儲存所有設定。
+        必須呼叫 super().closeEvent(event) 維持 MRO 鏈完整性。
+        """
+        if getattr(self, "_worker_sleep_prevented", False):
             from utils import prevent_sleep
             prevent_sleep(False)
         self.save_settings()
-        super().closeEvent(event)
+        super().closeEvent(event)  # ← MRO 鏈傳遞至 QMainWindow，勿省略
