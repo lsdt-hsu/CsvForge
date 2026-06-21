@@ -664,16 +664,3 @@ class EditPanel(BasePanel):
 
         # 新增按鈕可見性控制
         self.btn_add_rule.setVisible(len(self.rules) < 5)
-
-    def get_start_button_text(self, state: str) -> str:
-        if state == "critical":
-            return "停止載入"
-        elif state == "disabled":
-            return "正在停止..."
-        return "載入"
-
-    def handle_start_button_click(self, main_window, state: str):
-        if state == "critical":
-            main_window.cancel_task()
-        else:
-            main_window.start_task()

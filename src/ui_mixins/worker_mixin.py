@@ -22,57 +22,20 @@ if TYPE_CHECKING:
 
 class WorkerMixin:
 
-    def start_task(self: "MainWindow") -> None:
-        # 檢查點：來源與輸出不為空且相同
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
-        if src_path and out_path and src_path == out_path:
-            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
-            return
-
-        # 判斷當前活躍的分頁
-        active_tab = "translate"
-        if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
-            active_tab = "edit"
-
+    def start_load_task(self: "MainWindow") -> None:
         # 讀取通用設定值
         src_path = self.txt_src_path.text().strip()
         out_path = self.txt_out_path.text().strip()
         start_row = self.txt_start_row.text().strip()
         end_row = self.txt_end_row.text().strip()
 
-        # 根據活躍分頁初始化 Worker
-        if active_tab == "translate":
-            from translation.translation_worker import CSVTranslatorWorker
-            src_col = self.txt_src_col.text().strip()
-            tgt_col = self.txt_tgt_col.text().strip()
-            src_lang = self.translation_panel.get_src_lang()
-            tgt_lang = self.translation_panel.get_tgt_lang()
-            batch_interval = self.translation_panel.get_batch_interval()
-            single_interval = self.translation_panel.get_single_interval()
-            batch_size = self.translation_panel.get_batch_size()
-
-            worker_instance = CSVTranslatorWorker(
-                source_path=src_path,
-                output_path=out_path,
-                start_row=start_row,
-                end_row=end_row,
-                source_col=src_col,
-                target_col=tgt_col,
-                source_lang=src_lang,
-                target_lang=tgt_lang,
-                batch_interval=batch_interval,
-                single_interval=single_interval,
-                batch_size=batch_size
-            )
-        else:
-            from data_editor.edit_worker import CSVEditWorker
-            worker_instance = CSVEditWorker(
-                source_path=src_path,
-                output_path=out_path,
-                start_row=start_row,
-                end_row=end_row
-            )
+        from data_editor.edit_worker import CSVEditWorker
+        worker_instance = CSVEditWorker(
+            source_path=src_path,
+            output_path=out_path,
+            start_row=start_row,
+            end_row=end_row
+        )
 
         # 多態輸入驗證
         is_valid, err_msg = worker_instance.validate_inputs()
@@ -88,7 +51,70 @@ class WorkerMixin:
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("0/0")
         self.elapsed_time_str = "00:00:00"
-        self.task_status_str = "翻譯中..." if active_tab == "translate" else "編輯中..."
+        self.task_status_str = "載入中..."
+        self.update_status_summary()
+
+        self.start_time = time.time()
+        self.timer.start(1000)
+
+        self.worker.progress_updated.connect(self.on_worker_progress)
+        self.worker.log_emitted.connect(self.append_log)
+        self.worker.finished_successfully.connect(self.on_worker_success)
+        self.worker.finished_with_error.connect(self.on_worker_error)
+
+        self.worker.start()
+
+        self.set_ui_enabled(False)
+
+    def start_translation_task(self: "MainWindow") -> None:
+        # 檢查點：來源與輸出不為空且相同
+        src_path = self.txt_src_path.text().strip()
+        out_path = self.txt_out_path.text().strip()
+        if src_path and out_path and src_path == out_path:
+            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
+            return
+
+        start_row = self.txt_start_row.text().strip()
+        end_row = self.txt_end_row.text().strip()
+
+        from translation.translation_worker import CSVTranslatorWorker
+        src_col = self.txt_src_col.text().strip()
+        tgt_col = self.txt_tgt_col.text().strip()
+        src_lang = self.translation_panel.get_src_lang()
+        tgt_lang = self.translation_panel.get_tgt_lang()
+        batch_interval = self.translation_panel.get_batch_interval()
+        single_interval = self.translation_panel.get_single_interval()
+        batch_size = self.translation_panel.get_batch_size()
+
+        worker_instance = CSVTranslatorWorker(
+            source_path=src_path,
+            output_path=out_path,
+            start_row=start_row,
+            end_row=end_row,
+            source_col=src_col,
+            target_col=tgt_col,
+            source_lang=src_lang,
+            target_lang=tgt_lang,
+            batch_interval=batch_interval,
+            single_interval=single_interval,
+            batch_size=batch_size
+        )
+
+        # 多態輸入驗證
+        is_valid, err_msg = worker_instance.validate_inputs()
+        if not is_valid:
+            QMessageBox.warning(self, "輸入錯誤", err_msg)
+            return
+
+        self.worker = worker_instance
+
+        # 重置 UI 顯示狀態
+        self.txt_log.clear()
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("0/0")
+        self.elapsed_time_str = "00:00:00"
+        self.task_status_str = "翻譯中..."
         self.update_status_summary()
 
         self.start_time = time.time()
@@ -102,14 +128,12 @@ class WorkerMixin:
         self.worker.start()
 
         # 防止系統休眠（僅翻譯任務）
-        if active_tab == "translate":
-            from utils import prevent_sleep
-            self._worker_sleep_prevented = prevent_sleep(True)
-            if self._worker_sleep_prevented:
-                self.append_log("INFO", "已成功通知系統在翻譯期間不要進入休眠狀態。")
+        from utils import prevent_sleep
+        self._worker_sleep_prevented = prevent_sleep(True)
+        if self._worker_sleep_prevented:
+            self.append_log("INFO", "已成功通知系統在翻譯期間不要進入休眠狀態。")
 
         self.set_ui_enabled(False)
-        self.update_start_button_ui()
 
     def update_status_summary(self: "MainWindow") -> None:
         self.lbl_status_summary.setText(
@@ -149,12 +173,8 @@ class WorkerMixin:
             self.task_status_str = "完成"
             self.update_status_summary()
 
-            # 判斷是否為編輯任務並載入資料
-            active_tab = "translate"
-            if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:
-                active_tab = "edit"
-
-            if active_tab == "edit" and hasattr(self.worker, "loaded_rows"):
+            from data_editor.edit_worker import CSVEditWorker
+            if isinstance(self.worker, CSVEditWorker) and hasattr(self.worker, "loaded_rows"):
                 start_row = 1
                 try:
                     start_row = int(self.txt_start_row.text())

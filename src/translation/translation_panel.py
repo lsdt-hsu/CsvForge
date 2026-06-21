@@ -159,16 +159,3 @@ class TranslationPanel(BasePanel):
             self.set_src_lang(config["src_lang"])
         if "tgt_lang" in config:
             self.set_tgt_lang(config["tgt_lang"])
-
-    def get_start_button_text(self, state: str) -> str:
-        if state == "critical":
-            return "停止翻譯"
-        elif state == "disabled":
-            return "正在停止..."
-        return "開始翻譯"
-
-    def handle_start_button_click(self, main_window, state: str):
-        if state == "critical":
-            main_window.cancel_task()
-        else:
-            main_window.start_task()

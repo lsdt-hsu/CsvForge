@@ -250,9 +250,10 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, FilterMixin, WorkerM
         self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
         self.txt_tgt_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
 
-        self.btn_start = QPushButton("開始")
+        self.btn_start = QPushButton("載入")
         self.btn_start.setObjectName("btnStart")
         self.btn_start.setMinimumWidth(START_BUTTON_MIN_WIDTH)
+        self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.on_start_button_clicked)
 
         row2_layout.addWidget(lbl_start_row)

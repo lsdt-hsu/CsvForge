@@ -57,11 +57,7 @@ class UiStateMixin:
         self.translation_panel.set_enabled(enabled)
         self.edit_panel.set_enabled(enabled)
 
-        if enabled:
-            self.btn_start.setEnabled(True)
-            if hasattr(self.translation_panel, "btn_start"):
-                self.translation_panel.btn_start.setEnabled(True)
-            self.update_start_button_ui()
+        self.update_start_button_ui()
 
     def switch_sidebar_tab(self: "MainWindow", tab_name: str) -> None:
         is_task_running = self.worker is not None and self.worker.isRunning()
@@ -125,35 +121,61 @@ class UiStateMixin:
         return "normal"
 
     def update_start_button_ui(self: "MainWindow") -> None:
-        state = self.get_start_button_state()
-        panel = self.get_active_panel()
-        text = panel.get_start_button_text(state)
-        self.btn_start.setText(text)
-        if hasattr(self.translation_panel, "btn_start"):
-            self.translation_panel.btn_start.setText(text)
+        from translation.translation_worker import CSVTranslatorWorker
+        from data_editor.edit_worker import CSVEditWorker
 
-        if state == "disabled":
-            self.btn_start.setEnabled(False)
-            self.btn_start.setStyleSheet("background-color: #24283b; color: #565f89;")
-            if hasattr(self.translation_panel, "btn_start"):
-                self.translation_panel.btn_start.setEnabled(False)
-                self.translation_panel.btn_start.setStyleSheet("background-color: #24283b; color: #565f89;")
-        elif state == "critical":
-            self.btn_start.setEnabled(True)
-            self.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
-            if hasattr(self.translation_panel, "btn_start"):
-                self.translation_panel.btn_start.setEnabled(True)
-                self.translation_panel.btn_start.setStyleSheet("background-color: #f7768e; color: #1a1b26;")
-        else:  # normal
-            self.btn_start.setEnabled(True)
-            self.btn_start.setStyleSheet("")  # 恢復 QSS 原生樣式
-            if hasattr(self.translation_panel, "btn_start"):
-                self.translation_panel.btn_start.setEnabled(True)
-                self.translation_panel.btn_start.setStyleSheet("")  # 恢復 QSS 原生樣式
+        state = self.get_start_button_state()
+
+        style_disabled = "background-color: #24283b; color: #565f89;"
+        style_critical = "background-color: #f7768e; color: #1a1b26;"
+        style_normal = ""
+
+        # 1. 載入按鈕 (btn_start)
+        if self.worker is not None and isinstance(self.worker, CSVEditWorker) and self.worker.isRunning():
+            if state == "disabled":
+                self.btn_start.setText("正在停止...")
+                self.btn_start.setEnabled(False)
+                self.btn_start.setStyleSheet(style_disabled)
+            else:  # critical
+                self.btn_start.setText("停止載入")
+                self.btn_start.setEnabled(True)
+                self.btn_start.setStyleSheet(style_critical)
+        else:
+            self.btn_start.setText("載入")
+            is_any_running = self.worker is not None and self.worker.isRunning()
+            self.btn_start.setEnabled(not is_any_running)
+            self.btn_start.setStyleSheet(style_normal)
+
+        # 2. 開始翻譯按鈕 (translation_panel.btn_start)
+        if hasattr(self.translation_panel, "btn_start"):
+            if self.worker is not None and isinstance(self.worker, CSVTranslatorWorker) and self.worker.isRunning():
+                if state == "disabled":
+                    self.translation_panel.btn_start.setText("正在停止...")
+                    self.translation_panel.btn_start.setEnabled(False)
+                    self.translation_panel.btn_start.setStyleSheet(style_disabled)
+                else:  # critical
+                    self.translation_panel.btn_start.setText("停止翻譯")
+                    self.translation_panel.btn_start.setEnabled(True)
+                    self.translation_panel.btn_start.setStyleSheet(style_critical)
+            else:
+                self.translation_panel.btn_start.setText("開始翻譯")
+                is_any_running = self.worker is not None and self.worker.isRunning()
+                self.translation_panel.btn_start.setEnabled(not is_any_running)
+                self.translation_panel.btn_start.setStyleSheet(style_normal)
 
     def on_start_button_clicked(self: "MainWindow") -> None:
         state = self.get_start_button_state()
         if state == "disabled":
             return
-        panel = self.get_active_panel()
-        panel.handle_start_button_click(self, state)
+
+        sender = self.sender()
+        if hasattr(self.translation_panel, "btn_start") and sender == self.translation_panel.btn_start:
+            if state == "critical":
+                self.cancel_task()
+            else:
+                self.start_translation_task()
+        else:
+            if state == "critical":
+                self.cancel_task()
+            else:
+                self.start_load_task()
