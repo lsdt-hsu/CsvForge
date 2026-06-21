@@ -39,6 +39,7 @@ class CSVTableModel(QAbstractTableModel):
         self.end_row = end_row
         self.is_header = is_header
         self.num_cols = max(len(row) for row in all_rows) if all_rows else 0
+        self.filtered_indices = None
         self.update_visible_rows()
         self.endResetModel()
 
