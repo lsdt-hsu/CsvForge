@@ -29,13 +29,11 @@ class SettingsMixin:
 
     # ── 設定儲存 ──────────────────────────────────────────────────────────────
 
-    def save_settings(self: "MainWindow") -> None:
+    def get_current_settings_dict(self: "MainWindow") -> dict:
         is_max = self.isMaximized()
         geom = self.normalGeometry() if is_max else self.geometry()
 
-        if not self.sidebar.isVisible():
-            active_tab = "hidden"
-        elif self.sidebar_stacked.currentWidget() == self.translation_panel:
+        if self.sidebar_stacked.currentWidget() == self.translation_panel:
             active_tab = "translate"
         else:
             active_tab = "edit"
@@ -46,7 +44,15 @@ class SettingsMixin:
             if len(sizes) > 1:
                 self.status_expanded_height = sizes[1]
 
-        data = {
+        # 關鍵防重置邏輯：
+        # 如果編輯過濾面板尚未初始化完成（未載入 CSV 時，控制項隱藏），
+        # 則 filter_panel 設定應保留先前自 settings.json 載入的值，防止因 UI 為空而覆蓋。
+        if hasattr(self, "edit_panel") and self.edit_panel.controls_container.isVisible():
+            filter_panel_cfg = self.edit_panel.get_config()
+        else:
+            filter_panel_cfg = getattr(self, "loaded_settings", {}).get("filter_panel", {})
+
+        return {
             "window": {
                 "x": geom.x(),
                 "y": geom.y(),
@@ -63,27 +69,50 @@ class SettingsMixin:
                 "tgt_col": self.txt_tgt_col.text(),
                 "active_tab": active_tab,
             },
-            "panels": {
-                "translate": self.translation_panel.get_config(),
-                "edit": self.edit_panel.get_config(),
-                "status": {
-                    "expanded_height": self.status_expanded_height,
-                    "collapsed": not self.status_expanded,
-                },
-                "files": {
-                    "collapsed": not self.files_content_widget.isVisible(),
-                },
-                "preview": {
-                    "first_row_header": self.edit_content_panel.is_first_row_header(),
-                },
+            "side_panel": {
+                "collapsed": not self.sidebar.isVisible(),
+            },
+            "translate_panel": self.translation_panel.get_config(),
+            "filter_panel": filter_panel_cfg,
+            "status_panel": {
+                "expanded_height": self.status_expanded_height,
+                "collapsed": not self.status_expanded,
+            },
+            "files_panel": {
+                "collapsed": not self.files_content_widget.isVisible(),
+                "first_row_header": self.edit_content_panel.is_first_row_header(),
             },
         }
+
+    def save_settings(self: "MainWindow") -> None:
+        """
+        儲存設定的主要入口。
+        
+        【儲存時機】
+        僅在以下特定時期呼叫：
+        1. 載入檔案完成 (worker_mixin.py - on_worker_success)
+        2. 執行功能面板的大型任務（會鎖定UI的任務，如翻譯、過濾） (translation_panel.py - start_translation_task / edit_panel.py - on_filter_clicked)
+        3. 關閉程式 (ui.py - closeEvent)
+        (已移除在 UI 佈局微調如折疊面板、切換 tab 時的即時儲存)
+
+        【儲存條件】
+        - 僅在當前 UI 設定狀態與 loaded_settings 有所變更時，才寫入 settings.json。
+        - 若未載入 CSV 檔案，過濾規則（Rules）會沿用載入時的暫存值，防範因欄位未初始化而重置。
+        """
+        data = self.get_current_settings_dict()
+
+        # 比對是否有變更，若無變更則不寫入檔案
+        if getattr(self, "loaded_settings", {}) == data:
+            return
+
         self.settings_manager.save(data)
+        self.loaded_settings = data
 
     # ── 設定還原 ──────────────────────────────────────────────────────────────
 
     def restore_settings(self: "MainWindow") -> None:
         data = self.settings_manager.load()
+        self.loaded_settings = data if data else {}
         if not data:
             return
 
@@ -122,22 +151,31 @@ class SettingsMixin:
                 self.txt_tgt_col.setText(m_data.get("tgt_col", "2"))
 
                 active_tab = m_data.get("active_tab", "translate")
-                if active_tab == "hidden":
-                    self.sidebar.setVisible(False)
-                    self.v_line.setVisible(False)
-                    self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
-                    self.btn_translate.setProperty("active", False)
-                    self.btn_edit.setProperty("active", False)
-                else:
-                    self.switch_sidebar_tab(active_tab)
 
-            # 3. 恢復面板組態
-            if "panels" in data:
-                p_data = data["panels"]
-                self.translation_panel.set_config(p_data.get("translate", {}))
-                self.edit_panel.set_config(p_data.get("edit", {}))
+            # 3. 恢復側邊欄收合狀態與功能分頁
+            collapsed = False
+            if "side_panel" in data:
+                side_cfg = data["side_panel"]
+                collapsed = side_cfg.get("collapsed", False)
 
-                status_cfg = p_data.get("status", {})
+            if collapsed:
+                self.sidebar.setVisible(False)
+                self.v_line.setVisible(False)
+                self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
+                self.btn_translate.setProperty("active", False)
+                self.btn_edit.setProperty("active", False)
+            else:
+                self.switch_sidebar_tab(active_tab)
+
+            # 4. 恢復面板組態
+            if "translate_panel" in data:
+                self.translation_panel.set_config(data["translate_panel"])
+
+            if "filter_panel" in data:
+                self.edit_panel.set_config(data["filter_panel"])
+
+            if "status_panel" in data:
+                status_cfg = data["status_panel"]
                 self.status_expanded_height = status_cfg.get("expanded_height", 250)
                 status_collapsed = status_cfg.get("collapsed", False)
                 self.status_expanded = not status_collapsed
@@ -150,7 +188,8 @@ class SettingsMixin:
                     self.grp_status.setMinimumHeight(140)
                     self.grp_status.setMaximumHeight(16777215)
 
-                files_cfg = p_data.get("files", {})
+            if "files_panel" in data:
+                files_cfg = data["files_panel"]
                 files_collapsed = files_cfg.get("collapsed", False)
                 if files_collapsed:
                     self.files_content_widget.setVisible(False)
@@ -159,9 +198,8 @@ class SettingsMixin:
                     self.files_content_widget.setVisible(True)
                     self.btn_toggle_files.setText("▲")
 
-                preview_cfg = p_data.get("preview", {})
-                is_hdr = preview_cfg.get("first_row_header", False)
-                self.edit_content_panel.set_first_row_header(is_hdr)
+                first_row_hdr = files_cfg.get("first_row_header", False)
+                self.edit_content_panel.set_first_row_header(first_row_hdr)
 
             self.update_start_button_ui()
 
@@ -174,7 +212,6 @@ class SettingsMixin:
         collapsed = self.files_content_widget.isVisible()
         self.files_content_widget.setVisible(not collapsed)
         self.btn_toggle_files.setText("▼" if collapsed else "▲")
-        self.save_settings()
 
     def toggle_status_panel(self: "MainWindow") -> None:
         self.status_expanded = not self.status_expanded
@@ -210,8 +247,6 @@ class SettingsMixin:
             if len(sizes) > 1:
                 total_h = sum(sizes)
                 self.right_splitter.setSizes([total_h - header_h, header_h])
-
-        self.save_settings()
 
     # ── Splitter 事件 ─────────────────────────────────────────────────────────
 

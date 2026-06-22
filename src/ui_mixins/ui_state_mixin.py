@@ -133,7 +133,6 @@ class UiStateMixin:
         self.btn_edit.style().polish(self.btn_edit)
 
         self.update_start_button_ui()
-        self.save_settings()
 
     def get_active_panel(self: "MainWindow"):
         if self.sidebar.isVisible() and self.sidebar_stacked.currentWidget() == self.edit_panel:

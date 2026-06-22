@@ -191,4 +191,8 @@ class TranslationPanel(BasePanel):
             QMessageBox.warning(self, "輸入錯誤", err_msg)
             return
 
+        # 儲存設定（開始任務時期）
+        if self.context and hasattr(self.context, "_win"):
+            self.context._win.save_settings()
+
         self.request_start_worker.emit(worker_instance)

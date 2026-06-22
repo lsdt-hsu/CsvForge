@@ -158,6 +158,13 @@ class WorkerMixin:
                     self.edit_panel.update_column_dropdowns(num_cols, headers)
                     self.translation_panel.show_controls()
 
+                    # 重新套用暫存設定中的 rules 設定，因為此時已經有欄位資訊了
+                    if getattr(self, "loaded_settings", {}) and "filter_panel" in self.loaded_settings:
+                        self.edit_panel.set_config(self.loaded_settings["filter_panel"])
+
+                    # 儲存設定（載入檔案時期）
+                    self.save_settings()
+
             if not isinstance(self.worker, CSVEditWorker):
                 title, msg = self.worker.get_success_message(out_path)
                 QMessageBox.information(self, title, msg)

@@ -45,6 +45,7 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin, QMainWi
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json"
         )
         self.settings_manager = SettingsManager(self.settings_path)
+        self.loaded_settings = {}
 
         self.status_expanded = True
         self.status_expanded_height = 250
