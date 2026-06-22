@@ -22,15 +22,17 @@ from ui_constants import (
     INPUT_START_ROW_MAX_WIDTH, INPUT_END_ROW_MAX_WIDTH, INPUT_COL_MAX_WIDTH,
     SWAP_ICON_SIZE,
 )
-from ui_mixins import UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin
+from ui_mixins import UiStateMixin, SettingsMixin, WorkerMixin
+from io_panel import IoPanel
+from status_panel import StatusPanel
+from left_panel import LeftPanel
 
 
-class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin, QMainWindow):
+class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
     """
     主視窗：負責 UI 佈局建構與初始化。
     各項業務邏輯透過 Mixin 繼承組合：
       UiStateMixin    — 日誌、控制項啟停、分頁切換、按鈕狀態
-      FileOpsMixin    — 檔案操作與存檔
       SettingsMixin   — 設定持久化與 Splitter 管理
       WorkerMixin     — Worker 生命週期管理
     """
@@ -66,80 +68,29 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin, QMainWi
         # 4. 各面板自行從 AppContext 取得組態並還原 UI 狀態
         self._restore_all_panel_configs()
 
-    # ── 左側面板建構 ──────────────────────────────────────────────────────────
+    def init_ui(self):
+        self.setWindowTitle("CsvTranslator - CSV 批次翻譯工具")
+        self.resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
+        self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
 
-    def _build_left_panel(self):
-        self.left_container = QFrame()
-        self.left_container.setObjectName("leftContainer")
-        self.left_container.setFixedWidth(SIDEBAR_FULL_WIDTH)
-
-        left_layout = QHBoxLayout(self.left_container)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(0)
-
-        # 1. 活動列 (QWidget)
-        self.activity_bar = QWidget()
-        self.activity_bar.setObjectName("activityBarWidget")
-        self.activity_bar.setFixedWidth(ACTIVITY_BAR_WIDTH)
-
-        activity_layout = QVBoxLayout(self.activity_bar)
-        activity_layout.setContentsMargins(10, 15, 10, 15)
-        activity_layout.setSpacing(10)
-        activity_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        # 翻譯按鈕
-        translate_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "translate.png"
-        )
-        self.btn_translate = QPushButton()
-        self.btn_translate.setObjectName("btnActivityTranslate")
-        self.btn_translate.setFixedSize(40, 40)
-        self.btn_translate.setIcon(QIcon(translate_icon_path))
-        self.btn_translate.setIconSize(QSize(40, 40))
-        self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_translate.clicked.connect(lambda: self.switch_sidebar_tab("translate"))
-        self.btn_translate.setProperty("active", True)
-        activity_layout.addWidget(self.btn_translate)
-
-        # 編輯按鈕
-        edit_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "edit.png"
-        )
-        self.btn_edit = QPushButton()
-        self.btn_edit.setObjectName("btnActivityEdit")
-        self.btn_edit.setFixedSize(40, 40)
-        self.btn_edit.setIcon(QIcon(edit_icon_path))
-        self.btn_edit.setIconSize(QSize(40, 40))
-        self.btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_edit.clicked.connect(lambda: self.switch_sidebar_tab("edit"))
-        self.btn_edit.setProperty("active", False)
-        activity_layout.addWidget(self.btn_edit)
-
-        activity_layout.addStretch()
-
-        left_layout.addWidget(self.activity_bar)
-
-        # 2. 垂直分割線 (QWidget)
-        self.v_line = QWidget()
-        self.v_line.setObjectName("sidebarSeparator")
-        self.v_line.setFixedWidth(1)
-        left_layout.addWidget(self.v_line)
-
-        # 3. 側邊欄 (QWidget)
-        self.sidebar = QWidget()
-        self.sidebar.setObjectName("leftSidebarWidget")
-        self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
-
-        sidebar_layout = QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(15, 15, 15, 15)
-        sidebar_layout.setSpacing(15)
-
-        # 堆疊式容器 (QStackedWidget)
-        self.sidebar_stacked = QStackedWidget()
-
+        # 建立 AppContext (必須先建立，因為面板需要使用)
         from base_panel import AppContext
         self.context = AppContext(self)
 
+        main_widget = QWidget()
+        main_widget.setObjectName("mainContainer")
+        self.setCentralWidget(main_widget)
+
+        main_layout = QHBoxLayout(main_widget)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
+
+        # 建立獨立面板
+        self.left_panel = LeftPanel(parent=self, context=self.context)
+        self.io_panel = IoPanel(parent=self, context=self.context)
+        self.status_panel = StatusPanel(parent=self, context=self.context)
+
+        # 建立子面板並註冊到 LeftPanel
         self.translation_panel = TranslationPanel(context=self.context)
         self.translation_panel.btn_start.clicked.connect(self.on_start_button_clicked)
         self.translation_panel.request_lock_ui.connect(self.lock_ui_from_panel)
@@ -155,219 +106,19 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin, QMainWi
         self.edit_panel.log_emitted.connect(self.on_panel_log)
         self.edit_panel.request_start_worker.connect(self.on_request_start_worker)
 
-        self.sidebar_stacked.addWidget(self.translation_panel)
-        self.sidebar_stacked.addWidget(self.edit_panel)
+        self.left_panel.add_panel("translate", self.translation_panel)
+        self.left_panel.add_panel("edit", self.edit_panel)
 
-        sidebar_layout.addWidget(self.sidebar_stacked, stretch=1)
-
-        left_layout.addWidget(self.sidebar)
-
-    # ── 右側上半部：輸入與輸出面板 ───────────────────────────────────────────
-
-    def _build_files_group(self):
-        grp_files = QFrame()
-        grp_files.setObjectName("rightFrame")
-        grp_files_layout = QVBoxLayout(grp_files)
-        grp_files_layout.setContentsMargins(15, 12, 15, 12)
-        grp_files_layout.setSpacing(10)
-
-        # 標題與展開/收合列
-        title_row_widget = QWidget()
-        title_row_widget.setObjectName("titleRowWidget")
-        title_layout = QHBoxLayout(title_row_widget)
-        title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(10)
-
-        self.btn_toggle_files = QPushButton("▲")
-        self.btn_toggle_files.setObjectName("btnToggleFiles")
-        self.btn_toggle_files.setFixedSize(20, 20)
-        self.btn_toggle_files.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_toggle_files.clicked.connect(self.toggle_files_panel)
-        title_layout.addWidget(self.btn_toggle_files, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        lbl_files_sec = QLabel("輸入與輸出")
-        lbl_files_sec.setObjectName("sectionHeader")
-        title_layout.addWidget(lbl_files_sec, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        title_layout.addStretch()
-
-        grp_files_layout.addWidget(title_row_widget)
-
-        # 內容容器
-        self.files_content_widget = QWidget()
-        self.files_content_widget.setObjectName("filesContentWidget")
-        files_content_layout = QVBoxLayout(self.files_content_widget)
-        files_content_layout.setContentsMargins(0, 0, 0, 0)
-        files_content_layout.setSpacing(10)
-
-        # 第一列：來源與輸出路徑
-        row1_layout = QHBoxLayout()
-        row1_layout.setSpacing(15)
-
-        # 來源
-        src_layout = QHBoxLayout()
-        lbl_src = QLabel("來源 CSV：")
-        self.txt_src_path = QLineEdit()
-        self.txt_src_path.setPlaceholderText("選擇來源 CSV...")
-        self.txt_src_path.textChanged.connect(self.on_source_file_changed)
-        self.btn_src_browse = QPushButton("瀏覽...")
-        self.btn_src_browse.setObjectName("btnBrowse")
-        self.btn_src_browse.clicked.connect(self.browse_source_file)
-        src_layout.addWidget(lbl_src)
-        src_layout.addWidget(self.txt_src_path)
-        src_layout.addWidget(self.btn_src_browse)
-        row1_layout.addLayout(src_layout)
-
-        # 左右交換按鈕
-        self.btn_swap = QPushButton()
-        self.btn_swap.setObjectName("btnSwap")
-        self.btn_swap.setFixedSize(30, 30)
-        swap_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "swap.png"
-        )
-        self.btn_swap.setIcon(QIcon(swap_icon_path))
-        self.btn_swap.setIconSize(QSize(SWAP_ICON_SIZE, SWAP_ICON_SIZE))
-        self.btn_swap.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_swap.clicked.connect(self.swap_csv_paths)
-        row1_layout.addWidget(self.btn_swap)
-
-        # 輸出
-        out_layout = QHBoxLayout()
-        lbl_out = QLabel("輸出 CSV：")
-        self.txt_out_path = QLineEdit()
-        self.txt_out_path.setPlaceholderText("選擇輸出 CSV...")
-        self.btn_out_browse = QPushButton("瀏覽...")
-        self.btn_out_browse.setObjectName("btnBrowse")
-        self.btn_out_browse.clicked.connect(self.browse_output_file)
-        out_layout.addWidget(lbl_out)
-        out_layout.addWidget(self.txt_out_path)
-        out_layout.addWidget(self.btn_out_browse)
-        row1_layout.addLayout(out_layout)
-
-        files_content_layout.addLayout(row1_layout)
-
-        # 第二列：行號、欄號與開始按鈕
-        row2_layout = QHBoxLayout()
-        row2_layout.setSpacing(15)
-
-        lbl_start_row = QLabel("起始行號：")
-        self.txt_start_row = QLineEdit("2")
-        self.txt_start_row.setValidator(QIntValidator(1, 9999999))
-        self.txt_start_row.setMaximumWidth(INPUT_START_ROW_MAX_WIDTH)
-
-        lbl_end_row = QLabel("結束行號：")
-        self.txt_end_row = QLineEdit()
-        self.txt_end_row.setPlaceholderText("預設至檔尾")
-        self.txt_end_row.setValidator(QIntValidator(1, 9999999))
-        self.txt_end_row.setMaximumWidth(INPUT_END_ROW_MAX_WIDTH)
-
-        lbl_src_col = QLabel("來源欄號：")
-        self.txt_src_col = QLineEdit("1")
-        self.txt_src_col.setValidator(QIntValidator(1, 9999))
-        self.txt_src_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
-
-        lbl_tgt_col = QLabel("目標欄號：")
-        self.txt_tgt_col = QLineEdit("2")
-        self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
-        self.txt_tgt_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
-
-        self.btn_start = QPushButton("載入")
-        self.btn_start.setObjectName("btnStart")
-        self.btn_start.setMinimumWidth(START_BUTTON_MIN_WIDTH)
-        self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_start.clicked.connect(self.on_start_button_clicked)
-
-        row2_layout.addWidget(lbl_start_row)
-        row2_layout.addWidget(self.txt_start_row)
-        row2_layout.addWidget(lbl_end_row)
-        row2_layout.addWidget(self.txt_end_row)
-        row2_layout.addWidget(lbl_src_col)
-        row2_layout.addWidget(self.txt_src_col)
-        row2_layout.addWidget(lbl_tgt_col)
-        row2_layout.addWidget(self.txt_tgt_col)
-        row2_layout.addStretch()
-        row2_layout.addWidget(self.btn_start)
-
-        files_content_layout.addLayout(row2_layout)
-        grp_files_layout.addWidget(self.files_content_widget)
-        return grp_files
-
-    # ── 右側下半部：執行狀態與日誌面板 ─────────────────────────────────────
-
-    def _build_status_group(self):
-        grp_status = QFrame()
-        grp_status.setObjectName("rightFrame")
-        grp_status_layout = QVBoxLayout(grp_status)
-        grp_status_layout.setContentsMargins(15, 15, 15, 15)
-        grp_status_layout.setSpacing(8)
-
-        # 狀態標頭列
-        self.status_header_widget = QWidget()
-        self.status_header_widget.setObjectName("statusHeaderWidget")
-        status_header_layout = QHBoxLayout(self.status_header_widget)
-        status_header_layout.setContentsMargins(0, 0, 0, 0)
-        status_header_layout.setSpacing(15)
-
-        self.btn_toggle_status = QPushButton("▲")
-        self.btn_toggle_status.setObjectName("btnToggleStatus")
-        self.btn_toggle_status.setFixedSize(20, 20)
-        self.btn_toggle_status.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_toggle_status.clicked.connect(self.toggle_status_panel)
-        status_header_layout.addWidget(self.btn_toggle_status, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        lbl_log_title = QLabel("執行狀態與日誌")
-        lbl_log_title.setObjectName("sectionHeader")
-        status_header_layout.addWidget(lbl_log_title, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        status_header_layout.addStretch()
-
-        # 狀態摘要（已用時間 + 狀態）
-        self.elapsed_time_str = "00:00:00"
-        self.task_status_str = "就緒"
-        self.lbl_status_summary = QLabel("已用時間：00:00:00 | 狀態：就緒")
-        status_header_layout.addWidget(self.lbl_status_summary, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        # 進度條
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setFixedWidth(PROGRESS_BAR_WIDTH)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("0/0")
-        status_header_layout.addWidget(self.progress_bar, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        grp_status_layout.addWidget(self.status_header_widget)
-
-        # 日誌輸出框
-        self.txt_log = QTextEdit()
-        self.txt_log.setObjectName("logConsole")
-        self.txt_log.setReadOnly(True)
-        grp_status_layout.addWidget(self.txt_log)
-        return grp_status
-
-    # ── 主視窗初始化 ─────────────────────────────────────────────────────────
-
-    def init_ui(self):
-        self.setWindowTitle("CsvTranslator - CSV 批次翻譯工具")
-        self.resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
-        self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
-
-        main_widget = QWidget()
-        main_widget.setObjectName("mainContainer")
-        self.setCentralWidget(main_widget)
-
-        main_layout = QHBoxLayout(main_widget)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
-
-        # 左側大容器：活動列 + 側邊欄
-        self._build_left_panel()
-        main_layout.addWidget(self.left_container)
+        main_layout.addWidget(self.left_panel)
 
         # 右側面板
         right_panel = QVBoxLayout()
         right_panel.setSpacing(15)
+        right_panel.addWidget(self.io_panel)
 
-        self.grp_files = self._build_files_group()
-        right_panel.addWidget(self.grp_files)
+        # 連接 IO Panel 訊號
+        self.io_panel.load_clicked.connect(self.on_start_button_clicked)
+        self.io_panel.source_file_changed.connect(self.on_source_file_changed)
 
         # 來源預覽與日誌面板採用 QSplitter 垂直排列
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -379,11 +130,12 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin, QMainWi
         self.edit_content_panel.header_state_changed.connect(self.on_header_state_changed)
         self.edit_content_panel.request_start_worker.connect(self.on_request_start_worker)
 
-        self.grp_status = self._build_status_group()
-        self.grp_status.setMinimumHeight(140)
+        self.status_panel.setMinimumHeight(140)
+        # 連接 StatusPanel 訊號
+        self.status_panel.toggle_clicked.connect(self.on_status_panel_toggle)
 
         self.right_splitter.addWidget(self.edit_content_panel)
-        self.right_splitter.addWidget(self.grp_status)
+        self.right_splitter.addWidget(self.status_panel)
         self.right_splitter.setStretchFactor(0, 1)
         self.right_splitter.setStretchFactor(1, 0)
         self.right_splitter.splitterMoved.connect(self.on_splitter_moved)
@@ -392,6 +144,81 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin, QMainWi
         main_layout.addLayout(right_panel, stretch=1)
 
         self.apply_style()
+
+    def on_status_panel_toggle(self, collapsed: bool) -> None:
+        cfg = self.context.status_panel_config
+        if not collapsed:
+            self.status_panel.setMinimumHeight(140)
+            self.status_panel.setMaximumHeight(16777215)
+
+            sizes = self.right_splitter.sizes()
+            if len(sizes) > 1:
+                total_h = sum(sizes)
+                status_h = max(140, cfg.expanded_height)
+                editor_h = max(200, total_h - status_h)
+                if editor_h < 200:
+                    editor_h = 200
+                    status_h = max(140, total_h - 200)
+                self.right_splitter.setSizes([editor_h, status_h])
+        else:
+            sizes = self.right_splitter.sizes()
+            if len(sizes) > 1 and sizes[1] > 100:
+                cfg.expanded_height = sizes[1]
+
+            header_h = self.status_panel.header_height()
+            self.status_panel.setMinimumHeight(0)
+            self.status_panel.setMaximumHeight(header_h)
+
+            sizes = self.right_splitter.sizes()
+            if len(sizes) > 1:
+                total_h = sum(sizes)
+                self.right_splitter.setSizes([total_h - header_h, header_h])
+
+    def on_source_file_changed(self, file_path: str) -> None:
+        self.io_panel.txt_end_row.setPlaceholderText("預設至檔尾")
+        self.edit_content_panel.clear()
+        self.edit_panel.reset_panel()
+        self.translation_panel.reset_panel()
+        if self.worker and hasattr(self.worker, "loaded_rows"):
+            self.worker.loaded_rows = []
+
+    def save_edit_data(self) -> None:
+        out_path = self.context.output_path
+        if not out_path:
+            QMessageBox.warning(self, "錯誤", "請指定輸出 CSV 檔案路徑！")
+            return
+
+        src_path = self.context.source_path
+        if src_path and out_path and src_path == out_path:
+            QMessageBox.warning(
+                self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法存檔！請變更輸出路徑。"
+            )
+            return
+
+        all_rows = self.edit_content_panel.get_all_rows()
+        if not all_rows:
+            QMessageBox.warning(self, "錯誤", "沒有資料可儲存。")
+            return
+
+        delimiter = self.edit_content_panel.get_delimiter()
+
+        try:
+            out_dir = os.path.dirname(out_path)
+            if out_dir and not os.path.exists(out_dir):
+                os.makedirs(out_dir, exist_ok=True)
+
+            with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
+                import csv
+                writer = csv.writer(f, delimiter=delimiter)
+                writer.writerows(all_rows)
+
+            self.edit_content_panel.set_modified(False)
+            self.append_log("SUCCESS", f"編輯資料存檔成功！已寫入至：{out_path}")
+            QMessageBox.information(self, "成功", f"存檔成功！\n檔案已儲存至：\n{out_path}")
+
+        except Exception as e:
+            self.append_log("ERROR", f"存檔失敗：{str(e)}")
+            QMessageBox.critical(self, "存檔失敗", f"存檔失敗：\n{str(e)}")
 
     # ── QSS 樣式 ─────────────────────────────────────────────────────────────
 

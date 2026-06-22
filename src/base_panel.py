@@ -63,27 +63,27 @@ class AppContext:
 
     @property
     def source_path(self) -> str:
-        return self._win.txt_src_path.text().strip()
+        return self._win.io_panel.txt_src_path.text().strip()
 
     @property
     def output_path(self) -> str:
-        return self._win.txt_out_path.text().strip()
+        return self._win.io_panel.txt_out_path.text().strip()
 
     @property
     def start_row(self) -> str:
-        return self._win.txt_start_row.text().strip()
+        return self._win.io_panel.txt_start_row.text().strip()
 
     @property
     def end_row(self) -> str:
-        return self._win.txt_end_row.text().strip()
+        return self._win.io_panel.txt_end_row.text().strip()
 
     @property
     def source_col(self) -> str:
-        return self._win.txt_src_col.text().strip()
+        return self._win.io_panel.txt_src_col.text().strip()
 
     @property
     def target_col(self) -> str:
-        return self._win.txt_tgt_col.text().strip()
+        return self._win.io_panel.txt_tgt_col.text().strip()
 
     @property
     def is_first_row_header(self) -> bool:

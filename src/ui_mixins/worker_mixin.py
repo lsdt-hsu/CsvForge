@@ -28,10 +28,10 @@ class WorkerMixin:
         self.worker = worker_instance
 
         # 重置 UI 顯示狀態
-        self.txt_log.clear()
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("0/0")
+        self.status_panel.txt_log.clear()
+        self.status_panel.progress_bar.setRange(0, 0)
+        self.status_panel.progress_bar.setValue(0)
+        self.status_panel.progress_bar.setFormat("0/0")
         self.elapsed_time_str = "00:00:00"
 
         # 根據 Worker 型別設定狀態文字
@@ -49,9 +49,9 @@ class WorkerMixin:
             self.edit_panel.write_log("INFO", "開始執行 CSV 資料過濾...")
             
             rows_count = len(self.context.all_rows)
-            self.progress_bar.setRange(0, rows_count)
-            self.progress_bar.setValue(0)
-            self.progress_bar.setFormat(f"0/{rows_count}")
+            self.status_panel.progress_bar.setRange(0, rows_count)
+            self.status_panel.progress_bar.setValue(0)
+            self.status_panel.progress_bar.setFormat(f"0/{rows_count}")
         else:
             self.task_status_str = "執行中..."
 
@@ -90,14 +90,10 @@ class WorkerMixin:
         active_panel.lock_ui(True)
 
     def update_status_summary(self: "MainWindow") -> None:
-        self.lbl_status_summary.setText(
-            f"已用時間：{self.elapsed_time_str} | 狀態：{self.task_status_str}"
-        )
+        self.status_panel.update_status(self.elapsed_time_str, self.task_status_str)
 
     def on_worker_progress(self: "MainWindow", current: int, total: int) -> None:
-        self.progress_bar.setRange(0, total)
-        self.progress_bar.setValue(current)
-        self.progress_bar.setFormat(f"{current}/{total}")
+        self.status_panel.update_progress(current, total)
 
     def update_elapsed_time(self: "MainWindow") -> None:
         elapsed = int(time.time() - self.start_time)
@@ -149,7 +145,7 @@ class WorkerMixin:
 
                 # 更新結束行號 Placeholder
                 total_rows = len(self.worker.loaded_rows)
-                self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
+                self.io_panel.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
 
                 # 更新過濾面板與翻譯面板控制項
                 loaded_rows = self.worker.loaded_rows

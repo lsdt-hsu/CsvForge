@@ -49,73 +49,13 @@ class SettingsMixin:
         在 SettingsManager.load() 完成後、視窗顯示前由 __init__ 呼叫。
         """
         try:
-            self._restore_io_panel()
-            self._restore_side_panel()
-            self._restore_status_panel()
+            self.io_panel.apply_config(self.context.io_panel_config)
+            self.left_panel.apply_config(self.context.side_panel_config, self.context.main_config)
+            self.status_panel.apply_config(self.context.status_panel_config)
             self.edit_content_panel.restore_from_config()
             self.update_start_button_ui()
         except Exception:
             pass  # 設定還原失敗時靜默略過，避免影響程式啟動
-
-    def _restore_io_panel(self: "MainWindow") -> None:
-        """從 IoPanelConfig 還原輸入與輸出面板的控件初始值。"""
-        cfg = self.context.io_panel_config
-
-        self.txt_src_path.setText(cfg.source_path)
-        self.txt_out_path.setText(cfg.output_path)
-
-        # 安全檢查：來源與輸出路徑不可相同
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
-        if src_path and out_path and src_path == out_path:
-            QMessageBox.warning(
-                self,
-                "路徑重複",
-                "偵測到儲存的來源 CSV 與輸出 CSV 路徑相同！已自動清空輸出路徑以防檔案毀損。",
-            )
-            self.txt_out_path.clear()
-
-        self.txt_start_row.setText(cfg.start_row)
-        self.txt_end_row.setText(cfg.end_row)
-        self.txt_src_col.setText(cfg.src_col)
-        self.txt_tgt_col.setText(cfg.tgt_col)
-
-        # 折疊狀態
-        if cfg.collapsed:
-            self.files_content_widget.setVisible(False)
-            self.btn_toggle_files.setText("▼")
-        else:
-            self.files_content_widget.setVisible(True)
-            self.btn_toggle_files.setText("▲")
-
-    def _restore_side_panel(self: "MainWindow") -> None:
-        """從 SidePanelConfig 還原側邊欄折疊狀態；從 MainConfig 還原功能分頁。"""
-        side_cfg = self.context.side_panel_config
-        main_cfg = self.context.main_config
-
-        if side_cfg.collapsed:
-            self.sidebar.setVisible(False)
-            self.v_line.setVisible(False)
-            self.left_container.setFixedWidth(SIDEBAR_MIN_WIDTH)
-            self.btn_translate.setProperty("active", False)
-            self.btn_edit.setProperty("active", False)
-        else:
-            self.switch_sidebar_tab(main_cfg.active_tab, force_expand=True)
-
-    def _restore_status_panel(self: "MainWindow") -> None:
-        """從 StatusPanelConfig 還原日誌面板的展開/收合狀態。"""
-        cfg = self.context.status_panel_config
-
-        if cfg.collapsed:
-            self.txt_log.setVisible(False)
-            self.btn_toggle_status.setText("▼")
-            self.grp_status.setMinimumHeight(0)
-            self.grp_status.setMaximumHeight(50)
-        else:
-            self.txt_log.setVisible(True)
-            self.btn_toggle_status.setText("▲")
-            self.grp_status.setMinimumHeight(140)
-            self.grp_status.setMaximumHeight(16777215)
 
     # ── 設定儲存 ──────────────────────────────────────────────────────────────
 
@@ -132,10 +72,9 @@ class SettingsMixin:
         若所有 Config 的 dirty == False，SettingsManager.save() 將直接回傳，不寫入檔案。
         """
         self._update_window_config()
-        self._update_main_config()
-        self._update_side_panel_config()
-        self._update_io_panel_config()
-        self._update_status_panel_config()
+        self.left_panel.update_config(self.context.side_panel_config, self.context.main_config)
+        self.io_panel.update_config(self.context.io_panel_config)
+        self.status_panel.update_config(self.context.status_panel_config, self.right_splitter.sizes())
         SettingsManager.save(self._configs, self.settings_path)
 
     def _update_window_config(self: "MainWindow") -> None:
@@ -148,88 +87,6 @@ class SettingsMixin:
         cfg.height = geom.height()
         cfg.is_maximized = is_max
         cfg.dirty = True
-
-    def _update_main_config(self: "MainWindow") -> None:
-        if self.sidebar_stacked.currentWidget() == self.translation_panel:
-            active_tab = "translate"
-        else:
-            active_tab = "edit"
-        cfg = self.context.main_config
-        cfg.active_tab = active_tab
-        cfg.dirty = True
-
-    def _update_side_panel_config(self: "MainWindow") -> None:
-        cfg = self.context.side_panel_config
-        cfg.collapsed = not self.sidebar.isVisible()
-        cfg.dirty = True
-
-    def _update_io_panel_config(self: "MainWindow") -> None:
-        cfg = self.context.io_panel_config
-        cfg.source_path = self.txt_src_path.text().strip()
-        cfg.output_path = self.txt_out_path.text().strip()
-        cfg.start_row = self.txt_start_row.text()
-        cfg.end_row = self.txt_end_row.text()
-        cfg.src_col = self.txt_src_col.text()
-        cfg.tgt_col = self.txt_tgt_col.text()
-        cfg.collapsed = not self.files_content_widget.isVisible()
-        cfg.dirty = True
-
-    def _update_status_panel_config(self: "MainWindow") -> None:
-        cfg = self.context.status_panel_config
-        # 若目前展開，先更新最新展開高度
-        if not cfg.collapsed:
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1 and sizes[1] > 0:
-                cfg.expanded_height = sizes[1]
-        cfg.dirty = True
-
-    # ── 面板展開/收合 ─────────────────────────────────────────────────────────
-
-    def toggle_files_panel(self: "MainWindow") -> None:
-        collapsed = self.files_content_widget.isVisible()
-        self.files_content_widget.setVisible(not collapsed)
-        self.btn_toggle_files.setText("▼" if collapsed else "▲")
-        # 即時更新 Config dirty flag（切換本身不觸發存檔）
-        self.context.io_panel_config.collapsed = collapsed
-        self.context.io_panel_config.dirty = True
-
-    def toggle_status_panel(self: "MainWindow") -> None:
-        cfg = self.context.status_panel_config
-        cfg.collapsed = not cfg.collapsed
-        cfg.dirty = True
-
-        self.txt_log.setVisible(not cfg.collapsed)
-        self.btn_toggle_status.setText("▲" if not cfg.collapsed else "▼")
-
-        if not cfg.collapsed:
-            self.grp_status.setMinimumHeight(140)
-            self.grp_status.setMaximumHeight(16777215)
-
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1:
-                total_h = sum(sizes)
-                status_h = max(140, cfg.expanded_height)
-                editor_h = max(200, total_h - status_h)
-                if editor_h < 200:
-                    editor_h = 200
-                    status_h = max(140, total_h - 200)
-                self.right_splitter.setSizes([editor_h, status_h])
-        else:
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1 and sizes[1] > 100:
-                cfg.expanded_height = sizes[1]
-
-            header_h = self.status_header_widget.sizeHint().height() + 30
-            if header_h < 50:
-                header_h = 50
-
-            self.grp_status.setMinimumHeight(0)
-            self.grp_status.setMaximumHeight(header_h)
-
-            sizes = self.right_splitter.sizes()
-            if len(sizes) > 1:
-                total_h = sum(sizes)
-                self.right_splitter.setSizes([total_h - header_h, header_h])
 
     # ── Splitter 事件 ─────────────────────────────────────────────────────────
 
@@ -257,8 +114,8 @@ class SettingsMixin:
         available_h = total_h - handle_w
 
         if not cfg.collapsed:
-            self.grp_status.setMinimumHeight(140)
-            self.grp_status.setMaximumHeight(16777215)
+            self.status_panel.setMinimumHeight(140)
+            self.status_panel.setMaximumHeight(16777215)
             status_h = max(140, cfg.expanded_height)
             editor_h = max(200, available_h - status_h)
             if editor_h < 200:
@@ -266,10 +123,9 @@ class SettingsMixin:
                 status_h = max(140, available_h - 200)
             self.right_splitter.setSizes([editor_h, status_h])
         else:
-            header_h = self.status_header_widget.sizeHint().height() + 30
-            if header_h < 50:
-                header_h = 50
-            self.grp_status.setMinimumHeight(0)
-            self.grp_status.setMaximumHeight(header_h)
+            header_h = self.status_panel.header_height()
+            self.status_panel.setMinimumHeight(0)
+            self.status_panel.setMaximumHeight(header_h)
             editor_h = max(200, available_h - header_h)
             self.right_splitter.setSizes([editor_h, header_h])
+
