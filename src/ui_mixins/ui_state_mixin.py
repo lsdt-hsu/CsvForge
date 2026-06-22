@@ -89,7 +89,7 @@ class UiStateMixin:
 
         self.update_start_button_ui()
 
-    def switch_sidebar_tab(self: "MainWindow", tab_name: str) -> None:
+    def switch_sidebar_tab(self: "MainWindow", tab_name: str, force_expand: bool = False) -> None:
         if self.is_ui_locked:
             return
 
@@ -106,7 +106,7 @@ class UiStateMixin:
         if is_task_running and not is_same_tab:
             return
 
-        if self.sidebar.isVisible() and is_same_tab:
+        if not force_expand and self.sidebar.isVisible() and is_same_tab:
             # 收合
             self.sidebar.setVisible(False)
             self.v_line.setVisible(False)

@@ -100,7 +100,7 @@ class SettingsMixin:
             self.btn_translate.setProperty("active", False)
             self.btn_edit.setProperty("active", False)
         else:
-            self.switch_sidebar_tab(main_cfg.active_tab)
+            self.switch_sidebar_tab(main_cfg.active_tab, force_expand=True)
 
     def _restore_status_panel(self: "MainWindow") -> None:
         """從 StatusPanelConfig 還原日誌面板的展開/收合狀態。"""
