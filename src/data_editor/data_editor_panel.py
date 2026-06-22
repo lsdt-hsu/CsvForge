@@ -262,6 +262,10 @@ class DataEditorPanel(BasePanel):
         self.table_model.set_is_header(is_checked)
         self.resize_columns_fast()
         self.header_state_changed.emit(is_checked)
+        # 直接操作 DataEditorConfig（資料相依性），見 settings_manager.py 模組說明
+        if self.context:
+            self.context.data_editor_config.first_row_header = is_checked
+            self.context.data_editor_config.dirty = True
 
     def load_data(self, all_rows, start_row, end_row, file_path=None):
         self.table_model.set_data(
@@ -316,8 +320,19 @@ class DataEditorPanel(BasePanel):
     def is_first_row_header(self) -> bool:
         return self.chk_first_row_header.isChecked()
 
-    def set_first_row_header(self, checked: bool):
+    def restore_from_config(self) -> None:
+        """
+        從 AppContext 的 DataEditorConfig 還原面板初始狀態。
+        由 MainWindow._restore_all_panel_configs() 在啟動時呼叫。
+        """
+        if not self.context:
+            return
+        checked = self.context.data_editor_config.first_row_header
+        # blockSignals 避免觸發 on_header_checkbox_changed 時誤設 dirty flag
+        self.chk_first_row_header.blockSignals(True)
         self.chk_first_row_header.setChecked(checked)
+        self.table_model.set_is_header(checked)
+        self.chk_first_row_header.blockSignals(False)
 
     def clear(self):
         self.table_model.set_data([], 1, None, False)

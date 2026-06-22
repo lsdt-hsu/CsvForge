@@ -1,10 +1,27 @@
+"""
+translation_panel.py — 翻譯面板
+
+設計決策（Config 存取方式）：
+  本面板採用「直接操作 Config 物件」的方式（資料相依性），
+  而非透過 get_config() / set_config() 序列化/反序列化介面（程式流程相依性）。
+
+  程式流程相依性的問題在於：當儲存時機或初始化順序等程式流程被修改時，
+  若橋接方法的呼叫端未同步更新，容易造成設定丟失或順序錯誤等難以追蹤的 Bug，
+  且難以被靜態分析工具偵測。
+
+  資料相依性（直接依賴 Config 類別的欄位定義）更易於靜態分析，
+  欄位變更時編輯器能直接提示錯誤位置。
+"""
+
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget
 from PyQt6.QtCore import Qt
 from base_panel import BasePanel
 
+
 class TranslationPanel(BasePanel):
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="翻譯", require_data_loading=True, context=context)
+        self._config_restored = False  # 確保 restore_from_config 只執行一次
         self.init_ui()
 
     def init_ui(self):
@@ -23,32 +40,31 @@ class TranslationPanel(BasePanel):
         self.cb_src_lang = QComboBox()
         for code, name in self.langs:
             self.cb_src_lang.addItem(name, code)
-        self.cb_src_lang.setCurrentIndex(0) # 預設英文
+        self.cb_src_lang.setCurrentIndex(0)
 
         lbl_tgt_lang = QLabel("目標語言：")
         self.cb_tgt_lang = QComboBox()
         for code, name in self.langs:
             self.cb_tgt_lang.addItem(name, code)
-        self.cb_tgt_lang.setCurrentIndex(1) # 預設繁中
+        self.cb_tgt_lang.setCurrentIndex(1)
 
-        # 批次與單筆間隔時間 (QSlider 改版)
         self.lbl_batch_title = QLabel("批次間隔：10 秒")
         self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
         self.slider_batch_interval.setRange(10, 30)
         self.slider_batch_interval.setValue(10)
-        self.slider_batch_interval.valueChanged.connect(self.update_batch_label)
+        self.slider_batch_interval.valueChanged.connect(self._on_batch_interval_changed)
 
         self.lbl_single_title = QLabel("單筆間隔：1.0 秒")
         self.slider_single_interval = QSlider(Qt.Orientation.Horizontal)
         self.slider_single_interval.setRange(2, 10)
         self.slider_single_interval.setValue(2)
-        self.slider_single_interval.valueChanged.connect(self.update_single_label)
+        self.slider_single_interval.valueChanged.connect(self._on_single_interval_changed)
 
         self.lbl_batch_size_title = QLabel("批次筆數：18 筆")
         self.slider_batch_size = QSlider(Qt.Orientation.Horizontal)
         self.slider_batch_size.setRange(10, 20)
         self.slider_batch_size.setValue(18)
-        self.slider_batch_size.valueChanged.connect(self.update_batch_size_label)
+        self.slider_batch_size.valueChanged.connect(self._on_batch_size_changed)
 
         grid.addWidget(lbl_src_lang, 0, 0)
         grid.addWidget(self.cb_src_lang, 0, 1)
@@ -68,14 +84,92 @@ class TranslationPanel(BasePanel):
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.controls_layout.addWidget(self.btn_start)
 
-    def update_batch_label(self, val):
+        # 連接語言 ComboBox 的變動事件
+        self.cb_src_lang.currentIndexChanged.connect(self._on_src_lang_changed)
+        self.cb_tgt_lang.currentIndexChanged.connect(self._on_tgt_lang_changed)
+
+    # ── Config 變動事件 Handler ───────────────────────────────────────────────
+    # 各控件變動時直接寫入 TranslatePanelConfig，設定 dirty flag。
+    # 見模組頂部說明：此為「資料相依性」設計，取代 get_config/set_config 橋接。
+
+    def _on_batch_interval_changed(self, val: int) -> None:
         self.lbl_batch_title.setText(f"批次間隔：{val} 秒")
+        if self.context:
+            self.context.translate_panel_config.batch_interval = val
+            self.context.translate_panel_config.dirty = True
 
-    def update_single_label(self, val):
-        self.lbl_single_title.setText(f"單筆間隔：{val * 0.5:.1f} 秒")
+    def _on_single_interval_changed(self, val: int) -> None:
+        seconds = val * 0.5
+        self.lbl_single_title.setText(f"單筆間隔：{seconds:.1f} 秒")
+        if self.context:
+            self.context.translate_panel_config.single_interval = seconds
+            self.context.translate_panel_config.dirty = True
 
-    def update_batch_size_label(self, val):
+    def _on_batch_size_changed(self, val: int) -> None:
         self.lbl_batch_size_title.setText(f"批次筆數：{val} 筆")
+        if self.context:
+            self.context.translate_panel_config.batch_size = val
+            self.context.translate_panel_config.dirty = True
+
+    def _on_src_lang_changed(self, idx: int) -> None:
+        if self.context:
+            self.context.translate_panel_config.src_lang = self.cb_src_lang.currentData()
+            self.context.translate_panel_config.dirty = True
+
+    def _on_tgt_lang_changed(self, idx: int) -> None:
+        if self.context:
+            self.context.translate_panel_config.tgt_lang = self.cb_tgt_lang.currentData()
+            self.context.translate_panel_config.dirty = True
+
+    # ── Config 還原 ───────────────────────────────────────────────────────────
+
+    def restore_from_config(self) -> None:
+        """
+        從 AppContext 的 TranslatePanelConfig 還原面板設定。
+        在 show_controls() 首次被呼叫後執行（即首次載入 CSV 後），確保只還原一次。
+        """
+        if not self.context or self._config_restored:
+            return
+        self._config_restored = True
+        cfg = self.context.translate_panel_config
+
+        # blockSignals 避免還原過程觸發 _on_xxx_changed 誤設 dirty flag
+        self.slider_batch_interval.blockSignals(True)
+        self.slider_single_interval.blockSignals(True)
+        self.slider_batch_size.blockSignals(True)
+        self.cb_src_lang.blockSignals(True)
+        self.cb_tgt_lang.blockSignals(True)
+
+        try:
+            self.slider_batch_interval.setValue(int(cfg.batch_interval))
+            self.lbl_batch_title.setText(f"批次間隔：{int(cfg.batch_interval)} 秒")
+
+            slider_val = max(2, min(10, int(round(cfg.single_interval / 0.5))))
+            self.slider_single_interval.setValue(slider_val)
+            self.lbl_single_title.setText(f"單筆間隔：{cfg.single_interval:.1f} 秒")
+
+            self.slider_batch_size.setValue(int(cfg.batch_size))
+            self.lbl_batch_size_title.setText(f"批次筆數：{int(cfg.batch_size)} 筆")
+
+            idx = self.cb_src_lang.findData(cfg.src_lang)
+            if idx != -1:
+                self.cb_src_lang.setCurrentIndex(idx)
+
+            idx = self.cb_tgt_lang.findData(cfg.tgt_lang)
+            if idx != -1:
+                self.cb_tgt_lang.setCurrentIndex(idx)
+        finally:
+            self.slider_batch_interval.blockSignals(False)
+            self.slider_single_interval.blockSignals(False)
+            self.slider_batch_size.blockSignals(False)
+            self.cb_src_lang.blockSignals(False)
+            self.cb_tgt_lang.blockSignals(False)
+
+    def show_controls(self):
+        super().show_controls()
+        self.restore_from_config()
+
+    # ── 便捷讀取方法（供 start_translation_task 使用）────────────────────────
 
     def get_src_lang(self):
         return self.cb_src_lang.currentData()
@@ -92,63 +186,12 @@ class TranslationPanel(BasePanel):
     def get_batch_size(self):
         return self.slider_batch_size.value()
 
-    def set_src_lang(self, code):
-        idx = self.cb_src_lang.findData(code)
-        if idx != -1:
-            self.cb_src_lang.setCurrentIndex(idx)
-
-    def set_tgt_lang(self, code):
-        idx = self.cb_tgt_lang.findData(code)
-        if idx != -1:
-            self.cb_tgt_lang.setCurrentIndex(idx)
-
-    def set_batch_interval(self, val):
-        try:
-            self.slider_batch_interval.setValue(int(val))
-        except ValueError:
-            self.slider_batch_interval.setValue(10)
-
-    def set_single_interval(self, val):
-        try:
-            self.slider_single_interval.setValue(int(float(val) * 2))
-        except (ValueError, TypeError):
-            self.slider_single_interval.setValue(2)
-
-    def set_batch_size(self, val):
-        try:
-            self.slider_batch_size.setValue(int(val))
-        except ValueError:
-            self.slider_batch_size.setValue(18)
-
     def set_enabled(self, enabled):
         self.cb_src_lang.setEnabled(enabled)
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
         self.slider_single_interval.setEnabled(enabled)
         self.slider_batch_size.setEnabled(enabled)
-
-    def get_config(self) -> dict:
-        return {
-            "batch_interval": self.get_batch_interval(),
-            "single_interval": self.get_single_interval(),
-            "batch_size": self.get_batch_size(),
-            "src_lang": self.get_src_lang(),
-            "tgt_lang": self.get_tgt_lang()
-        }
-
-    def set_config(self, config: dict):
-        if not config:
-            return
-        if "batch_interval" in config:
-            self.set_batch_interval(config["batch_interval"])
-        if "single_interval" in config:
-            self.set_single_interval(config["single_interval"])
-        if "batch_size" in config:
-            self.set_batch_size(config["batch_size"])
-        if "src_lang" in config:
-            self.set_src_lang(config["src_lang"])
-        if "tgt_lang" in config:
-            self.set_tgt_lang(config["tgt_lang"])
 
     def start_translation_task(self):
         from PyQt6.QtWidgets import QMessageBox
@@ -161,38 +204,23 @@ class TranslationPanel(BasePanel):
             QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
             return
 
-        start_row = self.context.start_row
-        end_row = self.context.end_row
-        src_col = self.context.source_col
-        tgt_col = self.context.target_col
-        src_lang = self.get_src_lang()
-        tgt_lang = self.get_tgt_lang()
-        batch_interval = self.get_batch_interval()
-        single_interval = self.get_single_interval()
-        batch_size = self.get_batch_size()
-
         worker_instance = CSVTranslatorWorker(
             source_path=src_path,
             output_path=out_path,
-            start_row=start_row,
-            end_row=end_row,
-            source_col=src_col,
-            target_col=tgt_col,
-            source_lang=src_lang,
-            target_lang=tgt_lang,
-            batch_interval=batch_interval,
-            single_interval=single_interval,
-            batch_size=batch_size
+            start_row=self.context.start_row,
+            end_row=self.context.end_row,
+            source_col=self.context.source_col,
+            target_col=self.context.target_col,
+            source_lang=self.get_src_lang(),
+            target_lang=self.get_tgt_lang(),
+            batch_interval=self.get_batch_interval(),
+            single_interval=self.get_single_interval(),
+            batch_size=self.get_batch_size(),
         )
 
-        # 多態輸入驗證
         is_valid, err_msg = worker_instance.validate_inputs()
         if not is_valid:
             QMessageBox.warning(self, "輸入錯誤", err_msg)
             return
-
-        # 儲存設定（開始任務時期）
-        if self.context and hasattr(self.context, "_win"):
-            self.context._win.save_settings()
 
         self.request_start_worker.emit(worker_instance)

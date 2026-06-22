@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 class WorkerMixin:
 
     def on_request_start_worker(self: "MainWindow", worker_instance) -> None:
+        # 開始任務前統一儲存設定（鎖定 UI 前）
+        self.save_settings()
         self.worker = worker_instance
 
         # 重置 UI 顯示狀態
@@ -155,15 +157,12 @@ class WorkerMixin:
                     num_cols = max(len(r) for r in loaded_rows)
                     is_hdr = self.edit_content_panel.is_first_row_header()
                     headers = loaded_rows[0] if is_hdr else None
+                    # 重新套用的 rules 設定由 EditPanel.restore_from_config() 負責，
+                    # 新架構不需要此先前的防重置邏輯
                     self.edit_panel.update_column_dropdowns(num_cols, headers)
                     self.translation_panel.show_controls()
 
-                    # 重新套用暫存設定中的 rules 設定，因為此時已經有欄位資訊了
-                    if getattr(self, "loaded_settings", {}) and "filter_panel" in self.loaded_settings:
-                        self.edit_panel.set_config(self.loaded_settings["filter_panel"])
-
-                    # 儲存設定（載入檔案時期）
-                    self.save_settings()
+                    # 儲存設定由 on_request_start_worker 負責，此處不重複存檔
 
             if not isinstance(self.worker, CSVEditWorker):
                 title, msg = self.worker.get_success_message(out_path)

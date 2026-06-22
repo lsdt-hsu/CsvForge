@@ -44,18 +44,27 @@ class MainWindow(UiStateMixin, FileOpsMixin, SettingsMixin, WorkerMixin, QMainWi
         self.settings_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json"
         )
-        self.settings_manager = SettingsManager(self.settings_path)
-        self.loaded_settings = {}
 
-        self.status_expanded = True
-        self.status_expanded_height = 250
-        self.settings_restored = False
+        # Config 物件字典，由 SettingsManager.load() 填入、AppContext 存取
+        self._configs = {}
 
         # WorkerMixin 私有狀態
         self._worker_sleep_prevented = False
 
+        # Splitter 初始化旗標（替代舊的 settings_restored）
+        self._splitter_applied = False
+
+        # 1. 建立空視窗（預設位置、預設尺寸）
         self.init_ui()
-        self.restore_settings()
+
+        # 2. SettingsManager 讀入設定，在 AppContext 建立所有 Config 物件
+        self._configs = SettingsManager.load(self.settings_path)
+
+        # 3. 套用視窗組態（座標、大小）
+        self.apply_window_config()
+
+        # 4. 各面板自行從 AppContext 取得組態並還原 UI 狀態
+        self._restore_all_panel_configs()
 
     # ── 左側面板建構 ──────────────────────────────────────────────────────────
 

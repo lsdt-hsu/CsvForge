@@ -1,3 +1,18 @@
+"""
+edit_panel.py — 編輯過濾面板
+
+設計決策（Config 存取方式）：
+  本面板採用「直接操作 Config 物件」的方式（資料相依性），
+  而非透過 get_config() / set_config() 序列化/反序列化介面（程式流程相依性）。
+
+  程式流程相依性的問題在於：當儲存時機或初始化順序等程式流程被修改時，
+  若橋接方法的呼叫端未同步更新，容易造成設定丟失或順序錯誤等難以追蹤的 Bug，
+  且難以被靜態分析工具偵測。
+
+  資料相依性（直接依賴 Config 類別的欄位定義）更易於靜態分析，
+  欄位變更時編輯器能直接提示錯誤位置。
+"""
+
 import os
 import re
 from PyQt6.QtWidgets import (
@@ -339,12 +354,13 @@ class EditPanel(BasePanel):
         super().__init__(parent, title_text="編輯過濾", require_data_loading=True, context=context)
         self.num_cols = 0
         self.headers = None
-        
+
         # 多規則狀態維護
         self.rules = []
         self.logic_tree = None
         self.expression_is_valid = True
-        
+        self._config_restored = False  # 確保 restore_from_config 只執行一次
+
         self.init_ui()
 
     def init_ui(self):
@@ -449,7 +465,8 @@ class EditPanel(BasePanel):
         return True
 
     def on_rule_content_changed(self):
-        pass
+        # 直接操作 FilterPanelConfig（資料相依性），見模組頂部說明
+        self._sync_rules_to_config()
 
     def add_rule(self):
         if not self.check_expression_validity():
@@ -480,6 +497,7 @@ class EditPanel(BasePanel):
         self.txt_expression.setStyleSheet("")
         self.txt_expression.blockSignals(False)
         self.expression_is_valid = True
+        self._sync_rules_to_config()
 
     def delete_rule(self, del_idx):
         if not self.check_expression_validity():
@@ -513,6 +531,7 @@ class EditPanel(BasePanel):
         self.txt_expression.setStyleSheet("")
         self.txt_expression.blockSignals(False)
         self.expression_is_valid = True
+        self._sync_rules_to_config()
 
     def on_expression_focus_out(self):
         expr = self.txt_expression.toPlainText().strip()
@@ -533,8 +552,9 @@ class EditPanel(BasePanel):
             self.txt_expression.setPlainText(formatted_expr)
             self.txt_expression.setStyleSheet("")
             self.txt_expression.blockSignals(False)
-            
+
             self.expression_is_valid = True
+            self._sync_rules_to_config()
         except ValueError as e:
             # 解析失敗，外框變紅
             self.txt_expression.setStyleSheet("border: 2px solid #f7768e; border-radius: 4px;")
@@ -626,10 +646,7 @@ class EditPanel(BasePanel):
             filter_config=filter_config,
             parent=self.window()
         )
-        # 儲存設定（開始任務時期）
-        if self.context and hasattr(self.context, "_win"):
-            self.context._win.save_settings()
-
+        # 存檔由 WorkerMixin.on_request_start_worker() 統一負責，此處不直接呼叫
         self.request_start_worker.emit(worker_instance)
 
     def set_enabled(self, enabled):
@@ -639,14 +656,21 @@ class EditPanel(BasePanel):
         for r in self.rules:
             r.setEnabled(enabled)
 
-    def get_config(self) -> dict:
-        return {
-            "rules": [r.get_config() for r in self.rules],
-            "logic_tree": logic_tree.serialize_tree(self.logic_tree),
-            "expr_text": self.txt_expression.toPlainText()
-        }
+    def _sync_rules_to_config(self) -> None:
+        """將當前 UI 規則狀態同步至 FilterPanelConfig，並設 dirty flag。"""
+        if not self.context:
+            return
+        cfg = self.context.filter_panel_config
+        cfg.rules = [r.get_config() for r in self.rules]
+        cfg.logic_tree = logic_tree.serialize_tree(self.logic_tree)
+        cfg.expr_text = self.txt_expression.toPlainText()
+        cfg.dirty = True
 
-    def set_config(self, config: dict):
+    def _apply_config_to_ui(self, config: dict) -> None:
+        """
+        將組態字典套用至 UI 控件（還原用途）。
+        此方法為內部使用，供 restore_from_config() 呼叫。
+        """
         if not config:
             return
 
@@ -664,6 +688,12 @@ class EditPanel(BasePanel):
             self.rule_list_layout.addWidget(w)
             w.set_config(r_cfg)
 
+        # 若無規則，建立預設的第一條
+        if not self.rules:
+            w = RuleWidget(1, self)
+            self.rules.append(w)
+            self.rule_list_layout.addWidget(w)
+
         # 還原邏輯樹
         lt_cfg = config.get("logic_tree")
         self.logic_tree = logic_tree.deserialize_tree(lt_cfg)
@@ -678,3 +708,23 @@ class EditPanel(BasePanel):
 
         # 新增按鈕可見性控制
         self.btn_add_rule.setVisible(len(self.rules) < 5)
+
+    def restore_from_config(self) -> None:
+        """
+        從 AppContext 的 FilterPanelConfig 還原面板設定。
+        在 show_controls() 首次被呼叫後執行（即首次載入 CSV 後），確保只還原一次。
+        """
+        if not self.context or self._config_restored:
+            return
+        self._config_restored = True
+        cfg = self.context.filter_panel_config
+        config_dict = {
+            "rules": cfg.rules,
+            "logic_tree": cfg.logic_tree,
+            "expr_text": cfg.expr_text,
+        }
+        self._apply_config_to_ui(config_dict)
+
+    def show_controls(self):
+        super().show_controls()
+        self.restore_from_config()
