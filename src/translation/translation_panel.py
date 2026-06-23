@@ -194,33 +194,32 @@ class TranslationPanel(BasePanel):
         self.slider_batch_size.setEnabled(enabled)
 
     def start_translation_task(self):
-        from PyQt6.QtWidgets import QMessageBox
         from translation.translation_worker import CSVTranslatorWorker
+        from io_panel import validate_io_panel_inputs
 
-        # 檢查點：來源與輸出不為空且相同
-        src_path = self.context.source_path
-        out_path = self.context.output_path
-        if src_path and out_path and src_path == out_path:
-            QMessageBox.warning(self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法開始任務！請變更輸出路徑。")
+        is_valid, parsed = validate_io_panel_inputs(
+            self,
+            self.context,
+            require_source_path=True,
+            require_output_path=True,
+            require_source_col=True,
+            require_target_col=True,
+        )
+        if not is_valid:
             return
 
         worker_instance = CSVTranslatorWorker(
-            source_path=src_path,
-            output_path=out_path,
-            start_row=self.context.start_row,
-            end_row=self.context.end_row,
-            source_col=self.context.source_col,
-            target_col=self.context.target_col,
+            source_path=self.context.source_path,
+            output_path=self.context.output_path,
+            start_row=parsed["start_row"],
+            end_row=parsed["end_row"],
+            source_col=parsed["source_col"],
+            target_col=parsed["target_col"],
             source_lang=self.get_src_lang(),
             target_lang=self.get_tgt_lang(),
             batch_interval=self.get_batch_interval(),
             single_interval=self.get_single_interval(),
             batch_size=self.get_batch_size(),
         )
-
-        is_valid, err_msg = worker_instance.validate_inputs()
-        if not is_valid:
-            QMessageBox.warning(self, "輸入錯誤", err_msg)
-            return
 
         self.request_start_worker.emit(worker_instance)

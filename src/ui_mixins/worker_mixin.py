@@ -127,19 +127,9 @@ class WorkerMixin:
 
             from data_editor.edit_worker import CSVEditWorker
             if isinstance(self.worker, CSVEditWorker) and hasattr(self.worker, "loaded_rows"):
-                start_row = 1
-                try:
-                    start_row = int(self.context.start_row)
-                except ValueError:
-                    pass
-                end_row = None
-                if self.context.end_row:
-                    try:
-                        end_row = int(self.context.end_row)
-                    except ValueError:
-                        pass
-
-                src_path = self.context.source_path
+                start_row = self.worker.start_row
+                end_row = self.worker.end_row
+                src_path = self.worker.source_path
                 self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row, file_path=src_path)
                 self.edit_content_panel.set_delimiter(getattr(self.worker, "delimiter", ","))
 

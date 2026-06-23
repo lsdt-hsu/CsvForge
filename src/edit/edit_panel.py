@@ -608,30 +608,23 @@ class EditPanel(BasePanel):
             QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
             return
 
-        start_row = 1
-        try:
-            start_row = int(self.context.start_row)
-        except ValueError:
-            pass
+        from io_panel import validate_io_panel_inputs
 
-        end_row = None
-        if self.context.end_row:
-            try:
-                end_row = int(self.context.end_row)
-            except ValueError:
-                pass
+        is_valid, parsed = validate_io_panel_inputs(
+            self,
+            self.context,
+            require_source_path=False,
+            require_output_path=False,
+            require_source_col=True,
+            require_target_col=True,
+        )
+        if not is_valid:
+            return
 
-        src_col = 1
-        try:
-            src_col = int(self.context.source_col)
-        except ValueError:
-            pass
-
-        tgt_col = 1
-        try:
-            tgt_col = int(self.context.target_col)
-        except ValueError:
-            pass
+        start_row = parsed["start_row"]
+        end_row = parsed["end_row"]
+        src_col = parsed["source_col"]
+        tgt_col = parsed["target_col"]
 
         is_header = self.context.is_first_row_header
 

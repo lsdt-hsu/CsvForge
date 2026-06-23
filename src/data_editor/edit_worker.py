@@ -7,37 +7,7 @@ class CSVEditWorker(BaseCSVWorker):
         super().__init__(source_path, output_path, start_row, end_row)
         self.loaded_rows = []
 
-    def validate_inputs(self):
-        """
-        在編輯模式下，我們暫不實作存檔功能，因此只需驗證來源檔案路徑與行號設定。
-        """
-        if not self.source_path or not os.path.exists(self.source_path):
-            return False, "請選擇正確的來源 CSV 檔案路徑"
-            
-        start_row_str = str(self.start_row).strip() if self.start_row is not None else ""
-        if start_row_str == "":
-            self.start_row = 1
-        else:
-            try:
-                start_row_val = int(start_row_str)
-                if start_row_val < 1:
-                    return False, "起始行號必須是大於或等於 1 的正整數"
-                self.start_row = start_row_val
-            except (ValueError, TypeError):
-                return False, "起始行號必須是大於或等於 1 的正整數"
 
-        if self.end_row is not None and str(self.end_row).strip() != "":
-            try:
-                end_row_val = int(self.end_row)
-                if end_row_val < self.start_row:
-                    return False, "結束行號不能小於起始行號"
-                self.end_row = end_row_val
-            except (ValueError, TypeError):
-                return False, "結束行號必須是正整數"
-        else:
-            self.end_row = None
-                
-        return True, ""
 
     def run(self):
         try:

@@ -379,14 +379,3 @@ class CSVTranslatorWorker(BaseCSVWorker):
     def get_error_message(self, err_msg):
         return "翻譯中斷", f"翻譯過程發生錯誤：\n{err_msg}"
 
-    def validate_specific_inputs(self):
-        try:
-            src_col_val = int(self.source_col)
-            tgt_col_val = int(self.target_col)
-            if src_col_val < 1 or tgt_col_val < 1:
-                return False, "來源欄號與目標欄號必須是大於或等於 1 的正整數"
-            self.source_col = src_col_val
-            self.target_col = tgt_col_val
-        except (ValueError, TypeError):
-            return False, "來源欄號與目標欄號必須是大於或等於 1 的正整數"
-        return True, ""
