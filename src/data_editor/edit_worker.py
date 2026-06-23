@@ -14,13 +14,17 @@ class CSVEditWorker(BaseCSVWorker):
         if not self.source_path or not os.path.exists(self.source_path):
             return False, "請選擇正確的來源 CSV 檔案路徑"
             
-        try:
-            start_row_val = int(self.start_row)
-            if start_row_val < 1:
+        start_row_str = str(self.start_row).strip() if self.start_row is not None else ""
+        if start_row_str == "":
+            self.start_row = 1
+        else:
+            try:
+                start_row_val = int(start_row_str)
+                if start_row_val < 1:
+                    return False, "起始行號必須是大於或等於 1 的正整數"
+                self.start_row = start_row_val
+            except (ValueError, TypeError):
                 return False, "起始行號必須是大於或等於 1 的正整數"
-            self.start_row = start_row_val
-        except (ValueError, TypeError):
-            return False, "起始行號必須是大於或等於 1 的正整數"
 
         if self.end_row is not None and str(self.end_row).strip() != "":
             try:

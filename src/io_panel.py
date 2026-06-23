@@ -108,6 +108,7 @@ class IoPanel(BasePanel):
 
         lbl_start_row = QLabel("起始行號：")
         self.txt_start_row = QLineEdit("2")
+        self.txt_start_row.setPlaceholderText("預設為 1")
         self.txt_start_row.setValidator(QIntValidator(1, 9999999))
         self.txt_start_row.setMaximumWidth(INPUT_START_ROW_MAX_WIDTH)
 
