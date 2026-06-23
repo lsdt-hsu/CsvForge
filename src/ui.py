@@ -56,6 +56,10 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         # Splitter 初始化旗標（替代舊的 settings_restored）
         self._splitter_applied = False
 
+        # 初始狀態與計時字串，防止 UI 面板提早呼叫狀態更新時出錯
+        self.elapsed_time_str = "00:00:00"
+        self.task_status_str = "就緒"
+
         # 1. 建立空視窗（預設位置、預設尺寸）
         self.init_ui()
 

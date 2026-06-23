@@ -654,7 +654,7 @@ class EditPanel(BasePanel):
         self.request_start_worker.emit(worker_instance)
 
     def on_filter_completed(self, matched_indices, elapsed_time: float) -> None:
-        self.edit_content_panel.apply_filter(matched_indices)
+        self.context._win.edit_content_panel.apply_filter(matched_indices)
         self.update_status("完成")
         self.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
 
