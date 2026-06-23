@@ -39,8 +39,6 @@ class UiStateMixin:
             # 禁止/允許編輯 TableView
             self.edit_content_panel.set_table_editable(enabled)
 
-        self.update_start_button_ui()
-
     def switch_sidebar_tab(self: "MainWindow", tab_name: str, force_expand: bool = False) -> None:
         self.left_panel.switch_sidebar_tab(tab_name, force_expand)
 
@@ -48,50 +46,6 @@ class UiStateMixin:
         if self.left_panel.sidebar.isVisible() and self.left_panel.sidebar_stacked.currentWidget() == self.edit_panel:
             return self.edit_panel
         return self.translation_panel
-
-    def get_start_button_state(self: "MainWindow") -> str:
-        if self.worker is not None and self.worker.isRunning():
-            if self.worker._is_cancelled:
-                return "disabled"
-            else:
-                return "critical"
-        return "normal"
-
-    def update_start_button_ui(self: "MainWindow") -> None:
-        from io_panel.csv_loader import CSVEditWorker
-
-        state = self.get_start_button_state()
-
-        style_disabled = "background-color: #24283b; color: #565f89;"
-        style_critical = "background-color: #f7768e; color: #1a1b26;"
-        style_normal = ""
-
-        # 1. 載入按鈕 (btn_start)
-        if self.worker is not None and isinstance(self.worker, CSVEditWorker) and self.worker.isRunning():
-            if state == "disabled":
-                self.io_panel.btn_start.setText("正在停止...")
-                self.io_panel.btn_start.setEnabled(False)
-                self.io_panel.btn_start.setStyleSheet(style_disabled)
-            else:  # critical
-                self.io_panel.btn_start.setText("停止載入")
-                self.io_panel.btn_start.setEnabled(True)
-                self.io_panel.btn_start.setStyleSheet(style_critical)
-        else:
-            self.io_panel.btn_start.setText("載入")
-            is_any_running = self.worker is not None and self.worker.isRunning()
-            self.io_panel.btn_start.setEnabled(not is_any_running)
-            self.io_panel.btn_start.setStyleSheet(style_normal)
-
-    def on_start_button_clicked(self: "MainWindow") -> None:
-        state = self.get_start_button_state()
-        if state == "disabled":
-            return
-
-        if state == "critical":
-            self.cancel_task()
-        else:
-            self.csv_loader.start_load_task()
-
 
     def lock_ui_from_panel(self: "MainWindow", lock: bool) -> None:
         self.set_ui_enabled(not lock)

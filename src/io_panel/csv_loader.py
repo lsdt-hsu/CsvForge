@@ -1,6 +1,7 @@
 import os
 import csv
 from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtWidgets import QMessageBox
 from csv_worker import BaseCSVWorker
 from common_data.csv_data import LoadedCSVData
 from io_panel.io_panel_validator import validate_io_panel_inputs
@@ -57,12 +58,26 @@ class CSVLoader(QObject):
     request_start_worker = pyqtSignal(object)
     load_completed = pyqtSignal(LoadedCSVData)
     load_error = pyqtSignal(str)
+    
+    started = pyqtSignal()
+    finished = pyqtSignal()
+    cancelled = pyqtSignal()
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent)
         self.parent_win = parent  # MainWindow
         self.context = context
         self._current_worker = None
+
+    def is_running(self) -> bool:
+        return self._current_worker is not None and self._current_worker.isRunning()
+
+    def is_cancelled(self) -> bool:
+        return self._current_worker is not None and getattr(self._current_worker, "_is_cancelled", False)
+
+    def cancel_task(self):
+        if self._current_worker:
+            self._current_worker.cancel()
 
     def start_load_task(self):
         is_valid, parsed = validate_io_panel_inputs(
@@ -90,6 +105,7 @@ class CSVLoader(QObject):
 
         # 請求主視窗啟動 Worker Thread
         self.request_start_worker.emit(worker_instance)
+        self.started.emit()
 
     def _on_worker_success(self, out_path):
         if not self._current_worker:
@@ -106,8 +122,15 @@ class CSVLoader(QObject):
             file_path=worker.source_path
         )
         self.load_completed.emit(data)
+        self.finished.emit()
         self._current_worker = None
 
     def _on_worker_error(self, err_msg):
-        self.load_error.emit(err_msg)
+        if "使用者已取消" in err_msg:
+            self.cancelled.emit()
+        else:
+            self.load_error.emit(err_msg)
+            parent_win = self.parent_win.window() if self.parent_win else None
+            QMessageBox.critical(parent_win, "載入中斷", f"載入編輯過程發生錯誤：\n{err_msg}")
+            self.finished.emit()
         self._current_worker = None

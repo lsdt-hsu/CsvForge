@@ -126,12 +126,10 @@ class WorkerMixin:
             self.task_status_str = "完成"
 
         self.update_status_summary()
-        self.update_start_button_ui()
 
     def cancel_task(self: "MainWindow") -> None:
         if self.worker:
             self.task_status_str = "正在中斷工作..."
             self.update_status_summary()
             self.worker.cancel()
-            self.update_start_button_ui()
 

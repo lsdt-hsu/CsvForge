@@ -16,12 +16,19 @@ from .io_panel_validator import validate_paths_not_equal
 
 
 class IoPanel(BasePanel):
-    load_clicked = pyqtSignal()
     source_file_changed = pyqtSignal(str)
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="", require_data_loading=False, context=context)
         self.setObjectName("rightFrame")
+        self._ui_enabled_state = True
+
+        from .csv_loader import CSVLoader
+        self.loader = CSVLoader(parent=parent, context=context)
+        self.loader.started.connect(self.on_loader_started)
+        self.loader.finished.connect(self.on_loader_finished)
+        self.loader.cancelled.connect(self.on_loader_cancelled)
+
         self.init_ui()
 
     def init_ui(self):
@@ -133,7 +140,7 @@ class IoPanel(BasePanel):
         self.btn_start.setObjectName("btnStart")
         self.btn_start.setMinimumWidth(START_BUTTON_MIN_WIDTH)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_start.clicked.connect(self.load_clicked.emit)
+        self.btn_start.clicked.connect(self.on_start_clicked)
 
         row2_layout.addWidget(lbl_start_row)
         row2_layout.addWidget(self.txt_start_row)
@@ -236,6 +243,7 @@ class IoPanel(BasePanel):
 
 
     def set_enabled(self, enabled: bool) -> None:
+        self._ui_enabled_state = enabled
         self.txt_src_path.setEnabled(enabled)
         self.txt_out_path.setEnabled(enabled)
         self.btn_src_browse.setEnabled(enabled)
@@ -245,4 +253,41 @@ class IoPanel(BasePanel):
         self.txt_end_row.setEnabled(enabled)
         self.txt_src_col.setEnabled(enabled)
         self.txt_tgt_col.setEnabled(enabled)
-        self.btn_start.setEnabled(enabled)
+        
+        self.update_button_ui()
+
+    def on_start_clicked(self) -> None:
+        if self.loader.is_running():
+            if not self.loader.is_cancelled():
+                self.loader.cancel_task()
+                self.update_button_ui()
+        else:
+            self.loader.start_load_task()
+
+    def on_loader_started(self) -> None:
+        self.update_button_ui()
+
+    def on_loader_finished(self) -> None:
+        self.update_button_ui()
+
+    def on_loader_cancelled(self) -> None:
+        self.update_button_ui()
+
+    def update_button_ui(self) -> None:
+        style_disabled = "background-color: #24283b; color: #565f89;"
+        style_critical = "background-color: #f7768e; color: #1a1b26;"
+        style_normal = ""
+
+        if self.loader.is_running():
+            if self.loader.is_cancelled():
+                self.btn_start.setText("正在停止...")
+                self.btn_start.setEnabled(False)
+                self.btn_start.setStyleSheet(style_disabled)
+            else:
+                self.btn_start.setText("停止載入")
+                self.btn_start.setEnabled(True)
+                self.btn_start.setStyleSheet(style_critical)
+        else:
+            self.btn_start.setText("載入")
+            self.btn_start.setStyleSheet(style_normal)
+            self.btn_start.setEnabled(self._ui_enabled_state)

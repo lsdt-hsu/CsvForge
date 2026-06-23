@@ -77,11 +77,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         from base_panel import AppContext
         self.context = AppContext(self)
 
-        # 建立 CSV 載入器
-        from io_panel.csv_loader import CSVLoader
-        self.csv_loader = CSVLoader(parent=self, context=self.context)
-        self.csv_loader.load_completed.connect(self.on_csv_load_completed)
-        self.csv_loader.request_start_worker.connect(self.on_request_start_worker)
 
 
         main_widget = QWidget()
@@ -96,6 +91,10 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.left_panel = LeftPanel(parent=self, context=self.context)
         self.io_panel = IoPanel(parent=self, context=self.context)
         self.status_panel = StatusPanel(parent=self, context=self.context)
+
+        # 連接 CSVLoader 信號 (自 io_panel)
+        self.io_panel.loader.load_completed.connect(self.on_csv_load_completed)
+        self.io_panel.loader.request_start_worker.connect(self.on_request_start_worker)
 
         # 建立子面板並註冊到 LeftPanel
         self.translation_panel = TranslationPanel(context=self.context)
@@ -123,7 +122,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         right_panel.addWidget(self.io_panel)
 
         # 連接 IO Panel 訊號
-        self.io_panel.load_clicked.connect(self.on_start_button_clicked)
         self.io_panel.source_file_changed.connect(self.on_source_file_changed)
 
         # 來源預覽與日誌面板採用 QSplitter 垂直排列

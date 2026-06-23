@@ -136,9 +136,6 @@ class LeftPanel(QFrame):
         self.btn_translate.style().polish(self.btn_translate)
         self.btn_edit.style().polish(self.btn_edit)
 
-        if hasattr(self.parent(), "update_start_button_ui"):
-            self.parent().update_start_button_ui()
-
     def apply_config(self, side_cfg: SidePanelConfig, main_cfg: MainConfig) -> None:
         if side_cfg.collapsed:
             self.sidebar.setVisible(False)

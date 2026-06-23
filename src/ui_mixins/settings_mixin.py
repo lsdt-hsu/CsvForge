@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SettingsMixin — 設定持久化與 Splitter 尺寸管理
 
@@ -41,8 +42,6 @@ class SettingsMixin:
         if cfg.is_maximized:
             self.showMaximized()
 
-    # ── 面板組態還原 ──────────────────────────────────────────────────────────
-
     def _restore_all_panel_configs(self: "MainWindow") -> None:
         """
         依序從 AppContext 取得各 Config 物件，還原各面板的 UI 初始狀態。
@@ -53,7 +52,6 @@ class SettingsMixin:
             self.left_panel.apply_config(self.context.side_panel_config, self.context.main_config)
             self.status_panel.apply_config(self.context.status_panel_config)
             self.edit_content_panel.restore_from_config()
-            self.update_start_button_ui()
         except Exception:
             pass  # 設定還原失敗時靜默略過，避免影響程式啟動
 
