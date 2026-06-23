@@ -158,11 +158,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             sizes = self.right_splitter.sizes()
             if len(sizes) > 1:
                 total_h = sum(sizes)
-                status_h = max(140, cfg.expanded_height)
-                editor_h = max(200, total_h - status_h)
-                if editor_h < 200:
-                    editor_h = 200
-                    status_h = max(140, total_h - 200)
+                editor_h, status_h = self._calc_splitter_sizes(total_h, cfg.expanded_height)
                 self.right_splitter.setSizes([editor_h, status_h])
         else:
             sizes = self.right_splitter.sizes()

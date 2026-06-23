@@ -105,6 +105,15 @@ class SettingsMixin:
             self._splitter_applied = True
             QTimer.singleShot(0, self.apply_splitter_sizes)
 
+    def _calc_splitter_sizes(self: "MainWindow", available_h: int, expanded_height: int) -> tuple[int, int]:
+        """依可用高度與展開高度計算 [editor_h, status_h]。"""
+        status_h = max(140, expanded_height)
+        editor_h = max(200, available_h - status_h)
+        if editor_h < 200:
+            editor_h = 200
+            status_h = max(140, available_h - 200)
+        return editor_h, status_h
+
     def apply_splitter_sizes(self: "MainWindow") -> None:
         cfg = self.context.status_panel_config
         total_h = self.right_splitter.height()
@@ -114,11 +123,7 @@ class SettingsMixin:
         if not cfg.collapsed:
             self.status_panel.setMinimumHeight(140)
             self.status_panel.setMaximumHeight(16777215)
-            status_h = max(140, cfg.expanded_height)
-            editor_h = max(200, available_h - status_h)
-            if editor_h < 200:
-                editor_h = 200
-                status_h = max(140, available_h - 200)
+            editor_h, status_h = self._calc_splitter_sizes(available_h, cfg.expanded_height)
             self.right_splitter.setSizes([editor_h, status_h])
         else:
             header_h = self.status_panel.header_height()
