@@ -158,11 +158,21 @@ class CSVTranslatorWorker(BaseCSVWorker):
         line_buffer.clear()
         
         # 逐筆個別翻譯執行到最後，加上跟批次翻譯一樣的冷卻時間
+        self._sleep_batch_interval(msg_prefix="個別翻譯批次完成，", is_fallback=True)
+
+    def _sleep_batch_interval(self, msg_prefix: str = "", is_fallback: bool = False) -> None:
+        """執行批次冷卻等待，Error Rank 會自動延長間隔時間。"""
         actual_batch_interval = self.batch_interval + self.error_rank * 10
         if self.error_rank > 0:
-            self.log_emitted.emit("WARNING", f"個別翻譯批次完成，偵測到 Error Rank 為 {self.error_rank}，批次冷卻時間延長 {self.error_rank * 10} 秒，共 {actual_batch_interval} 秒...")
+            interval_type = "批次冷卻時間" if is_fallback else "批次翻譯間隔"
+            self.log_emitted.emit(
+                "WARNING",
+                f"{msg_prefix}偵測到 Error Rank 為 {self.error_rank}，"
+                f"{interval_type}延長 {self.error_rank * 10} 秒，共 {actual_batch_interval} 秒..."
+            )
         else:
-            self.log_emitted.emit("WARNING", f"個別翻譯批次完成，進行冷卻，休息 {self.batch_interval} 秒...")
+            action_text = "進行冷卻，" if is_fallback else ""
+            self.log_emitted.emit("WARNING", f"{msg_prefix}{action_text}休息 {self.batch_interval} 秒...")
         for _ in range(actual_batch_interval):
             if self._is_cancelled:
                 break
@@ -341,15 +351,7 @@ class CSVTranslatorWorker(BaseCSVWorker):
                                 line_buffer.clear()
                                 
                                 # 5.4.3 休息指定的批次間隔時間
-                                actual_batch_interval = self.batch_interval + self.error_rank * 10
-                                if self.error_rank > 0:
-                                    self.log_emitted.emit("WARNING", f"偵測到 Error Rank 為 {self.error_rank}，批次翻譯間隔延長 {self.error_rank * 10} 秒，共 {actual_batch_interval} 秒...")
-                                else:
-                                    self.log_emitted.emit("WARNING", f"休息 {self.batch_interval} 秒...")
-                                for _ in range(actual_batch_interval):
-                                    if self._is_cancelled:
-                                        break
-                                    self.msleep(1000)
+                                self._sleep_batch_interval()
                                 
                     # 2. 如果已讀取到檔案末尾，處理最後殘留批次
                     if tag_buffer:
