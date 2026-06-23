@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSize, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QIcon
 from base_panel import BasePanel
+from common_data.csv_data import LoadedCSVData
+
 
 PREVIEW_DEFAULT_SECTION_SIZE = 110
 PREVIEW_VERTICAL_SECTION_SIZE = 28
@@ -353,26 +355,7 @@ class DataEditorPanel(BasePanel):
                     QAbstractItemView.EditTrigger.AnyKeyPressed
                 )
 
-    def start_load_task(self):
-        from data_editor.edit_worker import CSVEditWorker
-        from io_panel import validate_io_panel_inputs
+    def set_csv_data(self, data: LoadedCSVData):
+        self.set_delimiter(data.delimiter)
+        self.load_data(data.all_rows, data.start_row, data.end_row, file_path=data.file_path)
 
-        is_valid, parsed = validate_io_panel_inputs(
-            self,
-            self.context,
-            require_source_path=True,
-            require_output_path=False,
-            require_source_col=False,
-            require_target_col=False,
-        )
-        if not is_valid:
-            return
-
-        worker_instance = CSVEditWorker(
-            source_path=self.context.source_path,
-            output_path=self.context.output_path,
-            start_row=parsed["start_row"],
-            end_row=parsed["end_row"]
-        )
-
-        self.request_start_worker.emit(worker_instance)

@@ -36,7 +36,7 @@ class WorkerMixin:
 
         # 根據 Worker 型別設定狀態文字
         from translation.translation_worker import CSVTranslatorWorker
-        from data_editor.edit_worker import CSVEditWorker
+        from io_panel.csv_loader import CSVEditWorker
         from edit.filter_worker import FilterWorker
 
         if isinstance(worker_instance, CSVEditWorker):
@@ -118,38 +118,14 @@ class WorkerMixin:
             self.task_status_str = "已取消"
             self.update_status_summary()
             title, msg = self.worker.get_cancel_message(out_path)
-            from data_editor.edit_worker import CSVEditWorker
+            from io_panel.csv_loader import CSVEditWorker
             if not isinstance(self.worker, CSVEditWorker):
                 QMessageBox.information(self, title, msg)
         else:
             self.task_status_str = "完成"
             self.update_status_summary()
 
-            from data_editor.edit_worker import CSVEditWorker
-            if isinstance(self.worker, CSVEditWorker) and hasattr(self.worker, "loaded_rows"):
-                start_row = self.worker.start_row
-                end_row = self.worker.end_row
-                src_path = self.worker.source_path
-                self.edit_content_panel.load_data(self.worker.loaded_rows, start_row, end_row, file_path=src_path)
-                self.edit_content_panel.set_delimiter(getattr(self.worker, "delimiter", ","))
-
-                # 更新結束行號 Placeholder
-                total_rows = len(self.worker.loaded_rows)
-                self.io_panel.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
-
-                # 更新過濾面板與翻譯面板控制項
-                loaded_rows = self.worker.loaded_rows
-                if loaded_rows:
-                    num_cols = max(len(r) for r in loaded_rows)
-                    is_hdr = self.edit_content_panel.is_first_row_header()
-                    headers = loaded_rows[0] if is_hdr else None
-                    # 重新套用的 rules 設定由 EditPanel.restore_from_config() 負責，
-                    # 新架構不需要此先前的防重置邏輯
-                    self.edit_panel.update_column_dropdowns(num_cols, headers)
-                    self.translation_panel.show_controls()
-
-                    # 儲存設定由 on_request_start_worker 負責，此處不重複存檔
-
+            from io_panel.csv_loader import CSVEditWorker
             if not isinstance(self.worker, CSVEditWorker):
                 title, msg = self.worker.get_success_message(out_path)
                 QMessageBox.information(self, title, msg)

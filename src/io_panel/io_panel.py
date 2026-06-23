@@ -231,6 +231,10 @@ class IoPanel(BasePanel):
         cfg.collapsed = not self.files_content_widget.isVisible()
         cfg.dirty = True
 
+    def set_end_row_placeholder(self, total_rows: int) -> None:
+        self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
+
+
     def set_enabled(self, enabled: bool) -> None:
         self.txt_src_path.setEnabled(enabled)
         self.txt_out_path.setEnabled(enabled)

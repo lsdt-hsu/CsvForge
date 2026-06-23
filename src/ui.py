@@ -77,6 +77,13 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         from base_panel import AppContext
         self.context = AppContext(self)
 
+        # 建立 CSV 載入器
+        from io_panel.csv_loader import CSVLoader
+        self.csv_loader = CSVLoader(parent=self, context=self.context)
+        self.csv_loader.load_completed.connect(self.on_csv_load_completed)
+        self.csv_loader.request_start_worker.connect(self.on_request_start_worker)
+
+
         main_widget = QWidget()
         main_widget.setObjectName("mainContainer")
         self.setCentralWidget(main_widget)
@@ -173,6 +180,23 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             if len(sizes) > 1:
                 total_h = sum(sizes)
                 self.right_splitter.setSizes([total_h - header_h, header_h])
+
+    def on_csv_load_completed(self, data) -> None:
+        from common_data.csv_data import LoadedCSVData
+        # 1. 載入資料至 DataEditorPanel
+        self.edit_content_panel.set_csv_data(data)
+
+        # 2. 更新 IoPanel 結束行號 Placeholder
+        total_rows = len(data.all_rows)
+        self.io_panel.set_end_row_placeholder(total_rows)
+
+        # 3. 更新過濾面板與翻譯面板控制項
+        if data.all_rows:
+            num_cols = max(len(r) for r in data.all_rows)
+            is_hdr = self.edit_content_panel.is_first_row_header()
+            headers = data.all_rows[0] if is_hdr else None
+            self.edit_panel.update_column_dropdowns(num_cols, headers)
+            self.translation_panel.show_controls()
 
     def on_source_file_changed(self, file_path: str) -> None:
         self.io_panel.txt_end_row.setPlaceholderText("預設至檔尾")

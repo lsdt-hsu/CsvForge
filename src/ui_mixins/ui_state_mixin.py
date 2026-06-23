@@ -59,7 +59,7 @@ class UiStateMixin:
 
     def update_start_button_ui(self: "MainWindow") -> None:
         from translation.translation_worker import CSVTranslatorWorker
-        from data_editor.edit_worker import CSVEditWorker
+        from io_panel.csv_loader import CSVEditWorker
 
         state = self.get_start_button_state()
 
@@ -115,7 +115,7 @@ class UiStateMixin:
             if state == "critical":
                 self.cancel_task()
             else:
-                self.edit_content_panel.start_load_task()
+                self.csv_loader.start_load_task()
 
     def lock_ui_from_panel(self: "MainWindow", lock: bool) -> None:
         self.set_ui_enabled(not lock)
