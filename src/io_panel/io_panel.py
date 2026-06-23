@@ -79,7 +79,7 @@ class IoPanel(BasePanel):
         self.btn_swap.setObjectName("btnSwap")
         self.btn_swap.setFixedSize(30, 30)
         swap_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "swap.png"
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "swap.png"
         )
         self.btn_swap.setIcon(QIcon(swap_icon_path))
         self.btn_swap.setIconSize(QSize(SWAP_ICON_SIZE, SWAP_ICON_SIZE))

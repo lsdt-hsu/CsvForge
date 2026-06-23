@@ -23,7 +23,7 @@ from ui_constants import (
     SWAP_ICON_SIZE,
 )
 from ui_mixins import UiStateMixin, SettingsMixin, WorkerMixin
-from io_panel import IoPanel
+from io_panel.io_panel import IoPanel
 from status_panel import StatusPanel
 from left_panel import LeftPanel
 
