@@ -21,7 +21,6 @@ from base_panel import BasePanel
 class TranslationPanel(BasePanel):
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="翻譯", require_data_loading=True, context=context)
-        self._config_restored = False  # 確保 restore_from_config 只執行一次
         
         from translation.csv_translator import CSVTranslator
         self.translator = CSVTranslator(parent=self, context=context)
@@ -138,9 +137,8 @@ class TranslationPanel(BasePanel):
         從 AppContext 的 TranslatePanelConfig 還原面板設定。
         在 show_controls() 首次被呼叫後執行（即首次載入 CSV 後），確保只還原一次。
         """
-        if not self.context or self._config_restored:
+        if not self.context:
             return
-        self._config_restored = True
         cfg = self.context.translate_panel_config
 
         # blockSignals 避免還原過程觸發 _on_xxx_changed 誤設 dirty flag

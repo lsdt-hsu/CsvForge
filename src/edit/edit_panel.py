@@ -359,7 +359,6 @@ class EditPanel(BasePanel):
         self.rules = []
         self.logic_tree = None
         self.expression_is_valid = True
-        self._config_restored = False  # 確保 restore_from_config 只執行一次
 
         self.init_ui()
 
@@ -730,9 +729,8 @@ class EditPanel(BasePanel):
         從 AppContext 的 FilterPanelConfig 還原面板設定。
         在 show_controls() 首次被呼叫後執行（即首次載入 CSV 後），確保只還原一次。
         """
-        if not self.context or self._config_restored:
+        if not self.context:
             return
-        self._config_restored = True
         cfg = self.context.filter_panel_config
         config_dict = {
             "rules": cfg.rules,
