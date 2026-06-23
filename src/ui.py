@@ -23,7 +23,7 @@ from ui_constants import (
     SWAP_ICON_SIZE,
 )
 from ui_mixins import UiStateMixin, SettingsMixin, WorkerMixin
-from io_panel.io_panel import IoPanel
+from io_panel import IoPanel, validate_paths_not_equal
 from status_panel import StatusPanel
 from left_panel import LeftPanel
 
@@ -189,10 +189,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             return
 
         src_path = self.context.source_path
-        if src_path and out_path and src_path == out_path:
-            QMessageBox.warning(
-                self, "路徑重複", "來源 CSV 與輸出 CSV 路徑相同，無法存檔！請變更輸出路徑。"
-            )
+        if not validate_paths_not_equal(self, src_path, out_path, mode="save"):
             return
 
         all_rows = self.edit_content_panel.get_all_rows()

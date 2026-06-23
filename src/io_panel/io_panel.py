@@ -12,6 +12,7 @@ from ui_constants import (
     SWAP_ICON_SIZE,
 )
 from settings_manager import IoPanelConfig
+from .io_panel_validator import validate_paths_not_equal
 
 
 class IoPanel(BasePanel):
@@ -170,12 +171,7 @@ class IoPanel(BasePanel):
         )
         if file_path:
             current_out = self.txt_out_path.text().strip()
-            if current_out and file_path == current_out:
-                QMessageBox.warning(
-                    self,
-                    "路徑重複",
-                    "選擇的來源 CSV 檔案不能與輸出 CSV 檔案路徑相同！請重新選擇。",
-                )
+            if not validate_paths_not_equal(self, file_path, current_out, mode="browse_src"):
                 return
 
             self.txt_src_path.setText(file_path)
@@ -194,12 +190,7 @@ class IoPanel(BasePanel):
         )
         if file_path:
             current_src = self.txt_src_path.text().strip()
-            if current_src and file_path == current_src:
-                QMessageBox.warning(
-                    self,
-                    "路徑重複",
-                    "選擇的輸出 CSV 檔案不能與來源 CSV 檔案路徑相同！請重新選擇。",
-                )
+            if not validate_paths_not_equal(self, current_src, file_path, mode="browse_out"):
                 return
 
             self.txt_out_path.setText(file_path)
@@ -214,12 +205,7 @@ class IoPanel(BasePanel):
         # 安全檢查：來源與輸出路徑不可相同
         src_path = self.txt_src_path.text().strip()
         out_path = self.txt_out_path.text().strip()
-        if src_path and out_path and src_path == out_path:
-            QMessageBox.warning(
-                self,
-                "路徑重複",
-                "偵測到儲存的來源 CSV 與輸出 CSV 路徑相同！已自動清空輸出路徑以防檔案毀損。",
-            )
+        if not validate_paths_not_equal(self, src_path, out_path, mode="config"):
             self.txt_out_path.clear()
 
         self.txt_start_row.setText(cfg.start_row)
