@@ -18,6 +18,8 @@ class CSVTranslatorWorker(BaseCSVWorker):
         self.single_interval = single_interval
         self.batch_size = batch_size
         self.error_rank = 0
+        self.prevent_sleep = True
+        self.task_name = "翻譯中..."
 
     def _get_http_error_suffix(self):
         """
@@ -378,4 +380,3 @@ class CSVTranslatorWorker(BaseCSVWorker):
 
     def get_error_message(self, err_msg):
         return "翻譯中斷", f"翻譯過程發生錯誤：\n{err_msg}"
-

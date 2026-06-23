@@ -99,7 +99,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
 
         # 建立子面板並註冊到 LeftPanel
         self.translation_panel = TranslationPanel(context=self.context)
-        self.translation_panel.btn_start.clicked.connect(self.on_start_button_clicked)
         self.translation_panel.request_lock_ui.connect(self.lock_ui_from_panel)
         self.translation_panel.progress_updated.connect(self.on_panel_progress)
         self.translation_panel.status_updated.connect(self.on_panel_status)

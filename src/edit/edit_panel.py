@@ -639,8 +639,31 @@ class EditPanel(BasePanel):
             filter_config=filter_config,
             parent=self.window()
         )
-        # 存檔由 WorkerMixin.on_request_start_worker() 統一負責，此處不直接呼叫
+        
+        # 設定通用屬性供 WorkerMixin 讀取
+        worker_instance.task_name = "過濾中..."
+        worker_instance.initial_progress_total = len(rows)
+        
+        # 寫入日誌與狀態
+        self.update_status("過濾中...")
+        self.write_log("INFO", "開始執行 CSV 資料過濾...")
+        
+        # 直接於面板內連接過濾完成與錯誤信號
+        worker_instance.filter_completed.connect(self.on_filter_completed)
+        worker_instance.filter_error.connect(self.on_filter_error)
+        
         self.request_start_worker.emit(worker_instance)
+
+    def on_filter_completed(self, matched_indices, elapsed_time: float) -> None:
+        self.edit_content_panel.apply_filter(matched_indices)
+        self.update_status("完成")
+        self.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
+
+    def on_filter_error(self, err_msg: str) -> None:
+        self.update_status("錯誤")
+        self.write_log("ERROR", f"過濾錯誤：{err_msg}")
+        QMessageBox.critical(self, "過濾錯誤", err_msg)
+
 
     def set_enabled(self, enabled):
         self.btn_add_rule.setEnabled(enabled)

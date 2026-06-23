@@ -22,7 +22,16 @@ class TranslationPanel(BasePanel):
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="翻譯", require_data_loading=True, context=context)
         self._config_restored = False  # 確保 restore_from_config 只執行一次
+        
+        from translation.csv_translator import CSVTranslator
+        self.translator = CSVTranslator(parent=self, context=context)
+        self.translator.request_start_worker.connect(self.request_start_worker.emit)
+        self.translator.started.connect(self.on_translator_started)
+        self.translator.finished.connect(self.on_translator_finished)
+        self.translator.cancelled.connect(self.on_translator_cancelled)
+        
         self.init_ui()
+
 
     def init_ui(self):
         grid = QGridLayout()
@@ -82,6 +91,7 @@ class TranslationPanel(BasePanel):
 
         self.btn_start = QPushButton("開始翻譯")
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_start.clicked.connect(self.on_start_clicked)
         self.controls_layout.addWidget(self.btn_start)
 
         # 連接語言 ComboBox 的變動事件
@@ -192,34 +202,37 @@ class TranslationPanel(BasePanel):
         self.slider_batch_interval.setEnabled(enabled)
         self.slider_single_interval.setEnabled(enabled)
         self.slider_batch_size.setEnabled(enabled)
+        if not self.translator.is_running():
+            self.btn_start.setEnabled(enabled)
 
-    def start_translation_task(self):
-        from translation.translation_worker import CSVTranslatorWorker
-        from io_panel import validate_io_panel_inputs
+    def on_start_clicked(self):
+        if self.translator.is_running():
+            self.translator.cancel_task()
+        else:
+            self.translator.start_translation_task(
+                src_lang=self.get_src_lang(),
+                tgt_lang=self.get_tgt_lang(),
+                batch_interval=self.get_batch_interval(),
+                single_interval=self.get_single_interval(),
+                batch_size=self.get_batch_size()
+            )
 
-        is_valid, parsed = validate_io_panel_inputs(
-            self,
-            self.context,
-            require_source_path=True,
-            require_output_path=True,
-            require_source_col=True,
-            require_target_col=True,
-        )
-        if not is_valid:
-            return
+    def on_translator_started(self):
+        style_critical = "background-color: #f7768e; color: #1a1b26;"
+        self.btn_start.setText("停止翻譯")
+        self.btn_start.setEnabled(True)
+        self.btn_start.setStyleSheet(style_critical)
+        self.set_enabled(False)
 
-        worker_instance = CSVTranslatorWorker(
-            source_path=self.context.source_path,
-            output_path=self.context.output_path,
-            start_row=parsed["start_row"],
-            end_row=parsed["end_row"],
-            source_col=parsed["source_col"],
-            target_col=parsed["target_col"],
-            source_lang=self.get_src_lang(),
-            target_lang=self.get_tgt_lang(),
-            batch_interval=self.get_batch_interval(),
-            single_interval=self.get_single_interval(),
-            batch_size=self.get_batch_size(),
-        )
+    def on_translator_finished(self):
+        self.btn_start.setText("開始翻譯")
+        self.btn_start.setEnabled(True)
+        self.btn_start.setStyleSheet("")
+        self.set_enabled(True)
 
-        self.request_start_worker.emit(worker_instance)
+    def on_translator_cancelled(self):
+        style_disabled = "background-color: #24283b; color: #565f89;"
+        self.btn_start.setText("正在停止...")
+        self.btn_start.setEnabled(False)
+        self.btn_start.setStyleSheet(style_disabled)
+

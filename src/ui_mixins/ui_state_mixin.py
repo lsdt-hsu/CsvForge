@@ -58,7 +58,6 @@ class UiStateMixin:
         return "normal"
 
     def update_start_button_ui(self: "MainWindow") -> None:
-        from translation.translation_worker import CSVTranslatorWorker
         from io_panel.csv_loader import CSVEditWorker
 
         state = self.get_start_button_state()
@@ -83,39 +82,16 @@ class UiStateMixin:
             self.io_panel.btn_start.setEnabled(not is_any_running)
             self.io_panel.btn_start.setStyleSheet(style_normal)
 
-        # 2. 開始翻譯按鈕 (translation_panel.btn_start)
-        if hasattr(self.translation_panel, "btn_start"):
-            if self.worker is not None and isinstance(self.worker, CSVTranslatorWorker) and self.worker.isRunning():
-                if state == "disabled":
-                    self.translation_panel.btn_start.setText("正在停止...")
-                    self.translation_panel.btn_start.setEnabled(False)
-                    self.translation_panel.btn_start.setStyleSheet(style_disabled)
-                else:  # critical
-                    self.translation_panel.btn_start.setText("停止翻譯")
-                    self.translation_panel.btn_start.setEnabled(True)
-                    self.translation_panel.btn_start.setStyleSheet(style_critical)
-            else:
-                self.translation_panel.btn_start.setText("開始翻譯")
-                is_any_running = self.worker is not None and self.worker.isRunning()
-                self.translation_panel.btn_start.setEnabled(not is_any_running)
-                self.translation_panel.btn_start.setStyleSheet(style_normal)
-
     def on_start_button_clicked(self: "MainWindow") -> None:
         state = self.get_start_button_state()
         if state == "disabled":
             return
 
-        sender = self.sender()
-        if hasattr(self.translation_panel, "btn_start") and sender == self.translation_panel.btn_start:
-            if state == "critical":
-                self.cancel_task()
-            else:
-                self.translation_panel.start_translation_task()
+        if state == "critical":
+            self.cancel_task()
         else:
-            if state == "critical":
-                self.cancel_task()
-            else:
-                self.csv_loader.start_load_task()
+            self.csv_loader.start_load_task()
+
 
     def lock_ui_from_panel(self: "MainWindow", lock: bool) -> None:
         self.set_ui_enabled(not lock)

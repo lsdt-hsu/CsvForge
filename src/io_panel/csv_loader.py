@@ -9,6 +9,7 @@ class CSVEditWorker(BaseCSVWorker):
     def __init__(self, source_path, output_path, start_row, end_row):
         super().__init__(source_path, output_path, start_row, end_row)
         self.loaded_rows = []
+        self.task_name = "載入中..."
 
     def run(self):
         try:
