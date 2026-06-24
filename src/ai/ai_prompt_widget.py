@@ -1,8 +1,91 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
-    QToolButton, QTextEdit, QScrollArea, QFrame
+    QToolButton, QTextEdit, QScrollArea, QFrame, QLayout, QSizePolicy
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QPoint, QRect, QSize
+
+
+class FlowLayout(QLayout):
+    def __init__(self, parent=None, margin=0, spacing=6):
+        super().__init__(parent)
+        self.setContentsMargins(margin, margin, margin, margin)
+        self.setSpacing(spacing)
+        self.itemList = []
+
+    def __del__(self):
+        item = self.takeAt(0)
+        while item:
+            item = self.takeAt(0)
+
+    def addItem(self, item):
+        self.itemList.append(item)
+
+    def count(self):
+        return len(self.itemList)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self.itemList):
+            return self.itemList[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self.itemList):
+            return self.itemList.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return Qt.Orientations(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        height = self.doLayout(QRect(0, 0, width, 0), True)
+        return height
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self.doLayout(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self.itemList:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
+        return size
+
+    def doLayout(self, rect, testOnly):
+        left, top, right, bottom = self.getContentsMargins()
+        effectiveRect = rect.adjusted(+left, +top, -right, -bottom)
+        x = effectiveRect.x()
+        y = effectiveRect.y()
+        lineHeight = 0
+        spaceX = self.spacing()
+        spaceY = self.spacing()
+
+        for item in self.itemList:
+            wid = item.widget()
+            if not wid:
+                continue
+            sz = item.sizeHint()
+            nextX = x + sz.width() + spaceX
+            if nextX - spaceX > effectiveRect.right() and lineHeight > 0:
+                x = effectiveRect.x()
+                y = y + lineHeight + spaceY
+                nextX = x + sz.width() + spaceX
+                lineHeight = 0
+
+            if not testOnly:
+                item.setGeometry(QRect(QPoint(x, y), sz))
+
+            x = nextX
+            lineHeight = max(lineHeight, sz.height())
+
+        return y + lineHeight - rect.y() + bottom
 
 
 class AiPromptWidget(QWidget):
@@ -57,21 +140,17 @@ class AiPromptWidget(QWidget):
         lbl_tags_title.setStyleSheet("color: #c0caf5;")
         layout.addWidget(lbl_tags_title)
 
-        # 使用 QScrollArea 裝載橫向排開的 QToolButtons，確保欄位過多時能優雅橫向滾動
+        # 使用 QScrollArea 裝載多列折行的 QToolButtons
         self.tags_scroll = QScrollArea()
         self.tags_scroll.setWidgetResizable(True)
-        self.tags_scroll.setFixedHeight(40)
         self.tags_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.tags_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.tags_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tags_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tags_scroll.setStyleSheet("background-color: transparent;")
 
         self.scroll_content = QWidget()
         self.scroll_content.setStyleSheet("background-color: transparent;")
-        self.tags_layout = QHBoxLayout(self.scroll_content)
-        self.tags_layout.setContentsMargins(0, 0, 0, 0)
-        self.tags_layout.setSpacing(6)
-        self.tags_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.tags_layout = FlowLayout(self.scroll_content, spacing=6)
         
         self.tags_scroll.setWidget(self.scroll_content)
         layout.addWidget(self.tags_scroll)
@@ -130,6 +209,7 @@ class AiPromptWidget(QWidget):
             lbl_tip = QLabel("（CSV 未包含欄位標記）")
             lbl_tip.setStyleSheet("color: #565f89; font-style: italic;")
             self.tags_layout.addWidget(lbl_tip)
+            self.adjust_tags_height()
             return
 
         for header in headers:
@@ -154,6 +234,8 @@ class AiPromptWidget(QWidget):
             # 使用預設參數 lambda 綁定 header 值，避免 loop scope bind 問題
             btn.clicked.connect(lambda checked=False, name=header: self._on_tag_clicked(name))
             self.tags_layout.addWidget(btn)
+
+        self.adjust_tags_height()
 
     def _on_tag_clicked(self, tag_name: str):
         """
@@ -197,3 +279,50 @@ class AiPromptWidget(QWidget):
             item = self.tags_layout.itemAt(i)
             if item and item.widget():
                 item.widget().setEnabled(enabled)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.adjust_tags_height()
+
+    def adjust_tags_height(self):
+        if not hasattr(self, 'scroll_content') or not self.scroll_content.layout():
+            return
+        
+        w = self.tags_scroll.viewport().width()
+        if w <= 0:
+            w = self.tags_scroll.width()
+        if w <= 0:
+            w = 300
+            
+        layout = self.scroll_content.layout()
+        
+        btn_height = 24
+        spacing = layout.spacing()
+        if spacing < 0:
+            spacing = 6
+            
+        max_btn_width = 0
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item and item.widget():
+                h = item.widget().sizeHint().height()
+                if h > 0:
+                    btn_height = max(btn_height, h)
+                w_btn = item.widget().sizeHint().width()
+                if w_btn > max_btn_width:
+                    max_btn_width = w_btn
+        
+        max_btn_width += 12
+        self.scroll_content.setMinimumWidth(max_btn_width)
+        
+        margins = layout.contentsMargins()
+        max_h = 5 * btn_height + 4 * spacing + margins.top() + margins.bottom()
+        
+        ideal_h = layout.heightForWidth(w)
+        if ideal_h <= 0:
+            ideal_h = btn_height + margins.top() + margins.bottom()
+            
+        final_h = min(ideal_h, max_h)
+        final_h += 4
+        
+        self.tags_scroll.setFixedHeight(final_h)
