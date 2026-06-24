@@ -354,7 +354,7 @@ class FilterPanel(BasePanel):
         self.txt_filter_start_row = QLineEdit("1")
         self.txt_filter_start_row.setPlaceholderText("1")
         self.txt_filter_start_row.setValidator(QIntValidator(1, 9999999))
-        self.txt_filter_start_row.setFixedWidth(60)
+        self.txt_filter_start_row.setFixedWidth(80)
         self.txt_filter_start_row.textChanged.connect(self._on_row_range_changed)
 
         lbl_end = QLabel("~")
