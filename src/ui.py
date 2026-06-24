@@ -13,6 +13,7 @@ from PyQt6.QtGui import QIntValidator, QIcon
 from translation.translation_panel import TranslationPanel
 from edit.edit_panel import EditPanel
 from filter.filter_panel import FilterPanel
+from ai.ai_panel import AiPanel
 from settings_manager import SettingsManager
 from data_editor.data_editor_panel import DataEditorPanel
 from ui_constants import (
@@ -123,7 +124,15 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.filter_panel.log_emitted.connect(self.on_panel_log)
         self.filter_panel.request_start_worker.connect(self.on_request_start_worker)
 
+        self.ai_panel = AiPanel(context=self.context)
+        self.ai_panel.request_lock_ui.connect(self.lock_ui_from_panel)
+        self.ai_panel.progress_updated.connect(self.on_panel_progress)
+        self.ai_panel.status_updated.connect(self.on_panel_status)
+        self.ai_panel.log_emitted.connect(self.on_panel_log)
+        self.ai_panel.request_start_worker.connect(self.on_request_start_worker)
+
         self.left_panel.add_panel("translate", self.translation_panel)
+        self.left_panel.add_panel("ai", self.ai_panel)
         self.left_panel.add_panel("edit", self.edit_panel)
         self.left_panel.add_panel("filter", self.filter_panel)
 
@@ -199,12 +208,15 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             headers = data.all_rows[0] if is_hdr else None
             self.filter_panel.update_column_dropdowns(num_cols, headers)
             self.translation_panel.show_controls()
+            self.ai_panel.update_column_dropdowns(num_cols, headers)
+            self.ai_panel.show_controls()
 
     def on_source_file_changed(self, file_path: str) -> None:
         self.edit_content_panel.clear()
         self.edit_panel.reset_panel()
         self.filter_panel.reset_panel()
         self.translation_panel.reset_panel()
+        self.ai_panel.reset_panel()
         if self.worker and hasattr(self.worker, "loaded_rows"):
             self.worker.loaded_rows = []
 

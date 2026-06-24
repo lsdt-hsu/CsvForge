@@ -1,0 +1,188 @@
+import time
+from PyQt6.QtCore import QThread, pyqtSignal
+from ai.ai_utils import build_final_prompt
+from ai.ai_client import generate_local_ai, generate_google_ai
+
+
+class CSVAIWorker(QThread):
+    """
+    CSVAIWorker — 在背景執行緒中遍歷 CSV 資料、呼叫 AI 客戶端並更新資料。
+    
+    訊號：
+      progress_updated(current, total): 更新 UI 進度條與已處理筆數。
+      status_updated(status_str): 更新 UI 狀態列字串。
+      log_emitted(level, msg): 發送日誌訊息 (INFO, SUCCESS, WARNING, ERROR) 到日誌面板。
+      finished_successfully(): 任務成功結束（或安全手動停止）。
+      finished_with_error(err_msg): 遭遇嚴重異常導致任務中斷。
+      data_changed(): 每次有欄位被寫入時，通知表格 UI 進行重繪與標記 modified。
+    """
+    
+    progress_updated = pyqtSignal(int, int)
+    status_updated = pyqtSignal(str)
+    log_emitted = pyqtSignal(str, str)
+    finished_successfully = pyqtSignal()
+    finished_with_error = pyqtSignal(str)
+    data_changed = pyqtSignal()
+
+    def __init__(self, all_rows, visible_row_indices, is_header,
+                 target_col_name, user_prompt, ai_service,
+                 google_api_key="", google_model="",
+                 local_server_url="", local_model="",
+                 num_ctx=4096, temperature=0.7):
+        super().__init__()
+        self.all_rows = all_rows
+        self.visible_row_indices = visible_row_indices
+        self.is_header = is_header
+        self.target_col_name = target_col_name
+        self.user_prompt = user_prompt
+        self.ai_service = ai_service
+        self.google_api_key = google_api_key
+        self.google_model = google_model
+        self.local_server_url = local_server_url
+        self.local_model = local_model
+        self.num_ctx = num_ctx
+        self.temperature = temperature
+
+        self._is_cancelled = False
+        self.prevent_sleep = True
+        self.task_name = "AI 處理中..."
+
+    def cancel(self):
+        """
+        供 UI 呼叫，用以要求終止背景處理迴圈。
+        """
+        self._is_cancelled = True
+
+    def pause(self):
+        pass
+
+    def resume(self):
+        pass
+
+    def run(self):
+        try:
+            self.status_updated.emit("準備 AI 欄位對映...")
+            self.log_emitted.emit("INFO", "開始執行 AI 批次處理任務...")
+
+            if not self.all_rows:
+                self.finished_with_error.emit("沒有可載入的 CSV 資料")
+                return
+
+            # 1. 根據首行是否為 Header，建立 headers 映射列表
+            if self.is_header:
+                headers = [str(cell).strip() for cell in self.all_rows[0]]
+            else:
+                headers = [str(i + 1) for i in range(len(self.all_rows[0]))]
+
+            # 2. 判定或建立目標寫回欄位索引
+            target_col_idx = -1
+            if self.target_col_name in headers:
+                target_col_idx = headers.index(self.target_col_name)
+            else:
+                # 目標欄位不存在，啟動自動新建欄位邏輯
+                self.log_emitted.emit("WARNING", f"目標欄位 '{self.target_col_name}' 不存在，將自動在資料尾端建立新欄位。")
+                if self.is_header:
+                    self.all_rows[0].append(self.target_col_name)
+                    target_col_idx = len(self.all_rows[0]) - 1
+                    # 補齊其他資料列的尾端空間
+                    for r_idx in range(1, len(self.all_rows)):
+                        self.all_rows[r_idx].append("")
+                else:
+                    # 首行不是表頭，檢查是否輸入的是代表數字索引的欄位
+                    try:
+                        idx_val = int(self.target_col_name) - 1
+                        if idx_val < 0:
+                            raise ValueError()
+                        target_col_idx = idx_val
+                        # 補齊所有行到該大小
+                        for r_idx in range(len(self.all_rows)):
+                            while len(self.all_rows[r_idx]) <= target_col_idx:
+                                self.all_rows[r_idx].append("")
+                    except ValueError:
+                        # 不是數字，一律在尾端追加
+                        for r_idx in range(len(self.all_rows)):
+                            self.all_rows[r_idx].append("")
+                        target_col_idx = len(self.all_rows[0]) - 1
+
+                # 表格結構變更，通知 UI 更新表頭與視圖
+                self.data_changed.emit()
+
+            # 3. 取得需要執行的列索引清單，排列表頭行本身
+            run_indices = [idx for idx in self.visible_row_indices]
+            if self.is_header and 0 in run_indices:
+                run_indices.remove(0)
+
+            total_count = len(run_indices)
+            processed_count = 0
+
+            if total_count == 0:
+                self.log_emitted.emit("WARNING", "沒有選定任何有效資料列進行處理")
+                self.finished_successfully.emit()
+                return
+
+            self.status_updated.emit("執行中...")
+            
+            # 4. 開始遍歷每一列進行處理
+            for r_idx in run_indices:
+                if self._is_cancelled:
+                    self.log_emitted.emit("WARNING", "使用者中止了 AI 處理任務")
+                    break
+
+                row = self.all_rows[r_idx]
+                
+                # 組裝當前行的 dict 對照
+                row_data = {}
+                for idx, h_name in enumerate(headers):
+                    if idx < len(row):
+                        row_data[h_name] = row[idx]
+                    else:
+                        row_data[h_name] = ""
+
+                # 調用純靜態 utility 進行 prompt 字串拼裝，避開 PyQt 元件
+                final_prompt = build_final_prompt(self.user_prompt, row_data)
+
+                # 發布處理詳情
+                self.log_emitted.emit("INFO", f"正在處理第 {r_idx + 1} 行... 呼叫 Prompt: {final_prompt[:80]}...")
+
+                try:
+                    if self.ai_service == "Google":
+                        result = generate_google_ai(
+                            api_key=self.google_api_key,
+                            model=self.google_model,
+                            prompt=final_prompt,
+                            temperature=self.temperature
+                        )
+                    else:
+                        result = generate_local_ai(
+                            server_url=self.local_server_url,
+                            model=self.local_model,
+                            prompt=final_prompt,
+                            num_ctx=self.num_ctx,
+                            temperature=self.temperature
+                        )
+
+                    # 將回傳結果寫入指定目標列中
+                    while len(row) <= target_col_idx:
+                        row.append("")
+                    row[target_col_idx] = result.strip()
+
+                    self.log_emitted.emit("SUCCESS", f"第 {r_idx + 1} 行處理成功！")
+                    self.data_changed.emit()
+
+                except Exception as ex:
+                    # 容錯處理：單行失敗時發布錯誤日誌並繼續，不崩潰
+                    self.log_emitted.emit("ERROR", f"第 {r_idx + 1} 行處理失敗: {str(ex)}")
+
+                processed_count += 1
+                self.progress_updated.emit(processed_count, total_count)
+                
+                # 為了避免 API 呼叫過於密集或為了讓 UI 線程能有餘裕反應，加一個微小 delay
+                time.sleep(0.1)
+
+            self.status_updated.emit("完成")
+            self.log_emitted.emit("SUCCESS", "AI 批次處理任務已結束！")
+            self.finished_successfully.emit()
+
+        except Exception as e:
+            self.log_emitted.emit("ERROR", f"AI背景任務異常中止: {str(e)}")
+            self.finished_with_error.emit(str(e))

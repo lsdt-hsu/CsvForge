@@ -1,7 +1,7 @@
 import os
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget, QPushButton, QStackedWidget
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 
 from ui_constants import (
     SIDEBAR_FULL_WIDTH,
@@ -20,6 +20,49 @@ class LeftPanel(QFrame):
         self.setObjectName("leftContainer")
         self.setFixedWidth(SIDEBAR_FULL_WIDTH)
         self.init_ui()
+
+    def create_ai_icon(self) -> QIcon:
+        """
+        在執行期使用 QPainter 動態繪製一個簡約、精美的高解析度 AI 文字圖標，
+        避免依賴外部 PNG 資源，防範資源遺失造成的崩潰。
+        """
+        # 1. 繪製正常 (Inactive) 狀態
+        pixmap = QPixmap(40, 40)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QColor("#7aa2f7"))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(2, 2, 36, 36, 6, 6)
+        
+        font = QFont("Arial")
+        font.setPointSize(12)
+        font.setBold(True)
+        
+        painter.setFont(font)
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "AI")
+        painter.end()
+
+        # 2. 繪製 Active 狀態
+        pixmap_active = QPixmap(40, 40)
+        pixmap_active.fill(Qt.GlobalColor.transparent)
+        
+        painter_act = QPainter(pixmap_active)
+        painter_act.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter_act.setPen(QColor("#2ac3de"))
+        painter_act.setBrush(Qt.BrushStyle.NoBrush)
+        painter_act.drawRoundedRect(2, 2, 36, 36, 6, 6)
+        
+        painter_act.setFont(font)
+        painter_act.drawText(pixmap_active.rect(), Qt.AlignmentFlag.AlignCenter, "AI")
+        painter_act.end()
+
+        icon = QIcon()
+        icon.addPixmap(pixmap, QIcon.Mode.Normal, QIcon.State.Off)
+        icon.addPixmap(pixmap_active, QIcon.Mode.Normal, QIcon.State.On)
+        icon.addPixmap(pixmap_active, QIcon.Mode.Active)
+        return icon
 
     def init_ui(self):
         left_layout = QHBoxLayout(self)
@@ -49,6 +92,17 @@ class LeftPanel(QFrame):
         self.btn_translate.clicked.connect(lambda: self.switch_sidebar_tab("translate"))
         self.btn_translate.setProperty("active", True)
         activity_layout.addWidget(self.btn_translate)
+
+        # AI 按鈕
+        self.btn_ai = QPushButton()
+        self.btn_ai.setObjectName("btnActivityAi")
+        self.btn_ai.setFixedSize(40, 40)
+        self.btn_ai.setIcon(self.create_ai_icon())
+        self.btn_ai.setIconSize(QSize(40, 40))
+        self.btn_ai.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_ai.clicked.connect(lambda: self.switch_sidebar_tab("ai"))
+        self.btn_ai.setProperty("active", False)
+        activity_layout.addWidget(self.btn_ai)
 
         # 編輯按鈕
         edit_icon_path = os.path.join(
@@ -129,6 +183,7 @@ class LeftPanel(QFrame):
             self.v_line.setVisible(False)
             self.setFixedWidth(SIDEBAR_MIN_WIDTH)
             self.btn_translate.setProperty("active", False)
+            self.btn_ai.setProperty("active", False)
             self.btn_edit.setProperty("active", False)
             self.btn_filter.setProperty("active", False)
         else:
@@ -142,19 +197,28 @@ class LeftPanel(QFrame):
             
             if tab_name == "translate":
                 self.btn_translate.setProperty("active", True)
+                self.btn_ai.setProperty("active", False)
+                self.btn_edit.setProperty("active", False)
+                self.btn_filter.setProperty("active", False)
+            elif tab_name == "ai":
+                self.btn_translate.setProperty("active", False)
+                self.btn_ai.setProperty("active", True)
                 self.btn_edit.setProperty("active", False)
                 self.btn_filter.setProperty("active", False)
             elif tab_name == "edit":
                 self.btn_translate.setProperty("active", False)
+                self.btn_ai.setProperty("active", False)
                 self.btn_edit.setProperty("active", True)
                 self.btn_filter.setProperty("active", False)
             elif tab_name == "filter":
                 self.btn_translate.setProperty("active", False)
+                self.btn_ai.setProperty("active", False)
                 self.btn_edit.setProperty("active", False)
                 self.btn_filter.setProperty("active", True)
 
         # 刷新按鈕樣式
         self.btn_translate.style().polish(self.btn_translate)
+        self.btn_ai.style().polish(self.btn_ai)
         self.btn_edit.style().polish(self.btn_edit)
         self.btn_filter.style().polish(self.btn_filter)
 
@@ -164,6 +228,7 @@ class LeftPanel(QFrame):
             self.v_line.setVisible(False)
             self.setFixedWidth(SIDEBAR_MIN_WIDTH)
             self.btn_translate.setProperty("active", False)
+            self.btn_ai.setProperty("active", False)
             self.btn_edit.setProperty("active", False)
             self.btn_filter.setProperty("active", False)
         else:
@@ -176,6 +241,8 @@ class LeftPanel(QFrame):
         current_widget = self.sidebar_stacked.currentWidget()
         if current_widget == self._panels.get("translate"):
             active_tab = "translate"
+        elif current_widget == self._panels.get("ai"):
+            active_tab = "ai"
         elif current_widget == self._panels.get("filter"):
             active_tab = "filter"
         else:
@@ -185,6 +252,7 @@ class LeftPanel(QFrame):
 
     def set_enabled(self, enabled: bool) -> None:
         self.btn_translate.setEnabled(enabled)
+        self.btn_ai.setEnabled(enabled)
         self.btn_edit.setEnabled(enabled)
         self.btn_filter.setEnabled(enabled)
         for panel in self._panels.values():

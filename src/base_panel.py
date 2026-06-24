@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from settings_manager import (
     WindowConfig, MainConfig, IoPanelConfig, DataEditorConfig,
     StatusPanelConfig, TranslatePanelConfig, FilterPanelConfig,
-    SidePanelConfig,
+    SidePanelConfig, AiPanelConfig,
 )
 
 
@@ -58,6 +58,10 @@ class AppContext:
     @property
     def filter_panel_config(self) -> FilterPanelConfig:
         return self._win._configs["filter_panel"]
+
+    @property
+    def ai_panel_config(self) -> AiPanelConfig:
+        return self._win._configs["ai_panel"]
 
     # ── 執行時動態狀態存取（半直接存取 Widget 最新值）────────────────────────
 

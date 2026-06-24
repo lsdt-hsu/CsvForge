@@ -130,9 +130,28 @@ class FilterPanelConfig:
     end_row: str = ""
 
 
+@dataclass
+class AiPanelConfig:
+    """
+    AI 處理面板組態。
+    寫入擁有者：AiPanel。
+    """
+    dirty: bool = False
+    ai_service: str = "Google AI"
+    google_api_key: str = ""
+    google_model: str = "gemini-1.5-flash"
+    local_backend: str = "Ollama"
+    local_server_url: str = "http://localhost:11434"
+    local_model: str = ""
+    advanced_num_ctx: int = 4096
+    advanced_temperature: float = 0.7
+    target_col: str = ""
+    prompt_template: str = ""
+
+
 # ── 固定的序列化鍵值順序 ──────────────────────────────────────────────────────
 # 保存順序：window → main → side_panel → io_panel → data_editor_panel → status_panel
-#           → translate_panel → filter_panel
+#           → translate_panel → filter_panel → ai_panel
 _CONFIG_KEYS_ORDER = [
     "window",
     "main",
@@ -142,6 +161,7 @@ _CONFIG_KEYS_ORDER = [
     "status_panel",
     "translate_panel",
     "filter_panel",
+    "ai_panel",
 ]
 
 # 每個 Key 對應的 Config 類別與 JSON 區段 Key 的映射
@@ -154,6 +174,7 @@ _CONFIG_CLASSES = {
     "status_panel":      StatusPanelConfig,
     "translate_panel":   TranslatePanelConfig,
     "filter_panel":      FilterPanelConfig,
+    "ai_panel":          AiPanelConfig,
 }
 
 
