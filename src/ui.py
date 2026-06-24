@@ -248,6 +248,43 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             self.append_log("ERROR", f"存檔失敗：{str(e)}")
             QMessageBox.critical(self, "存檔失敗", f"存檔失敗：\n{str(e)}")
 
+    def silent_save_edit_data(self) -> None:
+        out_path = self.context.output_path
+        if not out_path:
+            self.append_log("ERROR", "自動存檔失敗：未指定輸出 CSV 檔案路徑！")
+            return
+
+        src_path = self.context.source_path
+        if src_path and out_path:
+            norm_src = os.path.normpath(src_path.strip()).lower()
+            norm_out = os.path.normpath(out_path.strip()).lower()
+            if norm_src == norm_out:
+                self.append_log("ERROR", "自動存檔失敗：來源 CSV 與輸出 CSV 路徑相同！")
+                return
+
+        all_rows = self.edit_content_panel.get_all_rows()
+        if not all_rows:
+            self.append_log("ERROR", "自動存檔失敗：沒有資料可儲存。")
+            return
+
+        delimiter = self.edit_content_panel.get_delimiter()
+
+        try:
+            out_dir = os.path.dirname(out_path)
+            if out_dir and not os.path.exists(out_dir):
+                os.makedirs(out_dir, exist_ok=True)
+
+            with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
+                import csv
+                writer = csv.writer(f, delimiter=delimiter)
+                writer.writerows(all_rows)
+
+            self.edit_content_panel.set_modified(False)
+            self.append_log("SUCCESS", f"自動靜默存檔成功！已寫入至：{out_path}")
+
+        except Exception as e:
+            self.append_log("ERROR", f"自動靜默存檔失敗：{str(e)}")
+
     # ── QSS 樣式 ─────────────────────────────────────────────────────────────
 
     def apply_style(self):

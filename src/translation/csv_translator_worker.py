@@ -1,27 +1,45 @@
-import os
-import re
-import csv
 import concurrent.futures
+import re
+from PyQt6.QtCore import QThread, pyqtSignal
 from deep_translator import GoogleTranslator
 from network import get_http_error_info
-from csv_worker import BaseCSVWorker
 
 # --- CSV 翻譯執行緒工人類 ---
-class CSVTranslatorWorker(BaseCSVWorker):
-    def __init__(self, source_path, output_path, start_row, end_row, source_col, target_col, source_lang, target_lang, batch_interval=10, single_interval=1, batch_size=18):
-        super().__init__(source_path, output_path)
-        self.start_row = start_row
-        self.end_row = end_row
-        self.source_col = source_col
-        self.target_col = target_col
+class CSVTranslatorWorker(QThread):
+    progress_updated = pyqtSignal(int, int)      # 已處理列數, 總列數
+    status_updated = pyqtSignal(str)             # 狀態欄更新日誌
+    log_emitted = pyqtSignal(str, str)           # 級別 (INFO/SUCCESS/WARNING/ERROR), 訊息
+    finished_successfully = pyqtSignal()         # 成功完成或取消完成
+    finished_with_error = pyqtSignal(str)        # 錯誤原因
+    data_changed = pyqtSignal()                  # 有任何列被修改時發射
+
+    def __init__(self, all_rows, visible_row_indices,
+                 source_col_idx, target_col_idx,
+                 source_lang, target_lang,
+                 batch_interval=10, single_interval=1, batch_size=18):
+        super().__init__()
+        self.all_rows = all_rows
+        self.visible_row_indices = visible_row_indices
+        self.source_col_idx = source_col_idx
+        self.target_col_idx = target_col_idx
         self.source_lang = source_lang
         self.target_lang = target_lang
         self.batch_interval = batch_interval
         self.single_interval = single_interval
         self.batch_size = batch_size
+        self._is_cancelled = False
         self.error_rank = 0
         self.prevent_sleep = True
         self.task_name = "翻譯中..."
+
+    def cancel(self):
+        self._is_cancelled = True
+
+    def pause(self):
+        pass
+
+    def resume(self):
+        pass
 
     def _get_http_error_suffix(self):
         """
@@ -38,7 +56,7 @@ class CSVTranslatorWorker(BaseCSVWorker):
 
     def _do_batch_translate(self, joined_string, tag_buffer):
         """
-        嘗試批次翻譯。
+        嘗試批取翻譯。
         回傳: (is_fallback_needed, fallback_reason, translated_tags, translated_text)
         """
         is_fallback_needed = False
@@ -66,17 +84,15 @@ class CSVTranslatorWorker(BaseCSVWorker):
                 )
                 
         except Exception as e:
-            # 檢測是否為 "No translation was found using the current translator" 異常
             if "No translation was found using the current translator" in str(e):
                 is_fallback_needed = True
                 fallback_reason = "翻譯失敗: 'No translation was found using the current translator'"
             else:
-                # 其他錯誤直接 re-raise，由外層 try-except 捕獲處理
                 raise e
                 
         return is_fallback_needed, fallback_reason, translated_tags, translated_text
 
-    def _do_single_translate_fallback(self, tag_buffer, line_buffer, writer, target_col_idx, context):
+    def _do_single_translate_fallback(self, tag_buffer, target_col_idx):
         """
         當批次翻譯失敗或數量不符時，逐一翻譯 tag_buffer 中的項目。
         """
@@ -84,7 +100,6 @@ class CSVTranslatorWorker(BaseCSVWorker):
             if self._is_cancelled:
                 raise RuntimeError("使用者已取消翻譯")
             
-            # 每一筆個別翻譯前，加入單筆間隔冷卻時間 (每 100ms 檢查一次是否取消)
             actual_single_interval = self.single_interval + self.error_rank * 10
             if self.error_rank > 0:
                 self.log_emitted.emit("WARNING", f"偵測到 Error Rank 為 {self.error_rank}，單筆翻譯間隔延長 {self.error_rank * 10} 秒，共 {actual_single_interval} 秒。")
@@ -102,10 +117,10 @@ class CSVTranslatorWorker(BaseCSVWorker):
                 if not single_translated:
                     raise ValueError("個別翻譯結果為空")
                 
-                # 避免逗號切割CSV問題
                 single_translated_processed = single_translated.replace(",", "，")
                 
                 r_obj[target_col_idx] = single_translated_processed
+                self.data_changed.emit()
                 
                 self.error_rank = max(0, self.error_rank - 1)
                 
@@ -116,7 +131,6 @@ class CSVTranslatorWorker(BaseCSVWorker):
                 self.log_emitted.emit("INFO", f"收到文字：{single_translated_processed}")
             except Exception as e:
                 err_msg = str(e).lower()
-                err_type_str = type(e).__name__
                 err_module = type(e).__module__
                 
                 is_net_timeout_empty = (
@@ -143,27 +157,11 @@ class CSVTranslatorWorker(BaseCSVWorker):
                     
                     if self.error_rank >= 15:
                         raise RuntimeError(f"單筆翻譯異常次數過多 (Error Rank: {self.error_rank} >= 15)，終止翻譯。最後錯誤: {str(e)}")
-            
-            # 寫回 CSV
-            idx = line_buffer.index(r_obj)
-            next_to_write = context["next_to_write"]
-            write_slice = line_buffer[next_to_write : idx + 1]
-            if write_slice:
-                writer.writerows(write_slice)
-            context["next_to_write"] = idx + 1
-
-        next_to_write = context["next_to_write"]
-        if next_to_write < len(line_buffer):
-            writer.writerows(line_buffer[next_to_write:])
         
         tag_buffer.clear()
-        line_buffer.clear()
-        
-        # 逐筆個別翻譯執行到最後，加上跟批次翻譯一樣的冷卻時間
         self._sleep_batch_interval(msg_prefix="個別翻譯批次完成，", is_fallback=True)
 
     def _sleep_batch_interval(self, msg_prefix: str = "", is_fallback: bool = False) -> None:
-        """執行批次冷卻等待，Error Rank 會自動延長間隔時間。"""
         actual_batch_interval = self.batch_interval + self.error_rank * 10
         if self.error_rank > 0:
             interval_type = "批次冷卻時間" if is_fallback else "批次翻譯間隔"
@@ -180,23 +178,7 @@ class CSVTranslatorWorker(BaseCSVWorker):
                 break
             self.msleep(1000)
 
-    def _flush_remaining(self, line_buffer, tag_buffer, writer, reader, max_idx, context):
-        """
-        當翻譯發生致命錯誤時，將剩餘緩衝區的行與讀取器中未處理的行原樣寫入 CSV，以保護資料完整性。
-        """
-        next_to_write = context.get("next_to_write", 0)
-        if next_to_write < len(line_buffer):
-            writer.writerows(line_buffer[next_to_write:])
-        tag_buffer.clear()
-        line_buffer.clear()
-        
-        self.log_emitted.emit("WARNING", "翻譯終止，將剩餘未翻譯行原樣寫入檔案...")
-        for remain_row in reader:
-            while len(remain_row) <= max_idx:
-                remain_row.append("")
-            writer.writerow(remain_row)
-
-    def translate_batch(self, tag_buffer, line_buffer, writer, reader, target_col_idx, source_col_idx, max_idx):
+    def translate_batch(self, tag_buffer, target_col_idx):
         if not tag_buffer:
             return True
             
@@ -205,24 +187,21 @@ class CSVTranslatorWorker(BaseCSVWorker):
             
         texts = [item[1] for item in tag_buffer]
         joined_string = ",".join(texts)
-        context = {"next_to_write": 0}
         
         try:
-            # 1. 嘗試批次翻譯
             is_fallback_needed, fallback_reason, translated_tags, translated_text = self._do_batch_translate(
                 joined_string, tag_buffer
             )
 
-            # 2. 如果需要 fallback，則執行逐筆個別翻譯
             if is_fallback_needed:
                 self.log_emitted.emit("WARNING", f"{fallback_reason}\n開始進行逐筆個別翻譯...")
-                self._do_single_translate_fallback(tag_buffer, line_buffer, writer, target_col_idx, context)
+                self._do_single_translate_fallback(tag_buffer, target_col_idx)
                 return False
                 
-            # 3. 正常批次翻譯成功
             for (r_obj, _, _), trans_text in zip(tag_buffer, translated_tags):
                 r_obj[target_col_idx] = trans_text
                 
+            self.data_changed.emit()
             self.error_rank = max(0, self.error_rank - 1)
             
             first_row = tag_buffer[0][2]
@@ -233,10 +212,11 @@ class CSVTranslatorWorker(BaseCSVWorker):
             self.log_emitted.emit("SUCCESS", f"批次翻譯成功 (第 {first_row} - {last_row} 行)")
             self.log_emitted.emit("INFO", f"送出文字：{joined_string}")
             self.log_emitted.emit("INFO", f"收到文字：{translated_text}")
+            
+            tag_buffer.clear()
             return True
             
         except Exception as e:
-            # 批次或個別翻譯發生致命錯誤，將剩餘未翻譯行原樣寫入，避免損壞檔案
             suffix = self._get_http_error_suffix()
             error_msg = f"{str(e)}{suffix}"
 
@@ -244,143 +224,62 @@ class CSVTranslatorWorker(BaseCSVWorker):
             self.status_updated.emit(fail_status)
             self.log_emitted.emit("ERROR", f"翻譯失敗！ 送出文字：{joined_string}\n收到文字：\n錯誤訊息：{error_msg}")
             
-            self._flush_remaining(line_buffer, tag_buffer, writer, reader, max_idx, context)
-                
+            tag_buffer.clear()
             raise RuntimeError(fail_status)
 
     def run(self):
         try:
             self.error_rank = 0
-            self.log_emitted.emit("INFO", "開始執行 CSV 翻譯工作...")
-            encoding, delimiter = self.detect_format()
-            total_file_rows = self.count_total_rows(encoding, delimiter)
-            self.log_emitted.emit("INFO", f"來源檔案讀取完成，共 {total_file_rows} 行。")
+            self.log_emitted.emit("INFO", "開始執行記憶體 CSV 翻譯工作...")
 
-            # 翻譯範圍限制
-            start_row = self.start_row
-            end_row = self.end_row if self.end_row is not None else total_file_rows
-            total_to_translate = max(0, end_row - start_row + 1)
-            
-            self.log_emitted.emit("INFO", f"欲翻譯範圍：自 {start_row} 行至 {end_row} 行 (共 {total_to_translate} 行)")
+            total_to_translate = len(self.visible_row_indices)
+            self.log_emitted.emit("INFO", f"欲翻譯之可見行數共 {total_to_translate} 行")
 
             tag_buffer = []
-            line_buffer = []
+            target_col_idx = self.target_col_idx
 
-            source_col_idx = self.source_col - 1
-            target_col_idx = self.target_col - 1
-            max_idx = max(source_col_idx, target_col_idx)
-
-            with open(self.source_path, 'r', encoding=encoding, errors='replace') as f_in:
-                reader = csv.reader(f_in, delimiter=delimiter)
+            processed_count = 0
+            
+            for idx in self.visible_row_indices:
+                if self._is_cancelled:
+                    break
                 
-                # 建立輸出檔案路徑
-                out_dir = os.path.dirname(self.output_path)
-                if out_dir and not os.path.exists(out_dir):
-                    os.makedirs(out_dir, exist_ok=True)
+                row = self.all_rows[idx]
                 
-                with open(self.output_path, 'w', encoding='utf-8-sig', newline='') as f_out:
-                    writer = csv.writer(f_out, delimiter=delimiter)
+                # 補齊欄位避免 IndexError
+                while len(row) <= max(self.source_col_idx, self.target_col_idx):
+                    row.append("")
+                
+                processed_count += 1
+                self.progress_updated.emit(processed_count, total_to_translate)
+                
+                target_val = row[self.target_col_idx].strip()
+                source_val = row[self.source_col_idx]
+                
+                # 若目標列的值不為空，跳過不翻譯
+                if target_val != "":
+                    continue
+                
+                row_num = idx + 1
+                tag_buffer.append((row, source_val, row_num))
+                
+                total_char_len = sum(len(item[1]) for item in tag_buffer)
+                if len(tag_buffer) >= self.batch_size or total_char_len > 240:
+                    self.log_emitted.emit("INFO", f"達到批次處理上限 (tag: {len(tag_buffer)}/{self.batch_size}, chars: {total_char_len}/240)，開始進行批次翻譯...")
+                    self.translate_batch(tag_buffer, self.target_col_idx)
                     
-                    row_num = 0
-                    processed_count = 0
+                    self._sleep_batch_interval()
                     
-                    # 1. 迴圈讀取並處理每一列
-                    for row in reader:
-                        row_num += 1
-                        
-                        # 補齊欄位避免 IndexError
-                        while len(row) <= max_idx:
-                            row.append("")
-                        
-                        # 檢查是否取消
-                        if self._is_cancelled:
-                            self.log_emitted.emit("WARNING", "使用者已取消翻譯，正在將剩餘行原樣寫入檔案...")
-                            writer.writerows(line_buffer)
-                            tag_buffer.clear()
-                            line_buffer.clear()
-                            
-                            writer.writerow(row)
-                            
-                            for remain_row in reader:
-                                while len(remain_row) <= max_idx:
-                                    remain_row.append("")
-                                writer.writerow(remain_row)
-                            break
-                                
-                        if row_num < start_row:
-                            writer.writerow(row)
-                            continue
-                            
-                        # 結束行號
-                        if row_num > end_row:
-                            if tag_buffer:
-                                self.log_emitted.emit("INFO", f"已超過結束行，翻譯最後殘留批次，共 {len(tag_buffer)} 筆...")
-                                if self.translate_batch(tag_buffer, line_buffer, writer, reader, target_col_idx, source_col_idx, max_idx):
-                                    writer.writerows(line_buffer)
-                                    tag_buffer.clear()
-                                    line_buffer.clear()
-                                
-                            writer.writerow(row)
-                            continue
-                            
-                        processed_count += 1
-                        self.progress_updated.emit(processed_count, total_to_translate)
-                        
-                        target_val = row[target_col_idx].strip()
-                        source_val = row[source_col_idx]
-                        
-                        if target_val != "" and not line_buffer:
-                            writer.writerow(row)
-                            continue
-                            
-                        # 5.2 如果目標列的值不為空，則加入 line buffer
-                        elif target_val != "":
-                            line_buffer.append(row)
-                            
-                        # 5.3 如果目標列的值為空，則加入待翻譯的 tag buffer，並加入 line buffer
-                        else:
-                            tag_buffer.append((row, source_val, row_num))
-                            line_buffer.append(row)
-                            
-                        # 5.4 如果 tag buffer 長度達到 batch_size 筆，或 line buffer 達到 500 筆，或 tag buffer 總字元數超過 240
-                        total_char_len = sum(len(item[1]) for item in tag_buffer)
-                        if len(tag_buffer) >= self.batch_size or len(line_buffer) >= 500 or total_char_len > 240:
-                            self.log_emitted.emit("INFO", f"達到批次處理上限 (tag: {len(tag_buffer)}/{self.batch_size}, line: {len(line_buffer)}/500, chars: {total_char_len}/240)，開始進行批次翻譯...")
-                            if self.translate_batch(tag_buffer, line_buffer, writer, reader, target_col_idx, source_col_idx, max_idx):
-                                # 5.4.2
-                                writer.writerows(line_buffer)
-                                tag_buffer.clear()
-                                line_buffer.clear()
-                                
-                                # 5.4.3 休息指定的批次間隔時間
-                                self._sleep_batch_interval()
-                                
-                    # 2. 如果已讀取到檔案末尾，處理最後殘留批次
-                    if tag_buffer:
-                        self.log_emitted.emit("INFO", f"文件已讀取完畢，開始處理最後殘留批次，共 {len(tag_buffer)} 筆...")
-                        self.translate_batch(tag_buffer, line_buffer, writer, reader, target_col_idx, source_col_idx, max_idx)
-                    
-                    # 寫入 line buffer 中的剩餘行
-                    if line_buffer:
-                        writer.writerows(line_buffer)
-                        tag_buffer.clear()
-                        line_buffer.clear()
- 
             if self._is_cancelled:
-                self.log_emitted.emit("WARNING", f"翻譯已取消！結果已寫入至：{self.output_path}")
+                self.log_emitted.emit("WARNING", "使用者已取消翻譯。")
             else:
-                self.log_emitted.emit("SUCCESS", f"翻譯完成！結果已寫入至：{self.output_path}")
-            self.finished_successfully.emit(self.output_path)
- 
+                if tag_buffer:
+                    self.log_emitted.emit("INFO", f"開始處理最後殘留批次，共 {len(tag_buffer)} 筆...")
+                    self.translate_batch(tag_buffer, self.target_col_idx)
+                self.log_emitted.emit("SUCCESS", "翻譯完成！")
+
+            self.finished_successfully.emit()
+  
         except Exception as e:
             self.log_emitted.emit("ERROR", f"翻譯過程發生錯誤：{str(e)}")
             self.finished_with_error.emit(str(e))
-
-    def get_success_message(self, out_path):
-        return "成功", f"翻譯完成！\n檔案已儲存至：\n{out_path}"
-
-    def get_cancel_message(self, out_path):
-        return "中斷", f"已取消翻譯！\n檔案已儲存至：\n{out_path}"
-
-    def get_error_message(self, err_msg):
-        return "翻譯中斷", f"翻譯過程發生錯誤：\n{err_msg}"

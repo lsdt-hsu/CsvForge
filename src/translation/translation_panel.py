@@ -28,8 +28,19 @@ class TranslationPanel(BasePanel):
         self.translator.started.connect(self.on_translator_started)
         self.translator.finished.connect(self.on_translator_finished)
         self.translator.cancelled.connect(self.on_translator_cancelled)
+        self.translator.translation_done.connect(self._on_translation_done)
+        self.translator.data_changed.connect(self._on_data_changed)
         
         self.init_ui()
+
+    def _on_translation_done(self):
+        if self.context and self.context._win:
+            self.context._win.silent_save_edit_data()
+
+    def _on_data_changed(self):
+        if self.context and self.context._win:
+            self.context._win.edit_content_panel.set_modified(True)
+            self.context._win.edit_content_panel.table_model.layoutChanged.emit()
 
 
     def init_ui(self):

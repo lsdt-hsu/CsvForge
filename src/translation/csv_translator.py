@@ -1,5 +1,4 @@
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QMessageBox
 from io_panel.io_panel_validator import validate_io_panel_inputs
 from translation.csv_translator_worker import CSVTranslatorWorker
 
@@ -8,6 +7,8 @@ class CSVTranslator(QObject):
     started = pyqtSignal()
     finished = pyqtSignal()
     cancelled = pyqtSignal()
+    translation_done = pyqtSignal()
+    data_changed = pyqtSignal()
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent)
@@ -25,21 +26,22 @@ class CSVTranslator(QObject):
         is_valid, parsed = validate_io_panel_inputs(
             self.parent_win,
             self.context,
-            require_source_path=True,
-            require_output_path=True,
+            require_source_path=False,
+            require_output_path=False,
             require_source_col=True,
             require_target_col=True,
         )
         if not is_valid:
             return
 
+        visible_row_indices = list(self.context._win.edit_content_panel.table_model.visible_row_indices)
+        all_rows = self.context._win.edit_content_panel.get_all_rows()
+
         worker_instance = CSVTranslatorWorker(
-            source_path=self.context.source_path,
-            output_path=self.context.output_path,
-            start_row=parsed["start_row"],
-            end_row=parsed["end_row"],
-            source_col=parsed["source_col"],
-            target_col=parsed["target_col"],
+            all_rows=all_rows,
+            visible_row_indices=visible_row_indices,
+            source_col_idx=parsed["source_col"] - 1,
+            target_col_idx=parsed["target_col"] - 1,
             source_lang=src_lang,
             target_lang=tgt_lang,
             batch_interval=batch_interval,
@@ -51,6 +53,7 @@ class CSVTranslator(QObject):
         # 連接 Worker 完成與錯誤 Signal
         worker_instance.finished_successfully.connect(self._on_worker_success)
         worker_instance.finished_with_error.connect(self._on_worker_error)
+        worker_instance.data_changed.connect(self.data_changed.emit)
 
         # 請求主視窗啟動 Worker Thread
         self.request_start_worker.emit(worker_instance)
@@ -61,29 +64,16 @@ class CSVTranslator(QObject):
             self._current_worker.cancel()
             self.cancelled.emit()
 
-    def _on_worker_success(self, out_path):
+    def _on_worker_success(self):
         if not self._current_worker:
             return
-        worker = self._current_worker
-
-        # 彈出成功或中斷 QMessageBox
-        if worker._is_cancelled:
-            title, msg = worker.get_cancel_message(out_path)
-            QMessageBox.information(self.parent_win.window(), title, msg)
-        else:
-            title, msg = worker.get_success_message(out_path)
-            QMessageBox.information(self.parent_win.window(), title, msg)
-
         self.finished.emit()
+        self.translation_done.emit()
         self._current_worker = None
 
     def _on_worker_error(self, err_msg):
         if not self._current_worker:
             return
-        worker = self._current_worker
-
-        title, msg = worker.get_error_message(err_msg)
-        QMessageBox.critical(self.parent_win.window(), title, msg)
-
         self.finished.emit()
+        self.translation_done.emit()
         self._current_worker = None
