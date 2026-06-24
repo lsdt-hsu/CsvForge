@@ -117,7 +117,6 @@ class AiPromptWidget(QWidget):
         # 目標寫入欄位選單，限制為唯讀下拉選單
         self.cb_target_col = QComboBox()
         self.cb_target_col.setPlaceholderText("選擇欄位名稱")
-        self.cb_target_col.setMinimumWidth(180)
         self.cb_target_col.setStyleSheet("""
             QComboBox {
                 background-color: #1a1b26;
