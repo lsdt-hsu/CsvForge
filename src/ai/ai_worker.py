@@ -170,8 +170,8 @@ class CSVAIWorker(QThread):
                     self.data_changed.emit()
 
                 except Exception as ex:
-                    # 容錯處理：單行失敗時發布錯誤日誌並繼續，不崩潰
-                    self.log_emitted.emit("ERROR", f"第 {r_idx + 1} 行處理失敗: {str(ex)}")
+                    # 遇到錯誤，拋出異常以中斷任務
+                    raise RuntimeError(f"第 {r_idx + 1} 行處理失敗: {str(ex)}")
 
                 processed_count += 1
                 self.progress_updated.emit(processed_count, total_count)

@@ -648,6 +648,14 @@ class AiPanel(BasePanel):
         self.set_enabled(True)
         self.worker = None
 
+        # 彈出錯誤對話框
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(self, "AI 處理中斷", f"AI 處理過程中發生錯誤：\n{err_msg}")
+
+        # 自動存檔
+        if self.context and self.context._win:
+            self.context._win.silent_save_edit_data()
+
     def _on_data_changed(self):
         # 標記主資料已修改，觸發介面重繪
         if self.context and self.context._win:
