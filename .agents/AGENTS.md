@@ -4,6 +4,7 @@
 - Chat, implementation plans, and all reports MUST be in Traditional Chinese (繁體中文) by default.
 - Do NOT translate technical terms into Chinese (especially avoid Simplified Chinese terms).
 - Keep industry terms in English (e.g., Commit, Push, Branch, Merge, Thread, Callback, Instance, Repository, String, Constant).
+- The AI MUST explicitly declare that it has loaded and is adhering to the rules in .agents/AGENTS.md only once, in the first response to the user's initial prompt of each conversation. Do not repeat this declaration in subsequent steps or intermediate tool execution explanations within the same conversation.
 
 ## 2. Action Flow & Git Policy
 - **If Minor Changes** (constants, strings, assets, variable/function renaming):
