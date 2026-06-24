@@ -37,6 +37,14 @@ class AiPanel(BasePanel):
     
     負責提供 UI 選項、連線測試交互、管理 VRAM 進階保護設定，
     並於啟動處理時建立 CSVAIWorker 背景線程進行運算。
+
+    設計決策（Config 存取方式）：
+      本面板採用「直接操作 Config 物件」的方式（資料相依性）。
+      當任何 UI 控制項變更時，會透過 _on_field_changed 立即呼叫 save_to_config() 
+      更新記憶體中的 Config 物件，並設定 dirty 旗標。
+      主程式（MainWindow / SettingsMixin）會控制何時呼叫 SettingsManager.save() 寫入 settings.json。
+      這樣設計可確保在任何時刻（如載入新 CSV 等呼叫 restore_from_config 時）記憶體中的 Config 都是最新狀態，
+      以避免使用者修改的 UI 設定因還原被舊值覆蓋。
     """
 
     def __init__(self, parent=None, context=None):
@@ -44,6 +52,13 @@ class AiPanel(BasePanel):
         super().__init__(parent, title_text="AI 批次處理", require_data_loading=True, context=context)
         self.worker = None
         self.tester = None
+        
+        # 記錄是否已進行過連線測試
+        self._has_checked_ai_conn = False
+        # 記錄上一次執行連線測試時的後端設定，以避免重複探測
+        self._last_checked_service = None
+        self._last_checked_url = None
+        
         self.init_ui()
 
     def init_ui(self):
@@ -220,22 +235,22 @@ class AiPanel(BasePanel):
 
         # --- 事件信號連接 ---
         self.cb_service.currentIndexChanged.connect(self._on_service_combo_changed)
-        self.btn_test_conn.clicked.connect(self.start_connection_test)
+        self.btn_test_conn.clicked.connect(lambda: self.start_connection_test(force=True))
         self.btn_advanced_toggle.clicked.connect(self.toggle_advanced)
         self.btn_start.clicked.connect(self.on_start_clicked)
 
-        # 欄位值變更自動標記 config dirty
-        self.cb_service.currentIndexChanged.connect(self._mark_dirty)
-        self.txt_api_key.textChanged.connect(self._mark_dirty)
-        self.cb_google_model.currentIndexChanged.connect(self._mark_dirty)
-        self.cb_google_model.lineEdit().textChanged.connect(self._mark_dirty)
-        self.cb_local_backend.currentIndexChanged.connect(self._mark_dirty)
-        self.txt_local_url.textChanged.connect(self._mark_dirty)
-        self.cb_local_model.currentIndexChanged.connect(self._mark_dirty)
-        self.txt_ctx.textChanged.connect(self._mark_dirty)
-        self.txt_temp.textChanged.connect(self._mark_dirty)
-        self.prompt_widget.cb_target_col.currentIndexChanged.connect(self._mark_dirty)
-        self.prompt_widget.txt_prompt.textChanged.connect(self._mark_dirty)
+        # 欄位值變更時自動同步回 Config 記憶體並標記 dirty
+        self.cb_service.currentIndexChanged.connect(self._on_field_changed)
+        self.txt_api_key.textChanged.connect(self._on_field_changed)
+        self.cb_google_model.currentIndexChanged.connect(self._on_field_changed)
+        self.cb_google_model.lineEdit().textChanged.connect(self._on_field_changed)
+        self.cb_local_backend.currentIndexChanged.connect(self._on_field_changed)
+        self.txt_local_url.textChanged.connect(self._on_field_changed)
+        self.cb_local_model.currentIndexChanged.connect(self._on_field_changed)
+        self.txt_ctx.textChanged.connect(self._on_field_changed)
+        self.txt_temp.textChanged.connect(self._on_field_changed)
+        self.prompt_widget.cb_target_col.currentIndexChanged.connect(self._on_field_changed)
+        self.prompt_widget.txt_prompt.textChanged.connect(self._on_field_changed)
 
         # 當伺服器網址文字框按 Enter 或編輯完成時，也非同步探測一下
         self.txt_local_url.editingFinished.connect(self.start_connection_test)
@@ -261,9 +276,14 @@ class AiPanel(BasePanel):
         self.advanced_widget.setVisible(visible)
         self.btn_advanced_toggle.setText("▼ 進階設定 (VRAM 防護)" if visible else "▶ 進階設定 (VRAM 防護)")
 
-    def start_connection_test(self):
+    def start_connection_test(self, force=False):
         """
         非同步探測 Local AI (Ollama) Port 是否可用。
+
+        【連線測試防重複機制】：
+        若 force=False 且已執行過檢查 (_has_checked_ai_conn == True)，
+        僅在當前 AI 服務或網址與上一次檢查不同（即後端變更）時，才發起測試。
+        若 force=True（如手動點擊「測試連線」），則強制發起測試。
         """
         if self.cb_service.currentText() == "Google AI":
             return
@@ -273,11 +293,23 @@ class AiPanel(BasePanel):
             return
 
         url = self.txt_local_url.text().strip()
+        service = self.cb_service.currentText()
+
+        # 判斷是否略過連線測試
+        if not force and self._has_checked_ai_conn:
+            if service == self._last_checked_service and url == self._last_checked_url:
+                return
+
         if not url:
             self._update_conn_ui(state="failed", msg="網址不能為空")
             return
 
         self._update_conn_ui(state="connecting")
+
+        # 記錄本次發起測試的後端設定資訊
+        self._has_checked_ai_conn = True
+        self._last_checked_service = service
+        self._last_checked_url = url
 
         self.tester = ConnectionTester(url)
         self.tester.success.connect(self._on_test_success)
@@ -331,6 +363,19 @@ class AiPanel(BasePanel):
             cfg = self.context.ai_panel_config
             cfg.dirty = True
 
+    def _on_field_changed(self):
+        """
+        欄位值變更時的 Slot 函式。
+
+        【設計決策（設定即時同步）】：
+        當 UI 控制項變更時，立即呼叫 save_to_config() 將最新值寫入記憶體組態（ai_panel_config），
+        並標記 dirty。這可確保記憶體資料即時更新，避免在其他操作（如載入 CSV）
+        觸發 restore_from_config() 時，因記憶體仍保留舊資料而被舊設定覆蓋。
+        主程式會統一控制硬碟存檔（settings.json）的寫入時機。
+        """
+        self.save_to_config()
+        self._mark_dirty()
+
     def restore_from_config(self):
         """
         從 AppContext 的 AiPanelConfig 還原元件設定。
@@ -340,8 +385,21 @@ class AiPanel(BasePanel):
         
         cfg = self.context.ai_panel_config
         
-        self.blockSignals(True)
-        self.prompt_widget.blockSignals(True)
+        # 阻擋所有子控制項的變更訊號，防止在還原過程中因觸發值變更而執行 _on_field_changed()
+        # 進而導致以未還原完成的 UI 狀態覆寫記憶體 Config
+        self.cb_service.blockSignals(True)
+        self.txt_api_key.blockSignals(True)
+        self.cb_google_model.blockSignals(True)
+        if self.cb_google_model.lineEdit():
+            self.cb_google_model.lineEdit().blockSignals(True)
+        self.cb_local_backend.blockSignals(True)
+        self.txt_local_url.blockSignals(True)
+        self.cb_local_model.blockSignals(True)
+        self.txt_ctx.blockSignals(True)
+        self.txt_temp.blockSignals(True)
+        self.prompt_widget.cb_target_col.blockSignals(True)
+        self.prompt_widget.txt_prompt.blockSignals(True)
+        
         try:
             # AI 服務種類
             idx = self.cb_service.findText(cfg.ai_service)
@@ -373,8 +431,18 @@ class AiPanel(BasePanel):
             # 觸發顯示/隱藏
             self._on_service_combo_changed(self.cb_service.currentIndex())
         finally:
-            self.blockSignals(False)
-            self.prompt_widget.blockSignals(False)
+            self.cb_service.blockSignals(False)
+            self.txt_api_key.blockSignals(False)
+            self.cb_google_model.blockSignals(False)
+            if self.cb_google_model.lineEdit():
+                self.cb_google_model.lineEdit().blockSignals(False)
+            self.cb_local_backend.blockSignals(False)
+            self.txt_local_url.blockSignals(False)
+            self.cb_local_model.blockSignals(False)
+            self.txt_ctx.blockSignals(False)
+            self.txt_temp.blockSignals(False)
+            self.prompt_widget.cb_target_col.blockSignals(False)
+            self.prompt_widget.txt_prompt.blockSignals(False)
 
     def save_to_config(self):
         """
