@@ -173,6 +173,9 @@ class RuleWidget(QWidget):
             text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
             self.cmb_compare_col.addItem(text, i)
 
+        if isinstance(old_col, int) and (old_col >= num_cols or old_col < 0):
+            self.cmb_compare_col.addItem(f"欄位{old_col+1}", old_col)
+
         idx = self.cmb_compare_col.findData(old_col)
         self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
 
@@ -198,6 +201,9 @@ class RuleWidget(QWidget):
             for i in range(num_cols):
                 text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
                 self.cmb_compare_target.addItem(text, i)
+
+            if isinstance(old_target, int) and (old_target >= num_cols or old_target < 0):
+                self.cmb_compare_target.addItem(f"欄位{old_target+1}", old_target)
         
         idx = self.cmb_compare_target.findData(old_target)
         self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
@@ -289,6 +295,9 @@ class RuleWidget(QWidget):
         b_idx = cfg.get("belong_value_idx", 0)
 
         idx = self.cmb_compare_col.findData(col)
+        if idx < 0 and isinstance(col, int):
+            self.cmb_compare_col.addItem(f"欄位{col+1}", col)
+            idx = self.cmb_compare_col.findData(col)
         self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
 
         idx = self.cmb_compare_method.findText(method)
@@ -297,6 +306,9 @@ class RuleWidget(QWidget):
         self.update_target_options(self.parent_panel.num_cols, self.parent_panel.headers)
 
         idx = self.cmb_compare_target.findData(target)
+        if idx < 0 and isinstance(target, int) and method not in ("屬於", "不屬於"):
+            self.cmb_compare_target.addItem(f"欄位{target+1}", target)
+            idx = self.cmb_compare_target.findData(target)
         self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
 
         self.update_belong_visibility()

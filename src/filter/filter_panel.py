@@ -268,12 +268,27 @@ class FilterPanel(BasePanel):
         if not self.check_expression_validity():
             return
 
+        rows = self.context.all_rows
+        if not rows:
+            QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
+            return
+
         for r in self.rules:
             cfg = r.get_config()
             col = cfg["compare_col"]
             method = cfg["compare_method"]
             target = cfg["compare_target"]
             val = cfg["compare_value"]
+
+            # 檢查比對欄位是否無法對應
+            if isinstance(col, int) and (col >= self.num_cols or col < 0):
+                QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：比對欄位「欄位{col+1}」在當前 CSV 中不存在。")
+                return
+
+            # 檢查比對目標欄位是否無法對應
+            if method not in ("屬於", "不屬於") and isinstance(target, int) and (target >= self.num_cols or target < 0):
+                QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：比對目標「欄位{target+1}」在當前 CSV 中不存在。")
+                return
 
             if col != "none":
                 if method not in ("屬於", "不屬於"):
@@ -293,11 +308,6 @@ class FilterPanel(BasePanel):
             "rules": [r.get_config() for r in self.rules],
             "logic_tree": logic_tree.serialize_tree(self.logic_tree)
         }
-
-        rows = self.context.all_rows
-        if not rows:
-            QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
-            return
 
         from io_panel import validate_io_panel_inputs
 
