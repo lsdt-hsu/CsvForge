@@ -335,6 +335,30 @@ class FilterWorker(QThread):
             return any(self.eval_logic_tree(c, rule_results) for c in node.children)
         return False
 
+    def evaluate_general_rules(self, row, rules_cfg, tree, regex_patterns) -> bool:
+        # 若無規則或無邏輯樹，或者所有規則皆為 "none" (不過濾)，則直接最佳化回傳 True
+        if not rules_cfg or not tree or all(r.get("compare_col") == "none" for r in rules_cfg):
+            return True
+
+        # 求解各單一規則結果
+        rule_results = []
+        for j, r_cfg in enumerate(rules_cfg):
+            col = r_cfg.get("compare_col", "none")
+            if col == "none":
+                rule_results.append(True)
+            else:
+                match_res = self.check_row_match(
+                    row, col,
+                    r_cfg.get("compare_method"),
+                    r_cfg.get("compare_target"),
+                    r_cfg.get("compare_value"),
+                    regex_patterns[j]
+                )
+                rule_results.append(match_res)
+        
+        # 遞迴運算 AST 邏輯樹
+        return self.eval_logic_tree(tree, rule_results)
+
     def run(self):
         start_time = time.time()
         matched_indices = []
@@ -350,13 +374,12 @@ class FilterWorker(QThread):
             lt_cfg = self.filter_config.get("logic_tree")
             tree = logic_tree.deserialize_tree(lt_cfg)
             
-            # 若無規則或無邏輯樹，直接不進行過濾 (回傳 None)
-            if not rules_cfg or not tree:
-                self.filter_completed.emit(None, time.time() - start_time)
-                return
-                
-            # 若所有規則都是 "none" (不過濾)，亦不進行過濾
-            if all(r.get("compare_col") == "none" for r in rules_cfg):
+            # 效能優化判定：若無實質行號限制且滿足「無過濾規則」或「所有規則都是不過濾」，直接回傳 None (回復顯示全部)
+            actual_start = max(2, self.start_row) if self.is_header else self.start_row
+            has_row_limit = (actual_start > (2 if self.is_header else 1)) or (self.end_row is not None and self.end_row < total_rows)
+            is_no_rules_filter = not rules_cfg or not tree or all(r.get("compare_col") == "none" for r in rules_cfg)
+            
+            if not has_row_limit and is_no_rules_filter:
                 self.filter_completed.emit(None, time.time() - start_time)
                 return
 
@@ -390,29 +413,12 @@ class FilterWorker(QThread):
                 if self.is_header and r_num == 1:
                     continue
                     
-                # 僅檢查在 start_row 與 end_row 之間的資料
-                actual_start = max(2, self.start_row) if self.is_header else self.start_row
-                if not (actual_start <= r_num <= end_bound):
-                    continue
+                # 程式流程明確判定：起始行號限制 AND 結束行號限制 AND (一般規則總結果)
+                in_start_limit = (r_num >= actual_start)
+                in_end_limit = (self.end_row is None or r_num <= end_bound)
+                rules_match = self.evaluate_general_rules(row, rules_cfg, tree, regex_patterns)
                 
-                # 求解各單一規則結果
-                rule_results = []
-                for j, r_cfg in enumerate(rules_cfg):
-                    col = r_cfg.get("compare_col", "none")
-                    if col == "none":
-                        rule_results.append(True)
-                    else:
-                        match_res = self.check_row_match(
-                            row, col,
-                            r_cfg.get("compare_method"),
-                            r_cfg.get("compare_target"),
-                            r_cfg.get("compare_value"),
-                            regex_patterns[j]
-                        )
-                        rule_results.append(match_res)
-                
-                # 遞迴運算 AST 邏輯樹
-                if self.eval_logic_tree(tree, rule_results):
+                if in_start_limit and in_end_limit and rules_match:
                     matched_indices.append(i)
 
             self.progress_updated.emit(total_rows, total_rows)
