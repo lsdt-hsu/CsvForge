@@ -10,12 +10,10 @@ class BaseCSVWorker(QThread):
     finished_successfully = pyqtSignal(str)      # 成功時的輸出檔案路徑
     finished_with_error = pyqtSignal(str)        # 錯誤原因
 
-    def __init__(self, source_path, output_path, start_row, end_row):
+    def __init__(self, source_path, output_path):
         super().__init__()
         self.source_path = source_path
         self.output_path = output_path
-        self.start_row = start_row
-        self.end_row = end_row
         self._is_paused = False
         self._is_cancelled = False
         self.encoding = None

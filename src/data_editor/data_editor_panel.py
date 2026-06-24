@@ -28,18 +28,14 @@ class CSVTableModel(QAbstractTableModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.all_rows = []           # 儲存完整的 CSV 二維陣列數據
-        self.start_row = 1          # 起始行號 (1-based)
-        self.end_row = None         # 結束行號 (1-based, None 表示至結尾)
         self.is_header = False      # 第一行是否為標題
         self.num_cols = 0            # 快取欄位數量，避免 O(N) 重複計算
         self.filtered_indices = None # None = 未啟用過濾; list = 過濾後的 0-based 索引
         self.visible_row_indices = [] # 儲存當前可見資料行在 all_rows 中的索引值
 
-    def set_data(self, all_rows, start_row, end_row, is_header):
+    def set_data(self, all_rows, is_header):
         self.beginResetModel()
         self.all_rows = all_rows
-        self.start_row = start_row
-        self.end_row = end_row
         self.is_header = is_header
         self.num_cols = max(len(row) for row in all_rows) if all_rows else 0
         self.filtered_indices = None
@@ -59,31 +55,15 @@ class CSVTableModel(QAbstractTableModel):
         self.endResetModel()
 
     def update_visible_rows(self):
-        self.visible_row_indices = []
         if not self.all_rows:
+            self.visible_row_indices = []
             return
-
-        total_rows = len(self.all_rows)
-        end_idx = self.end_row if self.end_row is not None else total_rows
-        end_idx = min(end_idx, total_rows)
-
-        if self.is_header:
-            start = max(2, self.start_row)
-        else:
-            start = self.start_row
-
-        if start > end_idx:
-            return
-
+        total = len(self.all_rows)
+        data_start = 1 if self.is_header else 0  # 有標題則跳過第 0 行（索引 0）
         if self.filtered_indices is None:
-            self.visible_row_indices = list(range(start - 1, end_idx))
+            self.visible_row_indices = list(range(data_start, total))
         else:
-            range_start = start - 1
-            range_end = end_idx
-            self.visible_row_indices = [
-                i for i in self.filtered_indices
-                if range_start <= i < range_end
-            ]
+            self.visible_row_indices = [i for i in self.filtered_indices if i >= data_start]
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.visible_row_indices)
@@ -269,15 +249,11 @@ class DataEditorPanel(BasePanel):
             self.context.data_editor_config.first_row_header = is_checked
             self.context.data_editor_config.dirty = True
 
-    def load_data(self, all_rows, start_row, end_row, file_path=None):
+    def load_data(self, all_rows, file_path=None):
         self.table_model.set_data(
             all_rows, 
-            start_row, 
-            end_row, 
             self.chk_first_row_header.isChecked()
         )
-        
-        end_row_val = end_row if end_row is not None else len(all_rows)
         
         prefix = ""
         if file_path:
@@ -285,7 +261,7 @@ class DataEditorPanel(BasePanel):
             main_name, _ = os.path.splitext(base_name)
             prefix = f"{main_name}: "
             
-        self.lbl_status.setText(f"{prefix}{start_row} - {end_row_val} of {len(all_rows)}")
+        self.lbl_status.setText(f"{prefix}共 {len(all_rows)} 行")
         self.set_modified(False)
         self.resize_columns_fast()
 
@@ -337,7 +313,7 @@ class DataEditorPanel(BasePanel):
         self.chk_first_row_header.blockSignals(False)
 
     def clear(self):
-        self.table_model.set_data([], 1, None, False)
+        self.table_model.set_data([], False)
         self.lbl_status.setText("尚未載入資料")
         self.set_modified(False)
 
@@ -357,5 +333,5 @@ class DataEditorPanel(BasePanel):
 
     def set_csv_data(self, data: LoadedCSVData):
         self.set_delimiter(data.delimiter)
-        self.load_data(data.all_rows, data.start_row, data.end_row, file_path=data.file_path)
+        self.load_data(data.all_rows, file_path=data.file_path)
 

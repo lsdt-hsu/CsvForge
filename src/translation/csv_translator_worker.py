@@ -9,7 +9,9 @@ from csv_worker import BaseCSVWorker
 # --- CSV 翻譯執行緒工人類 ---
 class CSVTranslatorWorker(BaseCSVWorker):
     def __init__(self, source_path, output_path, start_row, end_row, source_col, target_col, source_lang, target_lang, batch_interval=10, single_interval=1, batch_size=18):
-        super().__init__(source_path, output_path, start_row, end_row)
+        super().__init__(source_path, output_path)
+        self.start_row = start_row
+        self.end_row = end_row
         self.source_col = source_col
         self.target_col = target_col
         self.source_lang = source_lang

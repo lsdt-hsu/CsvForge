@@ -7,8 +7,8 @@ from common_data.csv_data import LoadedCSVData
 from io_panel.io_panel_validator import validate_io_panel_inputs
 
 class CSVEditWorker(BaseCSVWorker):
-    def __init__(self, source_path, output_path, start_row, end_row):
-        super().__init__(source_path, output_path, start_row, end_row)
+    def __init__(self, source_path, output_path):
+        super().__init__(source_path, output_path)
         self.loaded_rows = []
         self.task_name = "載入中..."
 
@@ -93,9 +93,7 @@ class CSVLoader(QObject):
 
         worker_instance = CSVEditWorker(
             source_path=self.context.source_path,
-            output_path=self.context.output_path,
-            start_row=parsed["start_row"],
-            end_row=parsed["end_row"]
+            output_path=self.context.output_path
         )
         self._current_worker = worker_instance
 
@@ -115,8 +113,6 @@ class CSVLoader(QObject):
         # 轉換為共用資料結構 LoadedCSVData
         data = LoadedCSVData(
             all_rows=worker.loaded_rows,
-            start_row=worker.start_row,
-            end_row=worker.end_row,
             delimiter=getattr(worker, "delimiter", ","),
             encoding=getattr(worker, "encoding", "utf-8"),
             file_path=worker.source_path
