@@ -1,7 +1,7 @@
 import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
-    QLineEdit, QPushButton, QFormLayout, QFrame
+    QLineEdit, QPushButton, QFormLayout, QFrame, QScrollArea
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIntValidator, QDoubleValidator
@@ -65,6 +65,26 @@ class AiPanel(BasePanel):
         # 建立 UI 配置
         # 所有控制元件都必須放入 BasePanel 的 self.controls_layout 中
         
+        parent_layout = self.controls_layout
+        
+        self.main_scroll = QScrollArea()
+        self.main_scroll.setWidgetResizable(True)
+        self.main_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.main_scroll.setStyleSheet("QScrollArea { background-color: transparent; }")
+        
+        self.main_scroll_content = QWidget()
+        self.main_scroll_content.setObjectName("mainScrollContent")
+        self.main_scroll_content.setStyleSheet("QWidget#mainScrollContent { background-color: transparent; }")
+        
+        self.controls_layout = QVBoxLayout(self.main_scroll_content)
+        self.controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.controls_layout.setSpacing(10)
+        
+        self.main_scroll.setWidget(self.main_scroll_content)
+        parent_layout.addWidget(self.main_scroll)
+
         # 1. AI 服務選擇
         service_layout = QHBoxLayout()
         lbl_service = QLabel("AI 服務服務：")

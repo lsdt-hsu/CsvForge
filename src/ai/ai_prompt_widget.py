@@ -176,6 +176,8 @@ class AiPromptWidget(QWidget):
                 border: 1px solid #7aa2f7;
             }
         """)
+        fm = self.txt_prompt.fontMetrics()
+        self.txt_prompt.setMaximumHeight(10 * fm.lineSpacing() + 16)
         layout.addWidget(self.txt_prompt)
 
     def update_headers(self, headers: list[str]):
