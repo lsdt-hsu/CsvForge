@@ -26,42 +26,26 @@ class LeftPanel(QFrame):
         在執行期使用 QPainter 動態繪製一個簡約、精美的高解析度 AI 文字圖標，
         避免依賴外部 PNG 資源，防範資源遺失造成的崩潰。
         """
-        # 1. 繪製正常 (Inactive) 狀態
         pixmap = QPixmap(40, 40)
         pixmap.fill(Qt.GlobalColor.transparent)
         
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QColor("#7aa2f7"))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(2, 2, 36, 36, 6, 6)
         
         font = QFont("Arial")
-        font.setPointSize(12)
+        font.setPointSize(16)
         font.setBold(True)
         
         painter.setFont(font)
+        painter.setPen(QColor("#ffffff"))
+        
         painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "AI")
         painter.end()
 
-        # 2. 繪製 Active 狀態
-        pixmap_active = QPixmap(40, 40)
-        pixmap_active.fill(Qt.GlobalColor.transparent)
-        
-        painter_act = QPainter(pixmap_active)
-        painter_act.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter_act.setPen(QColor("#2ac3de"))
-        painter_act.setBrush(Qt.BrushStyle.NoBrush)
-        painter_act.drawRoundedRect(2, 2, 36, 36, 6, 6)
-        
-        painter_act.setFont(font)
-        painter_act.drawText(pixmap_active.rect(), Qt.AlignmentFlag.AlignCenter, "AI")
-        painter_act.end()
-
         icon = QIcon()
         icon.addPixmap(pixmap, QIcon.Mode.Normal, QIcon.State.Off)
-        icon.addPixmap(pixmap_active, QIcon.Mode.Normal, QIcon.State.On)
-        icon.addPixmap(pixmap_active, QIcon.Mode.Active)
+        icon.addPixmap(pixmap, QIcon.Mode.Normal, QIcon.State.On)
+        icon.addPixmap(pixmap, QIcon.Mode.Active)
         return icon
 
     def init_ui(self):

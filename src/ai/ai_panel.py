@@ -219,18 +219,6 @@ class AiPanel(BasePanel):
         # 6. 開始 AI 處理按鈕
         self.btn_start = QPushButton("開始 AI 處理")
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_start.setStyleSheet("""
-            QPushButton {
-                background-color: #2ac3de;
-                color: #1a1b26;
-                font-weight: bold;
-                border-radius: 4px;
-                padding: 8px;
-            }
-            QPushButton:hover {
-                background-color: #7dcfff;
-            }
-        """)
         self.controls_layout.addWidget(self.btn_start)
 
         # --- 事件信號連接 ---

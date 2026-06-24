@@ -326,16 +326,16 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         }
 
         /* 活動列按鈕 */
-        QPushButton#btnActivityTranslate, QPushButton#btnActivityEdit, QPushButton#btnActivityFilter {
+        QPushButton#btnActivityTranslate, QPushButton#btnActivityAi, QPushButton#btnActivityEdit, QPushButton#btnActivityFilter {
             background-color: transparent;
             border: none;
             border-radius: 8px;
             padding: 0px;
         }
-        QPushButton#btnActivityTranslate:hover, QPushButton#btnActivityEdit:hover, QPushButton#btnActivityFilter:hover {
+        QPushButton#btnActivityTranslate:hover, QPushButton#btnActivityAi:hover, QPushButton#btnActivityEdit:hover, QPushButton#btnActivityFilter:hover {
             background-color: #2e3047;
         }
-        QPushButton#btnActivityTranslate[active="true"], QPushButton#btnActivityEdit[active="true"], QPushButton#btnActivityFilter[active="true"] {
+        QPushButton#btnActivityTranslate[active="true"], QPushButton#btnActivityAi[active="true"], QPushButton#btnActivityEdit[active="true"], QPushButton#btnActivityFilter[active="true"] {
             background-color: #3b4261;
         }
 

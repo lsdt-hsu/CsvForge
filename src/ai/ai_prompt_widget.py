@@ -24,16 +24,11 @@ class AiPromptWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        # 🤖 AI 欄位動態映射處理 標題
-        lbl_section = QLabel("🤖 AI 欄位動態映射處理")
-        lbl_section.setStyleSheet("font-weight: bold; color: #7aa2f7; font-size: 13px;")
-        layout.addWidget(lbl_section)
-
         # 1. 設定目標寫回欄位
         target_layout = QHBoxLayout()
         target_layout.setSpacing(8)
         
-        lbl_target = QLabel("1. 輸出欄位：")
+        lbl_target = QLabel("輸出欄位：")
         lbl_target.setStyleSheet("color: #c0caf5;")
         
         # 目標寫入欄位選單，限制為唯讀下拉選單
@@ -54,13 +49,12 @@ class AiPromptWidget(QWidget):
         """)
         
         target_layout.addWidget(lbl_target)
-        target_layout.addWidget(self.cb_target_col)
-        target_layout.addStretch()
+        target_layout.addWidget(self.cb_target_col, 1)
         layout.addLayout(target_layout)
 
         # 2. 可用欄位標籤 (QToolButton 水平滾動區)
-        lbl_tags_title = QLabel("2. 可用欄位標籤（點擊可快速複製到 Prompt 中）：")
-        lbl_tags_title.setStyleSheet("color: #a9b1d6; font-size: 11px;")
+        lbl_tags_title = QLabel("可用欄位快選：")
+        lbl_tags_title.setStyleSheet("color: #c0caf5;")
         layout.addWidget(lbl_tags_title)
 
         # 使用 QScrollArea 裝載橫向排開的 QToolButtons，確保欄位過多時能優雅橫向滾動
@@ -83,7 +77,7 @@ class AiPromptWidget(QWidget):
         layout.addWidget(self.tags_scroll)
 
         # 3. AI 指示 (Prompt)
-        lbl_prompt_title = QLabel("3. AI 指示（Prompt）：")
+        lbl_prompt_title = QLabel("AI 指示（Prompt）：")
         lbl_prompt_title.setStyleSheet("color: #c0caf5;")
         layout.addWidget(lbl_prompt_title)
 
