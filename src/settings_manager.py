@@ -124,6 +124,8 @@ class FilterPanelConfig:
     rules: list = field(default_factory=list)
     logic_tree: dict = field(default_factory=dict)
     expr_text: str = "#1"
+    start_row: str = "1"
+    end_row: str = ""
 
 
 # ── 固定的序列化鍵值順序 ──────────────────────────────────────────────────────

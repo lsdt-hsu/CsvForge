@@ -7,10 +7,10 @@ import re
 from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton,
     QWidget, QHBoxLayout, QMessageBox, QRadioButton, QTextEdit,
-    QScrollArea
+    QScrollArea, QFrame
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon
+from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon, QIntValidator
 from base_panel import BasePanel
 
 from filter import logic_tree
@@ -344,6 +344,42 @@ class FilterPanel(BasePanel):
         self.init_ui()
 
     def init_ui(self):
+        # 行號範圍輸入
+        range_widget = QWidget()
+        range_layout = QHBoxLayout(range_widget)
+        range_layout.setContentsMargins(0, 0, 0, 0)
+        range_layout.setSpacing(10)
+
+        lbl_start = QLabel("行號：")
+        self.txt_filter_start_row = QLineEdit("1")
+        self.txt_filter_start_row.setPlaceholderText("1")
+        self.txt_filter_start_row.setValidator(QIntValidator(1, 9999999))
+        self.txt_filter_start_row.setFixedWidth(60)
+        self.txt_filter_start_row.textChanged.connect(self._on_row_range_changed)
+
+        lbl_end = QLabel("~")
+        lbl_end.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.txt_filter_end_row = QLineEdit()
+        self.txt_filter_end_row.setPlaceholderText("檔尾")
+        self.txt_filter_end_row.setValidator(QIntValidator(1, 9999999))
+        self.txt_filter_end_row.setFixedWidth(80)
+        self.txt_filter_end_row.textChanged.connect(self._on_row_range_changed)
+
+        range_layout.addWidget(lbl_start)
+        range_layout.addWidget(self.txt_filter_start_row)
+        range_layout.addWidget(lbl_end)
+        range_layout.addWidget(self.txt_filter_end_row)
+        range_layout.addStretch()
+
+        self.controls_layout.addWidget(range_widget)
+
+        # 分割線
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        sep.setStyleSheet("color: #3b4261; margin-bottom: 5px;")
+        self.controls_layout.addWidget(sep)
+
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -398,6 +434,13 @@ class FilterPanel(BasePanel):
 
         self.reset_panel()
 
+    def _on_row_range_changed(self):
+        if self.context:
+            cfg = self.context.filter_panel_config
+            cfg.start_row = self.txt_filter_start_row.text().strip()
+            cfg.end_row = self.txt_filter_end_row.text().strip()
+            cfg.dirty = True
+
     def clear_layout(self, layout):
         while layout.count():
             child = layout.takeAt(0)
@@ -422,6 +465,14 @@ class FilterPanel(BasePanel):
 
         self.btn_add_rule.setVisible(True)
         self.txt_expression.setPlainText("#1")
+
+        if hasattr(self, "txt_filter_start_row") and hasattr(self, "txt_filter_end_row"):
+            self.txt_filter_start_row.blockSignals(True)
+            self.txt_filter_end_row.blockSignals(True)
+            self.txt_filter_start_row.setText("1")
+            self.txt_filter_end_row.clear()
+            self.txt_filter_start_row.blockSignals(False)
+            self.txt_filter_end_row.blockSignals(False)
 
     def check_expression_validity(self):
         if not self.expression_is_valid:
@@ -567,6 +618,33 @@ class FilterPanel(BasePanel):
         if not is_valid:
             return
 
+        # 驗證行號輸入
+        start_row_str = self.txt_filter_start_row.text().strip()
+        if start_row_str == "":
+            start_row_val = 1
+        else:
+            try:
+                start_row_val = int(start_row_str)
+                if start_row_val < 1:
+                    QMessageBox.warning(self, "輸入錯誤", "起始行號必須是大於或等於 1 的正整數")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "輸入錯誤", "起始行號必須是大於或等於 1 的正整數")
+                return
+
+        end_row_str = self.txt_filter_end_row.text().strip()
+        if end_row_str != "":
+            try:
+                end_row_val = int(end_row_str)
+                if end_row_val < start_row_val:
+                    QMessageBox.warning(self, "輸入錯誤", "結束行號不能小於起始行號")
+                    return
+            except ValueError:
+                QMessageBox.warning(self, "輸入錯誤", "結束行號必須是正整數")
+                return
+        else:
+            end_row_val = None
+
         src_col = parsed["source_col"]
         tgt_col = parsed["target_col"]
 
@@ -575,8 +653,8 @@ class FilterPanel(BasePanel):
         from filter.filter_worker import FilterWorker
         worker_instance = FilterWorker(
             all_rows=rows,
-            start_row=1,
-            end_row=None,
+            start_row=start_row_val,
+            end_row=end_row_val,
             is_header=is_header,
             src_col=src_col,
             tgt_col=tgt_col,
@@ -606,6 +684,8 @@ class FilterPanel(BasePanel):
         QMessageBox.critical(self, "過濾錯誤", err_msg)
 
     def set_enabled(self, enabled):
+        self.txt_filter_start_row.setEnabled(enabled)
+        self.txt_filter_end_row.setEnabled(enabled)
         self.btn_add_rule.setEnabled(enabled)
         self.btn_start_filter.setEnabled(enabled)
         self.txt_expression.setEnabled(enabled)
@@ -619,6 +699,8 @@ class FilterPanel(BasePanel):
         cfg.rules = [r.get_config() for r in self.rules]
         cfg.logic_tree = logic_tree.serialize_tree(self.logic_tree)
         cfg.expr_text = self.txt_expression.toPlainText()
+        cfg.start_row = self.txt_filter_start_row.text().strip()
+        cfg.end_row = self.txt_filter_end_row.text().strip()
         cfg.dirty = True
 
     def _apply_config_to_ui(self, config: dict) -> None:
@@ -626,6 +708,14 @@ class FilterPanel(BasePanel):
             return
 
         self.txt_expression.blockSignals(True)
+        self.txt_filter_start_row.blockSignals(True)
+        self.txt_filter_end_row.blockSignals(True)
+
+        self.txt_filter_start_row.setText(config.get("start_row", "1"))
+        self.txt_filter_end_row.setText(config.get("end_row", ""))
+
+        self.txt_filter_start_row.blockSignals(False)
+        self.txt_filter_end_row.blockSignals(False)
 
         self.clear_layout(self.rule_list_layout)
         self.rules.clear()
@@ -661,6 +751,8 @@ class FilterPanel(BasePanel):
             "rules": cfg.rules,
             "logic_tree": cfg.logic_tree,
             "expr_text": cfg.expr_text,
+            "start_row": cfg.start_row,
+            "end_row": cfg.end_row,
         }
         self._apply_config_to_ui(config_dict)
 
