@@ -1,0 +1,18 @@
+# AI Rules (From .antigravityrc)
+
+## 1. Language & Terminology
+- Chat, implementation plans, and all reports MUST be in Traditional Chinese (繁體中文) by default.
+- Do NOT translate technical terms into Chinese (especially avoid Simplified Chinese terms).
+- Keep industry terms in English (e.g., Commit, Push, Branch, Merge, Thread, Callback, Instance, Repository, String, Constant).
+
+## 2. Action Flow & Git Policy
+- **If Minor Changes** (constants, strings, assets, variable/function renaming):
+  - Direct edit allowed (no prior plan needed).
+  - Auto local `git commit` allowed. No auto `git push`.
+  - *Exception*: If the change is for a bug fix, follow "Logical Changes" rule below.
+- **If Logical Changes** (new features, control flows, data processing, architecture, or **ANY bug fixes** including tiny changes like variable renaming or missing imports):
+  - MUST generate an implementation plan within Antigravity as the primary reference. A backup copy of this plan MUST be saved to a local file named LocalReports/AI_PLAN.md in the project root directory BEFORE requesting approval or editing.
+  - No auto commit, no auto push.
+
+## 3. Override Rule
+- Execute `git commit`, `git push`, or Git workflows ONLY when explicitly commanded by the developer. Manual user commands override all restrictions above.

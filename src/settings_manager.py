@@ -112,6 +112,8 @@ class TranslatePanelConfig:
     batch_size: int = 18
     src_lang: str = "ja"
     tgt_lang: str = "zh-TW"
+    src_col: str = "1"
+    tgt_col: str = "2"
 
 
 @dataclass

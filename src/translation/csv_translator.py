@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QObject, pyqtSignal
-from io_panel.io_panel_validator import validate_io_panel_inputs
+from translation.translation_validator import validate_translation_inputs
 from translation.csv_translator_worker import CSVTranslatorWorker
 
 class CSVTranslator(QObject):
@@ -19,17 +19,14 @@ class CSVTranslator(QObject):
     def is_running(self) -> bool:
         return self._current_worker is not None and self._current_worker.isRunning()
 
-    def start_translation_task(self, src_lang, tgt_lang, batch_interval, single_interval, batch_size):
+    def start_translation_task(self, src_lang, tgt_lang, batch_interval, single_interval, batch_size, src_col, tgt_col):
         if self.is_running():
             return
 
-        is_valid, parsed = validate_io_panel_inputs(
+        is_valid, parsed = validate_translation_inputs(
             self.parent_win,
-            self.context,
-            require_source_path=False,
-            require_output_path=False,
-            require_source_col=True,
-            require_target_col=True,
+            src_col,
+            tgt_col
         )
         if not is_valid:
             return

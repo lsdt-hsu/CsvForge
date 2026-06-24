@@ -13,9 +13,11 @@ translation_panel.py — 翻譯面板
   欄位變更時編輯器能直接提示錯誤位置。
 """
 
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIntValidator
 from base_panel import BasePanel
+from ui_constants import INPUT_COL_MAX_WIDTH
 
 
 class TranslationPanel(BasePanel):
@@ -67,6 +69,16 @@ class TranslationPanel(BasePanel):
             self.cb_tgt_lang.addItem(name, code)
         self.cb_tgt_lang.setCurrentIndex(1)
 
+        lbl_src_col = QLabel("來源欄號：")
+        self.txt_src_col = QLineEdit("1")
+        self.txt_src_col.setValidator(QIntValidator(1, 9999))
+        self.txt_src_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
+
+        lbl_tgt_col = QLabel("目標欄號：")
+        self.txt_tgt_col = QLineEdit("2")
+        self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
+        self.txt_tgt_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
+
         self.lbl_batch_title = QLabel("批次間隔：10 秒")
         self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
         self.slider_batch_interval.setRange(10, 30)
@@ -89,12 +101,16 @@ class TranslationPanel(BasePanel):
         grid.addWidget(self.cb_src_lang, 0, 1)
         grid.addWidget(lbl_tgt_lang, 1, 0)
         grid.addWidget(self.cb_tgt_lang, 1, 1)
-        grid.addWidget(self.lbl_batch_title, 2, 0)
-        grid.addWidget(self.slider_batch_interval, 2, 1)
-        grid.addWidget(self.lbl_single_title, 3, 0)
-        grid.addWidget(self.slider_single_interval, 3, 1)
-        grid.addWidget(self.lbl_batch_size_title, 4, 0)
-        grid.addWidget(self.slider_batch_size, 4, 1)
+        grid.addWidget(lbl_src_col, 2, 0)
+        grid.addWidget(self.txt_src_col, 2, 1, Qt.AlignmentFlag.AlignLeft)
+        grid.addWidget(lbl_tgt_col, 3, 0)
+        grid.addWidget(self.txt_tgt_col, 3, 1, Qt.AlignmentFlag.AlignLeft)
+        grid.addWidget(self.lbl_batch_title, 4, 0)
+        grid.addWidget(self.slider_batch_interval, 4, 1)
+        grid.addWidget(self.lbl_single_title, 5, 0)
+        grid.addWidget(self.slider_single_interval, 5, 1)
+        grid.addWidget(self.lbl_batch_size_title, 6, 0)
+        grid.addWidget(self.slider_batch_size, 6, 1)
 
         self.controls_layout.addLayout(grid)
         self.controls_layout.addStretch()
@@ -104,9 +120,11 @@ class TranslationPanel(BasePanel):
         self.btn_start.clicked.connect(self.on_start_clicked)
         self.controls_layout.addWidget(self.btn_start)
 
-        # 連接語言 ComboBox 的變動事件
+        # 連接事件
         self.cb_src_lang.currentIndexChanged.connect(self._on_src_lang_changed)
         self.cb_tgt_lang.currentIndexChanged.connect(self._on_tgt_lang_changed)
+        self.txt_src_col.textChanged.connect(self._on_src_col_changed)
+        self.txt_tgt_col.textChanged.connect(self._on_tgt_col_changed)
 
     # ── Config 變動事件 Handler ───────────────────────────────────────────────
     # 各控件變動時直接寫入 TranslatePanelConfig，設定 dirty flag。
@@ -141,6 +159,16 @@ class TranslationPanel(BasePanel):
             self.context.translate_panel_config.tgt_lang = self.cb_tgt_lang.currentData()
             self.context.translate_panel_config.dirty = True
 
+    def _on_src_col_changed(self, val: str) -> None:
+        if self.context:
+            self.context.translate_panel_config.src_col = val
+            self.context.translate_panel_config.dirty = True
+
+    def _on_tgt_col_changed(self, val: str) -> None:
+        if self.context:
+            self.context.translate_panel_config.tgt_col = val
+            self.context.translate_panel_config.dirty = True
+
     # ── Config 還原 ───────────────────────────────────────────────────────────
 
     def restore_from_config(self) -> None:
@@ -158,6 +186,8 @@ class TranslationPanel(BasePanel):
         self.slider_batch_size.blockSignals(True)
         self.cb_src_lang.blockSignals(True)
         self.cb_tgt_lang.blockSignals(True)
+        self.txt_src_col.blockSignals(True)
+        self.txt_tgt_col.blockSignals(True)
 
         try:
             self.slider_batch_interval.setValue(int(cfg.batch_interval))
@@ -177,12 +207,17 @@ class TranslationPanel(BasePanel):
             idx = self.cb_tgt_lang.findData(cfg.tgt_lang)
             if idx != -1:
                 self.cb_tgt_lang.setCurrentIndex(idx)
+
+            self.txt_src_col.setText(cfg.src_col)
+            self.txt_tgt_col.setText(cfg.tgt_col)
         finally:
             self.slider_batch_interval.blockSignals(False)
             self.slider_single_interval.blockSignals(False)
             self.slider_batch_size.blockSignals(False)
             self.cb_src_lang.blockSignals(False)
             self.cb_tgt_lang.blockSignals(False)
+            self.txt_src_col.blockSignals(False)
+            self.txt_tgt_col.blockSignals(False)
 
     def show_controls(self):
         super().show_controls()
@@ -205,12 +240,20 @@ class TranslationPanel(BasePanel):
     def get_batch_size(self):
         return self.slider_batch_size.value()
 
+    def get_src_col(self):
+        return self.txt_src_col.text().strip()
+
+    def get_tgt_col(self):
+        return self.txt_tgt_col.text().strip()
+
     def set_enabled(self, enabled):
         self.cb_src_lang.setEnabled(enabled)
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
         self.slider_single_interval.setEnabled(enabled)
         self.slider_batch_size.setEnabled(enabled)
+        self.txt_src_col.setEnabled(enabled)
+        self.txt_tgt_col.setEnabled(enabled)
         if not self.translator.is_running():
             self.btn_start.setEnabled(enabled)
 
@@ -223,7 +266,9 @@ class TranslationPanel(BasePanel):
                 tgt_lang=self.get_tgt_lang(),
                 batch_interval=self.get_batch_interval(),
                 single_interval=self.get_single_interval(),
-                batch_size=self.get_batch_size()
+                batch_size=self.get_batch_size(),
+                src_col=self.get_src_col(),
+                tgt_col=self.get_tgt_col()
             )
 
     def on_translator_started(self):
