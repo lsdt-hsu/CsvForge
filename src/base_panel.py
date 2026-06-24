@@ -69,13 +69,7 @@ class AppContext:
     def output_path(self) -> str:
         return self._win.io_panel.txt_out_path.text().strip()
 
-    @property
-    def start_row(self) -> str:
-        return self._win.io_panel.txt_start_row.text().strip()
 
-    @property
-    def end_row(self) -> str:
-        return self._win.io_panel.txt_end_row.text().strip()
 
     @property
     def source_col(self) -> str:

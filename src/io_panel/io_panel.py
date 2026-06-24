@@ -5,8 +5,6 @@ from PyQt6.QtGui import QIntValidator, QIcon
 
 from base_panel import BasePanel
 from ui_constants import (
-    INPUT_START_ROW_MAX_WIDTH,
-    INPUT_END_ROW_MAX_WIDTH,
     INPUT_COL_MAX_WIDTH,
     START_BUTTON_MIN_WIDTH,
     SWAP_ICON_SIZE,
@@ -114,18 +112,6 @@ class IoPanel(BasePanel):
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(15)
 
-        lbl_start_row = QLabel("起始行號：")
-        self.txt_start_row = QLineEdit("2")
-        self.txt_start_row.setPlaceholderText("預設為 1")
-        self.txt_start_row.setValidator(QIntValidator(1, 9999999))
-        self.txt_start_row.setMaximumWidth(INPUT_START_ROW_MAX_WIDTH)
-
-        lbl_end_row = QLabel("結束行號：")
-        self.txt_end_row = QLineEdit()
-        self.txt_end_row.setPlaceholderText("預設至檔尾")
-        self.txt_end_row.setValidator(QIntValidator(1, 9999999))
-        self.txt_end_row.setMaximumWidth(INPUT_END_ROW_MAX_WIDTH)
-
         lbl_src_col = QLabel("來源欄號：")
         self.txt_src_col = QLineEdit("1")
         self.txt_src_col.setValidator(QIntValidator(1, 9999))
@@ -142,10 +128,6 @@ class IoPanel(BasePanel):
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.on_start_clicked)
 
-        row2_layout.addWidget(lbl_start_row)
-        row2_layout.addWidget(self.txt_start_row)
-        row2_layout.addWidget(lbl_end_row)
-        row2_layout.addWidget(self.txt_end_row)
         row2_layout.addWidget(lbl_src_col)
         row2_layout.addWidget(self.txt_src_col)
         row2_layout.addWidget(lbl_tgt_col)
@@ -215,8 +197,6 @@ class IoPanel(BasePanel):
         if not validate_paths_not_equal(self, src_path, out_path, mode="config"):
             self.txt_out_path.clear()
 
-        self.txt_start_row.setText(cfg.start_row)
-        self.txt_end_row.setText(cfg.end_row)
         self.txt_src_col.setText(cfg.src_col)
         self.txt_tgt_col.setText(cfg.tgt_col)
 
@@ -231,15 +211,12 @@ class IoPanel(BasePanel):
     def update_config(self, cfg: IoPanelConfig) -> None:
         cfg.source_path = self.txt_src_path.text().strip()
         cfg.output_path = self.txt_out_path.text().strip()
-        cfg.start_row = self.txt_start_row.text()
-        cfg.end_row = self.txt_end_row.text()
         cfg.src_col = self.txt_src_col.text()
         cfg.tgt_col = self.txt_tgt_col.text()
         cfg.collapsed = not self.files_content_widget.isVisible()
         cfg.dirty = True
 
-    def set_end_row_placeholder(self, total_rows: int) -> None:
-        self.txt_end_row.setPlaceholderText(f"預設至檔尾 ({total_rows})")
+
 
 
     def set_enabled(self, enabled: bool) -> None:
@@ -249,8 +226,6 @@ class IoPanel(BasePanel):
         self.btn_src_browse.setEnabled(enabled)
         self.btn_out_browse.setEnabled(enabled)
         self.btn_swap.setEnabled(enabled)
-        self.txt_start_row.setEnabled(enabled)
-        self.txt_end_row.setEnabled(enabled)
         self.txt_src_col.setEnabled(enabled)
         self.txt_tgt_col.setEnabled(enabled)
         

@@ -124,7 +124,7 @@ class DataEditorPanel(BasePanel):
     資料編輯面板：顯示並允許使用者直接在 Table 中編輯 CSV 資料。
 
     公開介面（供主視窗與其他元件使用）：
-      - load_data(all_rows, start_row, end_row)
+      - load_data(all_rows)
       - clear()
       - get_all_rows() -> list
       - has_data() -> bool

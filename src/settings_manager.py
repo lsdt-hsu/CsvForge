@@ -66,7 +66,7 @@ class SidePanelConfig:
 @dataclass
 class IoPanelConfig:
     """
-    輸入與輸出面板組態（路徑、行號、欄號、折疊狀態）。
+    輸入與輸出面板組態（路徑、欄號、折疊狀態）。
     寫入擁有者：MainWindow（SettingsMixin）。
     注意：此組態僅作為 IO Panel 控件的初始預設值來源；
           執行時動態讀取的路徑等值仍透過 AppContext 存取器半直接取得編輯框最新值。
@@ -74,8 +74,6 @@ class IoPanelConfig:
     dirty: bool = False
     source_path: str = ""
     output_path: str = ""
-    start_row: str = "2"
-    end_row: str = ""
     src_col: str = "1"
     tgt_col: str = "2"
     collapsed: bool = False

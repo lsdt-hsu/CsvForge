@@ -58,8 +58,6 @@ def validate_io_panel_inputs(
 
     source_path = context.source_path
     output_path = context.output_path
-    start_row = context.start_row
-    end_row = context.end_row
     source_col = context.source_col
     target_col = context.target_col
 
@@ -77,36 +75,6 @@ def validate_io_panel_inputs(
         # 呼叫獨立的重複檢查函式
         if require_source_path and not validate_paths_not_equal(parent, source_path, output_path, mode="task"):
             return False, {}
-
-    # 3. 起始行號驗證
-    start_row_str = str(start_row).strip() if start_row is not None else ""
-    if start_row_str == "":
-        start_row_val = 1
-    else:
-        try:
-            start_row_val = int(start_row_str)
-            if start_row_val < 1:
-                QMessageBox.warning(parent, "輸入錯誤", "起始行號必須是大於或等於 1 的正整數")
-                return False, {}
-        except (ValueError, TypeError):
-            QMessageBox.warning(parent, "輸入錯誤", "起始行號必須是大於或等於 1 的正整數")
-            return False, {}
-    parsed["start_row"] = start_row_val
-
-    # 4. 結束行號驗證
-    end_row_str = str(end_row).strip() if end_row is not None else ""
-    if end_row_str != "":
-        try:
-            end_row_val = int(end_row_str)
-            if end_row_val < start_row_val:
-                QMessageBox.warning(parent, "輸入錯誤", "結束行號不能小於起始行號")
-                return False, {}
-        except (ValueError, TypeError):
-            QMessageBox.warning(parent, "輸入錯誤", "結束行號必須是正整數")
-            return False, {}
-    else:
-        end_row_val = None
-    parsed["end_row"] = end_row_val
 
     # 5. 欄號驗證 (合併與原本 Translator 相同的錯誤訊息)
     if require_source_col or require_target_col:

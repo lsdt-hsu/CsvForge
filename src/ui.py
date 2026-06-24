@@ -20,7 +20,7 @@ from ui_constants import (
     WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT,
     SIDEBAR_FULL_WIDTH, SIDEBAR_WIDTH, ACTIVITY_BAR_WIDTH,
     PROGRESS_BAR_WIDTH, START_BUTTON_MIN_WIDTH,
-    INPUT_START_ROW_MAX_WIDTH, INPUT_END_ROW_MAX_WIDTH, INPUT_COL_MAX_WIDTH,
+    INPUT_COL_MAX_WIDTH,
     SWAP_ICON_SIZE,
 )
 from ui_mixins import UiStateMixin, SettingsMixin, WorkerMixin
@@ -192,11 +192,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         # 1. 載入資料至 DataEditorPanel
         self.edit_content_panel.set_csv_data(data)
 
-        # 2. 更新 IoPanel 結束行號 Placeholder
-        total_rows = len(data.all_rows)
-        self.io_panel.set_end_row_placeholder(total_rows)
-
-        # 3. 更新過濾面板與翻譯面板控制項
+        # 2. 更新過濾面板與翻譯面板控制項
         if data.all_rows:
             num_cols = max(len(r) for r in data.all_rows)
             is_hdr = self.edit_content_panel.is_first_row_header()
@@ -205,7 +201,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             self.translation_panel.show_controls()
 
     def on_source_file_changed(self, file_path: str) -> None:
-        self.io_panel.txt_end_row.setPlaceholderText("預設至檔尾")
         self.edit_content_panel.clear()
         self.edit_panel.reset_panel()
         self.filter_panel.reset_panel()
