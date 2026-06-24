@@ -567,8 +567,6 @@ class FilterPanel(BasePanel):
         if not is_valid:
             return
 
-        start_row = parsed["start_row"]
-        end_row = parsed["end_row"]
         src_col = parsed["source_col"]
         tgt_col = parsed["target_col"]
 
@@ -577,8 +575,8 @@ class FilterPanel(BasePanel):
         from filter.filter_worker import FilterWorker
         worker_instance = FilterWorker(
             all_rows=rows,
-            start_row=start_row,
-            end_row=end_row,
+            start_row=1,
+            end_row=None,
             is_header=is_header,
             src_col=src_col,
             tgt_col=tgt_col,
