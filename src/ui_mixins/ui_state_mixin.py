@@ -43,8 +43,11 @@ class UiStateMixin:
         self.left_panel.switch_sidebar_tab(tab_name, force_expand)
 
     def get_active_panel(self: "MainWindow"):
-        if self.left_panel.sidebar.isVisible() and self.left_panel.sidebar_stacked.currentWidget() == self.edit_panel:
+        current = self.left_panel.sidebar_stacked.currentWidget()
+        if current == self.edit_panel:
             return self.edit_panel
+        if hasattr(self, "filter_panel") and current == self.filter_panel:
+            return self.filter_panel
         return self.translation_panel
 
     def lock_ui_from_panel(self: "MainWindow", lock: bool) -> None:

@@ -7,7 +7,7 @@ class LogicNode:
         self.leaf_idx = leaf_idx
 
     def flatten(self):
-        """遞迴將連續同類型的運算節點合併壓平。"""
+        """遞迴將連續同類類型的運算節點合併壓平。"""
         if self.op_type == "LEAF":
             return
         

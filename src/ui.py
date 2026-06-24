@@ -12,6 +12,7 @@ from PyQt6.QtGui import QIntValidator, QIcon
 
 from translation.translation_panel import TranslationPanel
 from edit.edit_panel import EditPanel
+from filter.filter_panel import FilterPanel
 from settings_manager import SettingsManager
 from data_editor.data_editor_panel import DataEditorPanel
 from ui_constants import (
@@ -115,8 +116,16 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.edit_panel.log_emitted.connect(self.on_panel_log)
         self.edit_panel.request_start_worker.connect(self.on_request_start_worker)
 
+        self.filter_panel = FilterPanel(context=self.context)
+        self.filter_panel.request_lock_ui.connect(self.lock_ui_from_panel)
+        self.filter_panel.progress_updated.connect(self.on_panel_progress)
+        self.filter_panel.status_updated.connect(self.on_panel_status)
+        self.filter_panel.log_emitted.connect(self.on_panel_log)
+        self.filter_panel.request_start_worker.connect(self.on_request_start_worker)
+
         self.left_panel.add_panel("translate", self.translation_panel)
         self.left_panel.add_panel("edit", self.edit_panel)
+        self.left_panel.add_panel("filter", self.filter_panel)
 
         main_layout.addWidget(self.left_panel)
 
@@ -192,13 +201,14 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             num_cols = max(len(r) for r in data.all_rows)
             is_hdr = self.edit_content_panel.is_first_row_header()
             headers = data.all_rows[0] if is_hdr else None
-            self.edit_panel.update_column_dropdowns(num_cols, headers)
+            self.filter_panel.update_column_dropdowns(num_cols, headers)
             self.translation_panel.show_controls()
 
     def on_source_file_changed(self, file_path: str) -> None:
         self.io_panel.txt_end_row.setPlaceholderText("預設至檔尾")
         self.edit_content_panel.clear()
         self.edit_panel.reset_panel()
+        self.filter_panel.reset_panel()
         self.translation_panel.reset_panel()
         if self.worker and hasattr(self.worker, "loaded_rows"):
             self.worker.loaded_rows = []
@@ -272,16 +282,16 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         }
 
         /* 活動列按鈕 */
-        QPushButton#btnActivityTranslate, QPushButton#btnActivityEdit {
+        QPushButton#btnActivityTranslate, QPushButton#btnActivityEdit, QPushButton#btnActivityFilter {
             background-color: transparent;
             border: none;
             border-radius: 8px;
             padding: 0px;
         }
-        QPushButton#btnActivityTranslate:hover, QPushButton#btnActivityEdit:hover {
+        QPushButton#btnActivityTranslate:hover, QPushButton#btnActivityEdit:hover, QPushButton#btnActivityFilter:hover {
             background-color: #2e3047;
         }
-        QPushButton#btnActivityTranslate[active="true"], QPushButton#btnActivityEdit[active="true"] {
+        QPushButton#btnActivityTranslate[active="true"], QPushButton#btnActivityEdit[active="true"], QPushButton#btnActivityFilter[active="true"] {
             background-color: #3b4261;
         }
 
@@ -542,7 +552,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         if all_rows:
             num_cols = max(len(r) for r in all_rows)
             headers = all_rows[0] if is_hdr else None
-            self.edit_panel.update_column_dropdowns(num_cols, headers)
+            self.filter_panel.update_column_dropdowns(num_cols, headers)
 
     # ── 視窗關閉事件 ─────────────────────────────────────────────────────────
 

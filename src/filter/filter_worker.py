@@ -340,7 +340,7 @@ class FilterWorker(QThread):
         matched_indices = []
         
         try:
-            from edit import logic_tree
+            from filter import logic_tree
             
             total_rows = len(self.all_rows)
             end_bound = self.end_row if self.end_row is not None else total_rows

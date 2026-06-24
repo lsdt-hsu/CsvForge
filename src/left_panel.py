@@ -64,6 +64,20 @@ class LeftPanel(QFrame):
         self.btn_edit.setProperty("active", False)
         activity_layout.addWidget(self.btn_edit)
 
+        # 過濾按鈕
+        filter_icon_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "filter.png"
+        )
+        self.btn_filter = QPushButton()
+        self.btn_filter.setObjectName("btnActivityFilter")
+        self.btn_filter.setFixedSize(40, 40)
+        self.btn_filter.setIcon(QIcon(filter_icon_path))
+        self.btn_filter.setIconSize(QSize(40, 40))
+        self.btn_filter.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_filter.clicked.connect(lambda: self.switch_sidebar_tab("filter"))
+        self.btn_filter.setProperty("active", False)
+        activity_layout.addWidget(self.btn_filter)
+
         activity_layout.addStretch()
         left_layout.addWidget(self.activity_bar)
 
@@ -116,6 +130,7 @@ class LeftPanel(QFrame):
             self.setFixedWidth(SIDEBAR_MIN_WIDTH)
             self.btn_translate.setProperty("active", False)
             self.btn_edit.setProperty("active", False)
+            self.btn_filter.setProperty("active", False)
         else:
             # 展開並切換
             self.sidebar.setVisible(True)
@@ -128,13 +143,20 @@ class LeftPanel(QFrame):
             if tab_name == "translate":
                 self.btn_translate.setProperty("active", True)
                 self.btn_edit.setProperty("active", False)
+                self.btn_filter.setProperty("active", False)
             elif tab_name == "edit":
                 self.btn_translate.setProperty("active", False)
                 self.btn_edit.setProperty("active", True)
+                self.btn_filter.setProperty("active", False)
+            elif tab_name == "filter":
+                self.btn_translate.setProperty("active", False)
+                self.btn_edit.setProperty("active", False)
+                self.btn_filter.setProperty("active", True)
 
         # 刷新按鈕樣式
         self.btn_translate.style().polish(self.btn_translate)
         self.btn_edit.style().polish(self.btn_edit)
+        self.btn_filter.style().polish(self.btn_filter)
 
     def apply_config(self, side_cfg: SidePanelConfig, main_cfg: MainConfig) -> None:
         if side_cfg.collapsed:
@@ -143,6 +165,7 @@ class LeftPanel(QFrame):
             self.setFixedWidth(SIDEBAR_MIN_WIDTH)
             self.btn_translate.setProperty("active", False)
             self.btn_edit.setProperty("active", False)
+            self.btn_filter.setProperty("active", False)
         else:
             self.switch_sidebar_tab(main_cfg.active_tab, force_expand=True)
 
@@ -150,8 +173,11 @@ class LeftPanel(QFrame):
         side_cfg.collapsed = not self.sidebar.isVisible()
         side_cfg.dirty = True
 
-        if self.sidebar_stacked.currentWidget() == self._panels.get("translate"):
+        current_widget = self.sidebar_stacked.currentWidget()
+        if current_widget == self._panels.get("translate"):
             active_tab = "translate"
+        elif current_widget == self._panels.get("filter"):
+            active_tab = "filter"
         else:
             active_tab = "edit"
         main_cfg.active_tab = active_tab
@@ -160,6 +186,7 @@ class LeftPanel(QFrame):
     def set_enabled(self, enabled: bool) -> None:
         self.btn_translate.setEnabled(enabled)
         self.btn_edit.setEnabled(enabled)
+        self.btn_filter.setEnabled(enabled)
         for panel in self._panels.values():
             if hasattr(panel, "set_enabled"):
                 panel.set_enabled(enabled)
