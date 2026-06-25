@@ -13,8 +13,20 @@ from settings_manager import IoPanelConfig
 from .io_panel_validator import validate_paths_not_equal
 
 
+def save_csv_file(out_path: str, all_rows: list, delimiter: str) -> None:
+    out_dir = os.path.dirname(out_path)
+    if out_dir and not os.path.exists(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+
+    with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
+        import csv
+        writer = csv.writer(f, delimiter=delimiter)
+        writer.writerows(all_rows)
+
+
 class IoPanel(BasePanel):
     source_file_changed = pyqtSignal(str)
+    request_save = pyqtSignal()
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="", require_data_loading=False, context=context)
@@ -108,7 +120,7 @@ class IoPanel(BasePanel):
 
         files_content_layout.addLayout(row1_layout)
 
-        # 第二列：開始按鈕
+        # 第二列：開始按鈕與儲存按鈕
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(15)
 
@@ -118,8 +130,17 @@ class IoPanel(BasePanel):
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.on_start_clicked)
 
+        self.btn_save = QPushButton("儲存")
+        self.btn_save.setObjectName("btnSave")
+        self.btn_save.setMinimumWidth(START_BUTTON_MIN_WIDTH)
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_save.setEnabled(False)
+        self.btn_save.clicked.connect(self.request_save.emit)
+
         row2_layout.addStretch()
         row2_layout.addWidget(self.btn_start)
+        row2_layout.addSpacing(10)
+        row2_layout.addWidget(self.btn_save)
 
         files_content_layout.addLayout(row2_layout)
         layout.addWidget(self.files_content_widget)
@@ -208,7 +229,16 @@ class IoPanel(BasePanel):
         self.btn_out_browse.setEnabled(enabled)
         self.btn_swap.setEnabled(enabled)
         
+        if enabled:
+            is_modified = getattr(self.context._win.edit_content_panel, "is_modified", False) if self.context and self.context._win else False
+            self.btn_save.setEnabled(is_modified)
+        else:
+            self.btn_save.setEnabled(False)
+        
         self.update_button_ui()
+
+    def on_modified_changed(self, is_modified: bool) -> None:
+        self.btn_save.setEnabled(self._ui_enabled_state and is_modified)
 
     def on_start_clicked(self) -> None:
         if self.loader.is_running():

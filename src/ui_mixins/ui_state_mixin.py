@@ -35,7 +35,6 @@ class UiStateMixin:
         # 第一行為標題與存檔按鈕 (在 DataEditorPanel 內)
         if hasattr(self, "edit_content_panel"):
             self.edit_content_panel.chk_first_row_header.setEnabled(enabled)
-            self.edit_content_panel.btn_save.setEnabled(enabled and self.edit_content_panel.is_modified)
             # 禁止/允許編輯 TableView
             self.edit_content_panel.set_table_editable(enabled)
 

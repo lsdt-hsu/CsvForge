@@ -138,7 +138,7 @@ class DataEditorPanel(BasePanel):
     Signals：
       - request_save：使用者點擊存檔按鈕時發射
     """
-    request_save = pyqtSignal()
+    modified_changed = pyqtSignal(bool)
     header_state_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None, context=None):
@@ -178,17 +178,7 @@ class DataEditorPanel(BasePanel):
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         header_layout.addWidget(self.lbl_status)
 
-        # 存檔按鈕
-        self.btn_save = QPushButton()
-        self.btn_save.setObjectName("btnSaveData")
-        self.btn_save.setFixedSize(30, 30)
-        save_icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "save.png")
-        self.btn_save.setIcon(QIcon(save_icon_path))
-        self.btn_save.setIconSize(QSize(20, 20))
-        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_save.setEnabled(False)
-        self.btn_save.clicked.connect(self.request_save.emit)
-        header_layout.addWidget(self.btn_save)
+
 
         layout.addWidget(header_widget)
 
@@ -237,7 +227,7 @@ class DataEditorPanel(BasePanel):
 
     def set_modified(self, modified):
         self.is_modified = modified
-        self.btn_save.setEnabled(modified)
+        self.modified_changed.emit(modified)
 
     def on_header_checkbox_changed(self, state):
         is_checked = self.chk_first_row_header.isChecked()

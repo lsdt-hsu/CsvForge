@@ -14,13 +14,15 @@ translation_panel.py — 翻譯面板
 """
 
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator
 from base_panel import BasePanel
 from ui_constants import INPUT_COL_MAX_WIDTH
 
 
 class TranslationPanel(BasePanel):
+    request_silent_save = pyqtSignal()
+
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="翻譯", require_data_loading=True, context=context)
         
@@ -36,8 +38,7 @@ class TranslationPanel(BasePanel):
         self.init_ui()
 
     def _on_translation_done(self):
-        if self.context and self.context._win:
-            self.context._win.silent_save_edit_data()
+        self.request_silent_save.emit()
 
     def _on_data_changed(self):
         if self.context and self.context._win:

@@ -46,6 +46,7 @@ class AiPanel(BasePanel):
       這樣設計可確保在任何時刻（如載入新 CSV 等呼叫 restore_from_config 時）記憶體中的 Config 都是最新狀態，
       以避免使用者修改的 UI 設定因還原被舊值覆蓋。
     """
+    request_silent_save = pyqtSignal()
 
     def __init__(self, parent=None, context=None):
         # require_data_loading=True 代表必須在載入 CSV 後才展示控制項
@@ -638,8 +639,7 @@ class AiPanel(BasePanel):
         self.set_enabled(True)
         self.worker = None
         # 自動存檔 (跟 translation 面板行為保持一致)
-        if self.context and self.context._win:
-            self.context._win.silent_save_edit_data()
+        self.request_silent_save.emit()
 
     def _on_task_error(self, err_msg):
         self.btn_start.setText("開始 AI 處理")
@@ -653,8 +653,7 @@ class AiPanel(BasePanel):
         QMessageBox.critical(self, "AI 處理中斷", f"AI 處理過程中發生錯誤：\n{err_msg}")
 
         # 自動存檔
-        if self.context and self.context._win:
-            self.context._win.silent_save_edit_data()
+        self.request_silent_save.emit()
 
     def _on_data_changed(self):
         # 標記主資料已修改，觸發介面重繪

@@ -130,6 +130,9 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.ai_panel.status_updated.connect(self.on_panel_status)
         self.ai_panel.log_emitted.connect(self.on_panel_log)
         self.ai_panel.request_start_worker.connect(self.on_request_start_worker)
+        self.ai_panel.request_silent_save.connect(self.silent_save_edit_data)
+        
+        self.translation_panel.request_silent_save.connect(self.silent_save_edit_data)
 
         self.left_panel.add_panel("translate", self.translation_panel)
         self.left_panel.add_panel("ai", self.ai_panel)
@@ -145,6 +148,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
 
         # 連接 IO Panel 訊號
         self.io_panel.source_file_changed.connect(self.on_source_file_changed)
+        self.io_panel.request_save.connect(self.save_edit_data)
 
         # 來源預覽與日誌面板採用 QSplitter 垂直排列
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -152,7 +156,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
 
         # 內容面板
         self.edit_content_panel = DataEditorPanel(context=self.context)
-        self.edit_content_panel.request_save.connect(self.save_edit_data)
+        self.edit_content_panel.modified_changed.connect(self.io_panel.on_modified_changed)
         self.edit_content_panel.header_state_changed.connect(self.on_header_state_changed)
         self.edit_content_panel.request_start_worker.connect(self.on_request_start_worker)
 
@@ -238,14 +242,8 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         delimiter = self.edit_content_panel.get_delimiter()
 
         try:
-            out_dir = os.path.dirname(out_path)
-            if out_dir and not os.path.exists(out_dir):
-                os.makedirs(out_dir, exist_ok=True)
-
-            with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
-                import csv
-                writer = csv.writer(f, delimiter=delimiter)
-                writer.writerows(all_rows)
+            from io_panel.io_panel import save_csv_file
+            save_csv_file(out_path, all_rows, delimiter)
 
             self.edit_content_panel.set_modified(False)
             self.append_log("SUCCESS", f"編輯資料存檔成功！已寫入至：{out_path}")
@@ -277,14 +275,8 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         delimiter = self.edit_content_panel.get_delimiter()
 
         try:
-            out_dir = os.path.dirname(out_path)
-            if out_dir and not os.path.exists(out_dir):
-                os.makedirs(out_dir, exist_ok=True)
-
-            with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
-                import csv
-                writer = csv.writer(f, delimiter=delimiter)
-                writer.writerows(all_rows)
+            from io_panel.io_panel import save_csv_file
+            save_csv_file(out_path, all_rows, delimiter)
 
             self.edit_content_panel.set_modified(False)
             self.append_log("SUCCESS", f"自動靜默存檔成功！已寫入至：{out_path}")
@@ -446,6 +438,20 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             color: #565f89;
         }
 
+        QPushButton#btnSave {
+            background-color: #ff9e64;
+            color: #1a1b26;
+            font-size: 15px;
+            padding: 12px;
+        }
+        QPushButton#btnSave:hover {
+            background-color: #ffb86c;
+        }
+        QPushButton#btnSave:disabled {
+            background-color: #24283b;
+            color: #565f89;
+        }
+
         QPushButton#btnBrowse {
             background-color: #3b4261;
             font-size: 12px;
@@ -455,21 +461,17 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             background-color: #414868;
         }
 
-        QPushButton#btnSwap, QPushButton#btnSwapRules, QPushButton#btnSaveData {
+        QPushButton#btnSwap, QPushButton#btnSwapRules {
             background-color: #3b4261;
             border: none;
             border-radius: 6px;
             padding: 0px;
         }
-        QPushButton#btnSwap:hover, QPushButton#btnSwapRules:hover, QPushButton#btnSaveData:hover {
+        QPushButton#btnSwap:hover, QPushButton#btnSwapRules:hover {
             background-color: #414868;
         }
-        QPushButton#btnSwap:pressed, QPushButton#btnSwapRules:pressed, QPushButton#btnSaveData:pressed {
+        QPushButton#btnSwap:pressed, QPushButton#btnSwapRules:pressed {
             background-color: #2e3c64;
-        }
-        QPushButton#btnSaveData:disabled {
-            background-color: #1c1d27;
-            border: 1px dashed #2f3047;
         }
 
         /* 表格樣式 */
