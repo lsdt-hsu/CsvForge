@@ -66,14 +66,6 @@ class AppContext:
     # ── 執行時動態狀態存取（半直接存取 Widget 最新值）────────────────────────
 
     @property
-    def source_path(self) -> str:
-        return self._win.io_panel.txt_src_path.text().strip()
-
-    @property
-    def output_path(self) -> str:
-        return self._win.io_panel.txt_out_path.text().strip()
-
-    @property
     def is_first_row_header(self) -> bool:
         if hasattr(self._win, "edit_content_panel"):
             return self._win.edit_content_panel.is_first_row_header()

@@ -42,4 +42,3 @@ def prevent_sleep(prevent: bool = True) -> bool:
             print(f"Failed to set thread execution state: {e}")
             return False
     return False
-

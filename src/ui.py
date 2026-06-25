@@ -25,7 +25,8 @@ from ui_constants import (
     SWAP_ICON_SIZE,
 )
 from ui_mixins import UiStateMixin, SettingsMixin, WorkerMixin
-from io_panel import IoPanel, validate_paths_not_equal
+from in_out.io_panel import IoPanel
+from in_out.io_panel_validator import validate_paths_not_equal
 from status_panel import StatusPanel
 from left_panel import LeftPanel
 
@@ -98,9 +99,11 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.io_panel = IoPanel(parent=self, context=self.context)
         self.status_panel = StatusPanel(parent=self, context=self.context)
 
-        # 連接 CSVLoader 信號 (自 io_panel)
+        # 連接 CSVReader 與 CSVWriter 信號 (自 io_panel)
         self.io_panel.loader.load_completed.connect(self.on_csv_load_completed)
         self.io_panel.loader.request_start_worker.connect(self.on_request_start_worker)
+        self.io_panel.writer.request_start_worker.connect(self.on_request_start_worker)
+        self.io_panel.writer.save_completed.connect(self.on_csv_save_completed)
 
         # 建立子面板並註冊到 LeftPanel
         self.translation_panel = TranslationPanel(context=self.context)
@@ -148,7 +151,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
 
         # 連接 IO Panel 訊號
         self.io_panel.source_file_changed.connect(self.on_source_file_changed)
-        self.io_panel.request_save.connect(self.save_edit_data)
 
         # 來源預覽與日誌面板採用 QSplitter 垂直排列
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -224,42 +226,16 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         if self.worker and hasattr(self.worker, "loaded_rows"):
             self.worker.loaded_rows = []
 
-    def save_edit_data(self) -> None:
-        out_path = self.context.output_path
-        if not out_path:
-            QMessageBox.warning(self, "錯誤", "請指定輸出 CSV 檔案路徑！")
-            return
-
-        src_path = self.context.source_path
-        if not validate_paths_not_equal(self, src_path, out_path, mode="save"):
-            return
-
-        all_rows = self.edit_content_panel.get_all_rows()
-        if not all_rows:
-            QMessageBox.warning(self, "錯誤", "沒有資料可儲存。")
-            return
-
-        delimiter = self.edit_content_panel.get_delimiter()
-
-        try:
-            from io_panel.io_panel import save_csv_file
-            save_csv_file(out_path, all_rows, delimiter)
-
-            self.edit_content_panel.set_modified(False)
-            self.append_log("SUCCESS", f"編輯資料存檔成功！已寫入至：{out_path}")
-            QMessageBox.information(self, "成功", f"存檔成功！\n檔案已儲存至：\n{out_path}")
-
-        except Exception as e:
-            self.append_log("ERROR", f"存檔失敗：{str(e)}")
-            QMessageBox.critical(self, "存檔失敗", f"存檔失敗：\n{str(e)}")
+    def on_csv_save_completed(self, out_path: str) -> None:
+        self.edit_content_panel.set_modified(False)
 
     def silent_save_edit_data(self) -> None:
-        out_path = self.context.output_path
+        out_path = self.io_panel.txt_out_path.text().strip()
         if not out_path:
             self.append_log("ERROR", "自動存檔失敗：未指定輸出 CSV 檔案路徑！")
             return
 
-        src_path = self.context.source_path
+        src_path = self.io_panel.txt_src_path.text().strip()
         if src_path and out_path:
             norm_src = os.path.normpath(src_path.strip()).lower()
             norm_out = os.path.normpath(out_path.strip()).lower()
@@ -275,12 +251,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         delimiter = self.edit_content_panel.get_delimiter()
 
         try:
-            from io_panel.io_panel import save_csv_file
-            save_csv_file(out_path, all_rows, delimiter)
-
-            self.edit_content_panel.set_modified(False)
-            self.append_log("SUCCESS", f"自動靜默存檔成功！已寫入至：{out_path}")
-
+            self.io_panel.writer.start_save_task(out_path, all_rows, delimiter, silent=True)
         except Exception as e:
             self.append_log("ERROR", f"自動靜默存檔失敗：{str(e)}")
 

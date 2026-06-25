@@ -13,31 +13,25 @@ from settings_manager import IoPanelConfig
 from .io_panel_validator import validate_paths_not_equal
 
 
-def save_csv_file(out_path: str, all_rows: list, delimiter: str) -> None:
-    out_dir = os.path.dirname(out_path)
-    if out_dir and not os.path.exists(out_dir):
-        os.makedirs(out_dir, exist_ok=True)
-
-    with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
-        import csv
-        writer = csv.writer(f, delimiter=delimiter)
-        writer.writerows(all_rows)
-
-
 class IoPanel(BasePanel):
     source_file_changed = pyqtSignal(str)
-    request_save = pyqtSignal()
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="", require_data_loading=False, context=context)
         self.setObjectName("rightFrame")
         self._ui_enabled_state = True
 
-        from .csv_loader import CSVLoader
-        self.loader = CSVLoader(parent=parent, context=context)
+        from .reader import CSVReader
+        self.loader = CSVReader(parent=parent)
         self.loader.started.connect(self.on_loader_started)
         self.loader.finished.connect(self.on_loader_finished)
         self.loader.cancelled.connect(self.on_loader_cancelled)
+
+        from .writer import CSVWriter
+        self.writer = CSVWriter(parent=parent)
+        self.writer.started.connect(self.on_writer_started)
+        self.writer.finished.connect(self.on_writer_finished)
+        self.writer.cancelled.connect(self.on_writer_cancelled)
 
         self.init_ui()
 
@@ -135,7 +129,7 @@ class IoPanel(BasePanel):
         self.btn_save.setMinimumWidth(START_BUTTON_MIN_WIDTH)
         self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.setEnabled(False)
-        self.btn_save.clicked.connect(self.request_save.emit)
+        self.btn_save.clicked.connect(self.on_save_clicked)
 
         row2_layout.addStretch()
         row2_layout.addWidget(self.btn_start)
@@ -198,28 +192,9 @@ class IoPanel(BasePanel):
         self.txt_src_path.setText(cfg.source_path)
         self.txt_out_path.setText(cfg.output_path)
 
-        # 安全檢查：來源與輸出路徑不可相同
-        src_path = self.txt_src_path.text().strip()
-        out_path = self.txt_out_path.text().strip()
-        if not validate_paths_not_equal(self, src_path, out_path, mode="config"):
-            self.txt_out_path.clear()
-
-        # 折疊狀態
-        if cfg.collapsed:
-            self.files_content_widget.setVisible(False)
-            self.btn_toggle_files.setText("▼")
-        else:
-            self.files_content_widget.setVisible(True)
-            self.btn_toggle_files.setText("▲")
-
     def update_config(self, cfg: IoPanelConfig) -> None:
         cfg.source_path = self.txt_src_path.text().strip()
         cfg.output_path = self.txt_out_path.text().strip()
-        cfg.collapsed = not self.files_content_widget.isVisible()
-        cfg.dirty = True
-
-
-
 
     def set_enabled(self, enabled: bool) -> None:
         self._ui_enabled_state = enabled
@@ -229,16 +204,10 @@ class IoPanel(BasePanel):
         self.btn_out_browse.setEnabled(enabled)
         self.btn_swap.setEnabled(enabled)
         
-        if enabled:
-            is_modified = getattr(self.context._win.edit_content_panel, "is_modified", False) if self.context and self.context._win else False
-            self.btn_save.setEnabled(is_modified)
-        else:
-            self.btn_save.setEnabled(False)
-        
         self.update_button_ui()
 
     def on_modified_changed(self, is_modified: bool) -> None:
-        self.btn_save.setEnabled(self._ui_enabled_state and is_modified)
+        self.update_button_ui()
 
     def on_start_clicked(self) -> None:
         if self.loader.is_running():
@@ -246,7 +215,32 @@ class IoPanel(BasePanel):
                 self.loader.cancel_task()
                 self.update_button_ui()
         else:
-            self.loader.start_load_task()
+            source = self.txt_src_path.text().strip()
+            output = self.txt_out_path.text().strip()
+            self.loader.start_load_task(source, output)
+
+    def on_save_clicked(self) -> None:
+        if self.writer.is_running():
+            if not self.writer.is_cancelled():
+                self.writer.cancel_task()
+                self.update_button_ui()
+        else:
+            source = self.txt_src_path.text().strip()
+            output = self.txt_out_path.text().strip()
+            if not output:
+                QMessageBox.warning(self, "輸入錯誤", "請指定輸出 CSV 檔案路徑")
+                return
+            if not validate_paths_not_equal(self, source, output, mode="save"):
+                return
+            
+            # 獲取資料
+            all_rows = self.context._win.edit_content_panel.get_all_rows() if self.context and self.context._win else []
+            if not all_rows:
+                QMessageBox.warning(self, "錯誤", "沒有資料可儲存。")
+                return
+            delimiter = self.context._win.edit_content_panel.get_delimiter() if self.context and self.context._win else ","
+            
+            self.writer.start_save_task(output, all_rows, delimiter, silent=False)
 
     def on_loader_started(self) -> None:
         self.update_button_ui()
@@ -257,11 +251,21 @@ class IoPanel(BasePanel):
     def on_loader_cancelled(self) -> None:
         self.update_button_ui()
 
+    def on_writer_started(self) -> None:
+        self.update_button_ui()
+
+    def on_writer_finished(self) -> None:
+        self.update_button_ui()
+
+    def on_writer_cancelled(self) -> None:
+        self.update_button_ui()
+
     def update_button_ui(self) -> None:
         style_disabled = "background-color: #24283b; color: #565f89;"
         style_critical = "background-color: #f7768e; color: #1a1b26;"
         style_normal = ""
 
+        # 1. 更新載入按鈕
         if self.loader.is_running():
             if self.loader.is_cancelled():
                 self.btn_start.setText("正在停止...")
@@ -275,3 +279,23 @@ class IoPanel(BasePanel):
             self.btn_start.setText("載入")
             self.btn_start.setStyleSheet(style_normal)
             self.btn_start.setEnabled(self._ui_enabled_state)
+
+        # 2. 更新儲存按鈕
+        if self.writer.is_running():
+            if self.writer.is_cancelled():
+                self.btn_save.setText("正在停止...")
+                self.btn_save.setEnabled(False)
+                self.btn_save.setStyleSheet(style_disabled)
+            else:
+                self.btn_save.setText("停止儲存")
+                self.btn_save.setEnabled(True)
+                self.btn_save.setStyleSheet(style_critical)
+        else:
+            self.btn_save.setText("儲存")
+            self.btn_save.setStyleSheet(style_normal)
+            
+            # 儲存按鈕啟用條件為：面板處於 enabled 且資料已被修改
+            is_modified = False
+            if self.context and self.context._win and hasattr(self.context._win, "edit_content_panel"):
+                is_modified = self.context._win.edit_content_panel.is_modified
+            self.btn_save.setEnabled(self._ui_enabled_state and is_modified)

@@ -4,22 +4,25 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 from csv_worker import BaseCSVWorker
 from common_data.csv_data import LoadedCSVData
-from io_panel.io_panel_validator import validate_io_panel_inputs
+from utils import ThrottledProgress
 
 class CSVEditWorker(BaseCSVWorker):
     def __init__(self, source_path, output_path):
         super().__init__(source_path, output_path)
         self.loaded_rows = []
         self.task_name = "載入中..."
+        
+        self.progress_throttler = ThrottledProgress(self.progress_updated, min_interval=0.2)
+        self.log_throttler = ThrottledProgress(self.log_emitted, min_interval=0.2)
 
     def run(self):
         try:
-            self.log_emitted.emit("INFO", "開始載入 CSV 資料以供編輯...")
+            self.log_throttler.emit("INFO", "開始載入 CSV 資料以供編輯...", force=True)
             encoding, delimiter = self.detect_format()
             
             # 統計總行數
             total_file_rows = self.count_total_rows(encoding, delimiter)
-            self.log_emitted.emit("INFO", f"來源檔案讀取完成，共 {total_file_rows} 行。")
+            self.log_throttler.emit("INFO", f"來源檔案讀取完成，共 {total_file_rows} 行。", force=True)
 
             all_rows = []
             with open(self.source_path, 'r', encoding=encoding, errors='replace') as f:
@@ -30,18 +33,17 @@ class CSVEditWorker(BaseCSVWorker):
                         
                     all_rows.append(row)
                     
-                    # 每 10000 行更新一次進度，避免太頻繁發送訊號
-                    if idx % 10000 == 0:
-                        self.progress_updated.emit(idx, total_file_rows)
-                        self.log_emitted.emit("INFO", f"已讀取 {idx} 行...")
+                    # 限制進度更新頻率為每秒最多 5 次
+                    self.progress_throttler.emit(idx, total_file_rows)
+                    self.log_throttler.emit("INFO", f"已讀取 {idx} 行...")
 
-            self.progress_updated.emit(total_file_rows, total_file_rows)
+            self.progress_throttler.emit(total_file_rows, total_file_rows, force=True)
             self.loaded_rows = all_rows
-            self.log_emitted.emit("SUCCESS", f"編輯資料載入成功，共 {len(all_rows)} 行。")
+            self.log_throttler.emit("SUCCESS", f"編輯資料載入成功，共 {len(all_rows)} 行。", force=True)
             self.finished_successfully.emit(self.output_path)
 
         except Exception as e:
-            self.log_emitted.emit("ERROR", f"載入編輯過程發生錯誤：{str(e)}")
+            self.log_throttler.emit("ERROR", f"載入編輯過程發生錯誤：{str(e)}", force=True)
             self.finished_with_error.emit(str(e))
 
     def get_success_message(self, out_path):
@@ -54,7 +56,7 @@ class CSVEditWorker(BaseCSVWorker):
         return "載入中斷", f"載入編輯過程發生錯誤：\n{err_msg}"
 
 
-class CSVLoader(QObject):
+class CSVReader(QObject):
     request_start_worker = pyqtSignal(object)
     load_completed = pyqtSignal(LoadedCSVData)
     load_error = pyqtSignal(str)
@@ -63,10 +65,9 @@ class CSVLoader(QObject):
     finished = pyqtSignal()
     cancelled = pyqtSignal()
 
-    def __init__(self, parent=None, context=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_win = parent  # MainWindow
-        self.context = context
         self._current_worker = None
 
     def is_running(self) -> bool:
@@ -79,10 +80,12 @@ class CSVLoader(QObject):
         if self._current_worker:
             self._current_worker.cancel()
 
-    def start_load_task(self):
+    def start_load_task(self, source_path: str, output_path: str):
+        from .io_panel_validator import validate_io_panel_inputs
         is_valid, parsed = validate_io_panel_inputs(
             self.parent_win,
-            self.context,
+            source_path=source_path,
+            output_path=output_path,
             require_source_path=True,
             require_output_path=False,
         )
@@ -90,8 +93,8 @@ class CSVLoader(QObject):
             return
 
         worker_instance = CSVEditWorker(
-            source_path=self.context.source_path,
-            output_path=self.context.output_path
+            source_path=source_path,
+            output_path=output_path
         )
         self._current_worker = worker_instance
 

@@ -318,16 +318,7 @@ class FilterPanel(BasePanel):
             "logic_tree": logic_tree.serialize_tree(self.logic_tree)
         }
 
-        from io_panel import validate_io_panel_inputs
 
-        is_valid, parsed = validate_io_panel_inputs(
-            self,
-            self.context,
-            require_source_path=False,
-            require_output_path=False,
-        )
-        if not is_valid:
-            return
 
         # 驗證行號輸入
         start_row_str = self.txt_filter_start_row.text().strip()
