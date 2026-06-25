@@ -74,8 +74,6 @@ class IoPanelConfig:
     dirty: bool = False
     source_path: str = ""
     output_path: str = ""
-    src_col: str = "1"
-    tgt_col: str = "2"
     collapsed: bool = False
 
 

@@ -46,20 +46,16 @@ def validate_io_panel_inputs(
     context,
     require_source_path: bool = True,
     require_output_path: bool = False,
-    require_source_col: bool = False,
-    require_target_col: bool = False,
 ) -> tuple[bool, dict]:
     """
     通用驗證模組：驗證 io_panel 各輸入欄位的值是否合法。
-    若驗證失敗，會直接以 QMessageBox.warning 彈出對話框告知使用者，並回傳 (False, {})。
+    若驗證失敗，會直接以 QMessageBox.warning 彈出對話框告知使用者，並回傳 (False, {}）。
     若驗證成功，回傳 (True, parsed_dict)。
     """
     parsed = {}
 
     source_path = context.source_path
     output_path = context.output_path
-    source_col = context.source_col
-    target_col = context.target_col
 
     # 1. 來源 CSV 路徑驗證
     if require_source_path:
@@ -74,36 +70,6 @@ def validate_io_panel_inputs(
             return False, {}
         # 呼叫獨立的重複檢查函式
         if require_source_path and not validate_paths_not_equal(parent, source_path, output_path, mode="task"):
-            return False, {}
-
-    # 5. 欄號驗證 (合併與原本 Translator 相同的錯誤訊息)
-    if require_source_col or require_target_col:
-        sc_ok = False
-        if require_source_col:
-            try:
-                sc_val = int(str(source_col).strip())
-                if sc_val >= 1:
-                    parsed["source_col"] = sc_val
-                    sc_ok = True
-            except Exception:
-                pass
-        else:
-            sc_ok = True
-
-        tc_ok = False
-        if require_target_col:
-            try:
-                tc_val = int(str(target_col).strip())
-                if tc_val >= 1:
-                    parsed["target_col"] = tc_val
-                    tc_ok = True
-            except Exception:
-                pass
-        else:
-            tc_ok = True
-
-        if not sc_ok or not tc_ok:
-            QMessageBox.warning(parent, "輸入錯誤", "來源欄號與目標欄號必須是大於或等於 1 的正整數")
             return False, {}
 
     return True, parsed

@@ -108,19 +108,9 @@ class IoPanel(BasePanel):
 
         files_content_layout.addLayout(row1_layout)
 
-        # 第二列：行號、欄號與開始按鈕
+        # 第二列：開始按鈕
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(15)
-
-        lbl_src_col = QLabel("來源欄號：")
-        self.txt_src_col = QLineEdit("1")
-        self.txt_src_col.setValidator(QIntValidator(1, 9999))
-        self.txt_src_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
-
-        lbl_tgt_col = QLabel("目標欄號：")
-        self.txt_tgt_col = QLineEdit("2")
-        self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
-        self.txt_tgt_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
 
         self.btn_start = QPushButton("載入")
         self.btn_start.setObjectName("btnStart")
@@ -128,10 +118,6 @@ class IoPanel(BasePanel):
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.on_start_clicked)
 
-        row2_layout.addWidget(lbl_src_col)
-        row2_layout.addWidget(self.txt_src_col)
-        row2_layout.addWidget(lbl_tgt_col)
-        row2_layout.addWidget(self.txt_tgt_col)
         row2_layout.addStretch()
         row2_layout.addWidget(self.btn_start)
 
@@ -197,9 +183,6 @@ class IoPanel(BasePanel):
         if not validate_paths_not_equal(self, src_path, out_path, mode="config"):
             self.txt_out_path.clear()
 
-        self.txt_src_col.setText(cfg.src_col)
-        self.txt_tgt_col.setText(cfg.tgt_col)
-
         # 折疊狀態
         if cfg.collapsed:
             self.files_content_widget.setVisible(False)
@@ -211,8 +194,6 @@ class IoPanel(BasePanel):
     def update_config(self, cfg: IoPanelConfig) -> None:
         cfg.source_path = self.txt_src_path.text().strip()
         cfg.output_path = self.txt_out_path.text().strip()
-        cfg.src_col = self.txt_src_col.text()
-        cfg.tgt_col = self.txt_tgt_col.text()
         cfg.collapsed = not self.files_content_widget.isVisible()
         cfg.dirty = True
 
@@ -226,8 +207,6 @@ class IoPanel(BasePanel):
         self.btn_src_browse.setEnabled(enabled)
         self.btn_out_browse.setEnabled(enabled)
         self.btn_swap.setEnabled(enabled)
-        self.txt_src_col.setEnabled(enabled)
-        self.txt_tgt_col.setEnabled(enabled)
         
         self.update_button_ui()
 

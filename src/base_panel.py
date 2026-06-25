@@ -73,16 +73,6 @@ class AppContext:
     def output_path(self) -> str:
         return self._win.io_panel.txt_out_path.text().strip()
 
-
-
-    @property
-    def source_col(self) -> str:
-        return self._win.io_panel.txt_src_col.text().strip()
-
-    @property
-    def target_col(self) -> str:
-        return self._win.io_panel.txt_tgt_col.text().strip()
-
     @property
     def is_first_row_header(self) -> bool:
         if hasattr(self._win, "edit_content_panel"):

@@ -325,8 +325,6 @@ class FilterPanel(BasePanel):
             self.context,
             require_source_path=False,
             require_output_path=False,
-            require_source_col=False,
-            require_target_col=False,
         )
         if not is_valid:
             return
