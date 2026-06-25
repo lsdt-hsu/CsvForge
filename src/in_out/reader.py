@@ -25,6 +25,7 @@ class CSVEditWorker(BaseCSVWorker):
             self.log_throttler.emit("INFO", f"來源檔案讀取完成，共 {total_file_rows} 行。", force=True)
 
             all_rows = []
+            num_cols = 0
             with open(self.source_path, 'r', encoding=encoding, errors='replace') as f:
                 reader = csv.reader(f, delimiter=delimiter)
                 for idx, row in enumerate(reader):
@@ -32,6 +33,9 @@ class CSVEditWorker(BaseCSVWorker):
                         raise RuntimeError("使用者已取消載入編輯工作")
                         
                     all_rows.append(row)
+                    row_len = len(row)
+                    if row_len > num_cols:
+                        num_cols = row_len
                     
                     # 限制進度更新頻率為每秒最多 5 次
                     self.progress_throttler.emit(idx, total_file_rows)
@@ -39,6 +43,7 @@ class CSVEditWorker(BaseCSVWorker):
 
             self.progress_throttler.emit(total_file_rows, total_file_rows, force=True)
             self.loaded_rows = all_rows
+            self.num_cols = num_cols
             self.log_throttler.emit("SUCCESS", f"編輯資料載入成功，共 {len(all_rows)} 行。", force=True)
             self.finished_successfully.emit(self.output_path)
 
@@ -116,7 +121,8 @@ class CSVReader(QObject):
             all_rows=worker.loaded_rows,
             delimiter=getattr(worker, "delimiter", ","),
             encoding=getattr(worker, "encoding", "utf-8"),
-            file_path=worker.source_path
+            file_path=worker.source_path,
+            num_cols=getattr(worker, "num_cols", 0)
         )
         self.load_completed.emit(data)
         self.finished.emit()

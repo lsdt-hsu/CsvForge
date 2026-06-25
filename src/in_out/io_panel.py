@@ -189,8 +189,13 @@ class IoPanel(BasePanel):
         self.source_file_changed.emit(text)
 
     def apply_config(self, cfg: IoPanelConfig) -> None:
+        self.txt_src_path.blockSignals(True)
+        self.txt_out_path.blockSignals(True)
         self.txt_src_path.setText(cfg.source_path)
         self.txt_out_path.setText(cfg.output_path)
+        self.txt_src_path.blockSignals(False)
+        self.txt_out_path.blockSignals(False)
+
 
     def update_config(self, cfg: IoPanelConfig) -> None:
         cfg.source_path = self.txt_src_path.text().strip()
@@ -296,6 +301,6 @@ class IoPanel(BasePanel):
             
             # 儲存按鈕啟用條件為：面板處於 enabled 且資料已被修改
             is_modified = False
-            if self.context and self.context._win and hasattr(self.context._win, "edit_content_panel"):
-                is_modified = self.context._win.edit_content_panel.is_modified
+            if self.context and self.context.csv_data:
+                is_modified = self.context.csv_data.is_modified
             self.btn_save.setEnabled(self._ui_enabled_state and is_modified)

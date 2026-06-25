@@ -36,6 +36,19 @@ class FilterPanel(BasePanel):
         self.expression_is_valid = True
 
         self.init_ui()
+        if self.context and self.context.csv_data:
+            self.context.csv_data.data_loaded.connect(self.on_csv_data_refreshed)
+            self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
+
+    def on_csv_data_refreshed(self):
+        if self.context and self.context.csv_data:
+            csv_data = self.context.csv_data
+            if csv_data.all_rows:
+                if not self.controls_container.isVisible():
+                    self.show_controls()
+                self.update_column_dropdowns(csv_data.num_cols, csv_data.headers)
+            else:
+                self.reset_panel()
 
     def init_ui(self):
         # 行號範圍輸入
@@ -256,8 +269,6 @@ class FilterPanel(BasePanel):
             self.expression_is_valid = False
 
     def update_column_dropdowns(self, num_cols, headers=None):
-        self.show_controls()
-
         self.num_cols = num_cols
         self.headers = headers
 
@@ -371,7 +382,7 @@ class FilterPanel(BasePanel):
         self.request_start_worker.emit(worker_instance)
 
     def on_filter_completed(self, matched_indices, elapsed_time: float) -> None:
-        self.context._win.edit_content_panel.apply_filter(matched_indices)
+        self.context.csv_data.set_filtered_indices(matched_indices)
         self.update_status("完成")
         self.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
 

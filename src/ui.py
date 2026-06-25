@@ -80,11 +80,13 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
         self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
 
+        # 實例化 LoadedCSVData Model (單例，與 MainWindow 共存亡)
+        from common_data.csv_data import LoadedCSVData
+        self.csv_data = LoadedCSVData()
+
         # 建立 AppContext (必須先建立，因為面板需要使用)
         from base_panel import AppContext
         self.context = AppContext(self)
-
-
 
         main_widget = QWidget()
         main_widget.setObjectName("mainContainer")
@@ -158,8 +160,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
 
         # 內容面板
         self.edit_content_panel = DataEditorPanel(context=self.context)
-        self.edit_content_panel.modified_changed.connect(self.io_panel.on_modified_changed)
-        self.edit_content_panel.header_state_changed.connect(self.on_header_state_changed)
+        self.csv_data.modified_changed.connect(self.io_panel.on_modified_changed)
         self.edit_content_panel.request_start_worker.connect(self.on_request_start_worker)
 
         self.status_panel.setMinimumHeight(140)
@@ -176,6 +177,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         main_layout.addLayout(right_panel, stretch=1)
 
         self.apply_style()
+
 
     def on_status_panel_toggle(self, collapsed: bool) -> None:
         cfg = self.context.status_panel_config
@@ -203,22 +205,22 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
                 self.right_splitter.setSizes([total_h - header_h, header_h])
 
     def on_csv_load_completed(self, data) -> None:
-        from common_data.csv_data import LoadedCSVData
-        # 1. 載入資料至 DataEditorPanel
-        self.edit_content_panel.set_csv_data(data)
-
-        # 2. 更新過濾面板與翻譯面板控制項
+        # 1. 將資料寫入 Model，這會自動觸發各面板訂閱的刷新信號
+        self.csv_data.set_csv_data(
+            all_rows=data.all_rows,
+            delimiter=data.delimiter,
+            encoding=data.encoding,
+            file_path=data.file_path,
+            num_cols=data.num_cols
+        )
+        
+        # 2. 顯示控制項
         if data.all_rows:
-            num_cols = max(len(r) for r in data.all_rows)
-            is_hdr = self.edit_content_panel.is_first_row_header()
-            headers = data.all_rows[0] if is_hdr else None
-            self.filter_panel.update_column_dropdowns(num_cols, headers)
             self.translation_panel.show_controls()
-            self.ai_panel.update_column_dropdowns(num_cols, headers)
             self.ai_panel.show_controls()
 
     def on_source_file_changed(self, file_path: str) -> None:
-        self.edit_content_panel.clear()
+        self.csv_data.set_csv_data([], ",", "utf-8", None)
         self.edit_panel.reset_panel()
         self.filter_panel.reset_panel()
         self.translation_panel.reset_panel()
@@ -227,7 +229,8 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
             self.worker.loaded_rows = []
 
     def on_csv_save_completed(self, out_path: str) -> None:
-        self.edit_content_panel.set_modified(False)
+        self.csv_data.set_modified(False)
+
 
     def silent_save_edit_data(self) -> None:
         out_path = self.io_panel.txt_out_path.text().strip()
@@ -563,13 +566,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         """
         self.setStyleSheet(qss)
 
-    def on_header_state_changed(self, is_hdr: bool) -> None:
-        """當『第一行為標題』狀態改變時，更新編輯過濾面板的比對欄位與比對目標下拉選單。"""
-        all_rows = self.edit_content_panel.get_all_rows()
-        if all_rows:
-            num_cols = max(len(r) for r in all_rows)
-            headers = all_rows[0] if is_hdr else None
-            self.filter_panel.update_column_dropdowns(num_cols, headers)
 
     # ── 視窗關閉事件 ─────────────────────────────────────────────────────────
 

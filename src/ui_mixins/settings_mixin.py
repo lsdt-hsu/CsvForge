@@ -55,6 +55,7 @@ class SettingsMixin:
         except Exception:
             pass  # 設定還原失敗時靜默略過，避免影響程式啟動
 
+
     # ── 設定儲存 ──────────────────────────────────────────────────────────────
 
     def save_settings(self: "MainWindow") -> None:

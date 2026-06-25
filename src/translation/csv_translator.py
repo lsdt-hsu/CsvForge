@@ -31,8 +31,8 @@ class CSVTranslator(QObject):
         if not is_valid:
             return
 
-        visible_row_indices = list(self.context._win.edit_content_panel.table_model.visible_row_indices)
-        all_rows = self.context._win.edit_content_panel.get_all_rows()
+        visible_row_indices = self.context.csv_data.get_visible_indices()
+        all_rows = self.context.csv_data.all_rows
 
         worker_instance = CSVTranslatorWorker(
             all_rows=all_rows,

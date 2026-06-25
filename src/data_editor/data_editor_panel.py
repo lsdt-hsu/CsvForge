@@ -21,79 +21,84 @@ class CsvTableDelegate(QStyledItemDelegate):
         super().paint(painter, opt, index)
 
     def updateEditorGeometry(self, editor, option, index):
-        # 將編輯元件高度與寬度拉伸到整個儲存格大小（包含格線內框）
         editor.setGeometry(option.rect)
 
 class CSVTableModel(QAbstractTableModel):
-    def __init__(self, parent=None):
+    def __init__(self, csv_data: LoadedCSVData, parent=None):
         super().__init__(parent)
-        self.all_rows = []           # 儲存完整的 CSV 二維陣列數據
-        self.is_header = False      # 第一行是否為標題
-        self.num_cols = 0            # 快取欄位數量，避免 O(N) 重複計算
-        self.filtered_indices = None # None = 未啟用過濾; list = 過濾後的 0-based 索引
-        self.visible_row_indices = [] # 儲存當前可見資料行在 all_rows 中的索引值
+        self.csv_data = csv_data
+        
+        # 本地屬性快取
+        self._visible_indices = []
+        self._num_cols = 0
+        self._is_header = False
+        self._update_local_cache()
+        
+        # 連接 Model 的事件通知
+        self.csv_data.data_loaded.connect(self.on_data_loaded)
+        self.csv_data.data_changed.connect(self.on_data_changed)
+        self.csv_data.filter_changed.connect(self.on_filter_changed)
+        self.csv_data.header_state_changed.connect(self.on_header_state_changed)
 
-    def set_data(self, all_rows, is_header):
-        self.beginResetModel()
-        self.all_rows = all_rows
-        self.is_header = is_header
-        self.num_cols = max(len(row) for row in all_rows) if all_rows else 0
-        self.filtered_indices = None
-        self.update_visible_rows()
-        self.endResetModel()
-
-    def set_is_header(self, is_header):
-        self.beginResetModel()
-        self.is_header = is_header
-        self.update_visible_rows()
-        self.endResetModel()
-
-    def set_filtered_indices(self, indices):
-        self.beginResetModel()
-        self.filtered_indices = indices
-        self.update_visible_rows()
-        self.endResetModel()
-
-    def update_visible_rows(self):
-        if not self.all_rows:
-            self.visible_row_indices = []
-            return
-        total = len(self.all_rows)
-        data_start = 1 if self.is_header else 0  # 有標題則跳過第 0 行（索引 0）
-        if self.filtered_indices is None:
-            self.visible_row_indices = list(range(data_start, total))
+    def _update_local_cache(self):
+        if self.csv_data:
+            self._visible_indices = self.csv_data.get_visible_indices()
+            self._num_cols = self.csv_data.num_cols
+            self._is_header = self.csv_data.is_header
         else:
-            self.visible_row_indices = [i for i in self.filtered_indices if i >= data_start]
+            self._visible_indices = []
+            self._num_cols = 0
+            self._is_header = False
+
+    def on_data_loaded(self):
+        self._update_local_cache()
+        self.beginResetModel()
+        self.endResetModel()
+
+    def on_data_changed(self):
+        self._update_local_cache()
+        # 局部資料改變，發射 layoutChanged 以讓 View 重繪目前可見格
+        self.layoutChanged.emit()
+
+    def on_filter_changed(self):
+        self._update_local_cache()
+        self.beginResetModel()
+        self.endResetModel()
+
+    def on_header_state_changed(self, is_header):
+        self._update_local_cache()
+        self.beginResetModel()
+        self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()):
-        return len(self.visible_row_indices)
+        return len(self._visible_indices)
 
     def columnCount(self, parent=QModelIndex()):
-        return self.num_cols
+        return self._num_cols
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if not index.isValid():
+        if not index.isValid() or not self.csv_data:
             return None
             
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
-            r = self.visible_row_indices[index.row()]
+            r = self._visible_indices[index.row()]
             c = index.column()
-            row_data = self.all_rows[r]
+            row_data = self.csv_data.all_rows[r]
             return row_data[c] if c < len(row_data) else ""
             
         return None
 
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
-        if index.isValid() and role == Qt.ItemDataRole.EditRole:
-            r = self.visible_row_indices[index.row()]
+        if index.isValid() and role == Qt.ItemDataRole.EditRole and self.csv_data:
+            r = self._visible_indices[index.row()]
             c = index.column()
             
-            row_data = self.all_rows[r]
+            # 確保該 row 寬度足夠
+            row_data = self.csv_data.all_rows[r]
             while len(row_data) <= c:
                 row_data.append("")
                 
-            row_data[c] = str(value)
-            self.dataChanged.emit(index, index, [role])
+            self.csv_data.update_cell(r, c, str(value))
             return True
         return False
 
@@ -103,51 +108,26 @@ class CSVTableModel(QAbstractTableModel):
         return Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
-        if role == Qt.ItemDataRole.DisplayRole:
+        if role == Qt.ItemDataRole.DisplayRole and self.csv_data:
             if orientation == Qt.Orientation.Horizontal:
-                if self.is_header and self.all_rows:
-                    header_row = self.all_rows[0]
-                    h = header_row[section] if section < len(header_row) else ""
-                    h = h if h.strip() else f"第 {section+1} 欄"
-                    return f"{section+1}. {h}"
-                else:
-                    return f"第 {section+1} 欄"
+                return self.csv_data.get_column_header(section)
             else:
-                # 直向標題：顯示該資料行在原始 CSV 中的 1-based 行號
-                actual_row_num = self.visible_row_indices[section] + 1
+                actual_row_num = self._visible_indices[section] + 1
                 return str(actual_row_num)
                 
         return None
 
 class DataEditorPanel(BasePanel):
-    """
-    資料編輯面板：顯示並允許使用者直接在 Table 中編輯 CSV 資料。
-
-    公開介面（供主視窗與其他元件使用）：
-      - load_data(all_rows)
-      - clear()
-      - get_all_rows() -> list
-      - has_data() -> bool
-      - apply_filter(indices: list | None)
-      - get_delimiter() -> str
-      - set_delimiter(delimiter: str)
-      - is_first_row_header() -> bool
-      - set_first_row_header(checked: bool)
-      - set_modified(modified: bool)
-
-    Signals：
-      - request_save：使用者點擊存檔按鈕時發射
-    """
-    modified_changed = pyqtSignal(bool)
-    header_state_changed = pyqtSignal(bool)
-
     def __init__(self, parent=None, context=None):
         super().__init__(parent, require_data_loading=False, context=context)
         self.setObjectName("rightFrame")
         self.setMinimumHeight(200)
-        self.is_modified = False
         self._delimiter = ","
         self.init_ui()
+        
+        # 訂閱資料載入信號以自動調整欄寬與更新狀態文字
+        if self.context and self.context.csv_data:
+            self.context.csv_data.data_loaded.connect(self.on_model_loaded)
 
     def init_ui(self):
         layout = self.controls_layout
@@ -178,8 +158,6 @@ class DataEditorPanel(BasePanel):
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         header_layout.addWidget(self.lbl_status)
 
-
-
         layout.addWidget(header_widget)
 
         # 使用 QTableView 支援大數據虛擬滾動
@@ -188,98 +166,72 @@ class DataEditorPanel(BasePanel):
         self.table_view.verticalHeader().setDefaultSectionSize(PREVIEW_VERTICAL_SECTION_SIZE)
         self.table_view.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
-        # 關聯 Model 與 Delegate
-        self.table_model = CSVTableModel()
+        # 關聯 Model 與 Delegate (使用全域共享的 csv_data)
+        csv_data = self.context.csv_data if self.context else LoadedCSVData()
+        self.table_model = CSVTableModel(csv_data, self.table_view)
         self.table_view.setModel(self.table_model)
         self.table_view.setItemDelegate(CsvTableDelegate(self.table_view))
-        
-        # 監聽資料異動
-        self.table_model.dataChanged.connect(lambda: self.set_modified(True))
         
         layout.addWidget(self.table_view)
 
     # ── 公開介面方法 ──────────────────────────────────────────────────────────
 
     def get_all_rows(self) -> list:
-        """取得目前在記憶體中的全部 CSV 二維陣列（未經過濾的原始資料）。"""
-        return self.table_model.all_rows
+        return self.context.csv_data.all_rows if self.context and self.context.csv_data else []
 
     def has_data(self) -> bool:
-        """判斷面板是否已載入 CSV 資料。"""
-        return bool(self.table_model.all_rows)
-
-    def apply_filter(self, indices):
-        """
-        套用過濾結果至資料表。
-        :param indices: 符合過濾條件的 0-based 行索引列表；傳入 None 表示清除過濾。
-        """
-        self.table_model.set_filtered_indices(indices)
+        return bool(self.get_all_rows())
 
     def get_delimiter(self) -> str:
-        """取得當前使用的 CSV 分隔符。"""
         return self._delimiter
 
     def set_delimiter(self, delimiter: str):
-        """設定 CSV 分隔符（通常在資料載入後由主視窗呼叫）。"""
         self._delimiter = delimiter
 
     # ── 內部控制方法 ──────────────────────────────────────────────────────────
 
-    def set_modified(self, modified):
-        self.is_modified = modified
-        self.modified_changed.emit(modified)
-
     def on_header_checkbox_changed(self, state):
         is_checked = self.chk_first_row_header.isChecked()
-        self.table_model.set_is_header(is_checked)
+        if self.context and self.context.csv_data:
+            self.context.csv_data.set_is_header(is_checked)
         self.resize_columns_fast()
-        self.header_state_changed.emit(is_checked)
-        # 直接操作 DataEditorConfig（資料相依性），見 settings_manager.py 模組說明
+        
+        # 直接操作 DataEditorConfig（資料相依性）
         if self.context:
             self.context.data_editor_config.first_row_header = is_checked
             self.context.data_editor_config.dirty = True
 
-    def load_data(self, all_rows, file_path=None):
-        self.table_model.set_data(
-            all_rows, 
-            self.chk_first_row_header.isChecked()
-        )
-        
+    def on_model_loaded(self):
+        csv_data = self.context.csv_data
         prefix = ""
-        if file_path:
-            base_name = os.path.basename(file_path)
+        if csv_data.file_path:
+            base_name = os.path.basename(csv_data.file_path)
             main_name, _ = os.path.splitext(base_name)
             prefix = f"{main_name}: "
             
-        self.lbl_status.setText(f"{prefix}共 {len(all_rows)} 行")
-        self.set_modified(False)
+        self.lbl_status.setText(f"{prefix}共 {len(csv_data.all_rows)} 行")
         self.resize_columns_fast()
 
     def resize_columns_fast(self):
-        """
-        為防大檔案計算凍結，僅針對前 100 行內容估算並調整欄寬。
-        """
-        model = self.table_model
-        if not model or not model.all_rows:
+        csv_data = self.context.csv_data if self.context else None
+        if not csv_data or not csv_data.all_rows:
             return
             
-        num_cols = model.columnCount()
-        num_rows = min(100, model.rowCount())
+        num_cols = self.table_model.columnCount()
+        num_rows = min(100, self.table_model.rowCount())
         font = self.table_view.font()
         fm = QFontMetrics(font)
         
         for col in range(num_cols):
             max_width = 80 # 最小預設欄寬
             
-            # 計算橫向標題寬度
-            header_text = model.headerData(col, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole)
+            header_text = self.table_model.headerData(col, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole)
             if header_text:
                 max_width = max(max_width, fm.horizontalAdvance(str(header_text)) + 25)
             
-            # 遍歷前 100 行計算最大寬度
             for row in range(num_rows):
-                index = model.index(row, col)
-                val = model.data(index, Qt.ItemDataRole.DisplayRole)
+                index = self.table_model.index(row, col)
+                val = self.table_model.data(index, Qt.ItemDataRole.DisplayRole)
                 if val:
                     max_width = max(max_width, fm.horizontalAdvance(str(val)) + 15)
                     
@@ -289,23 +241,14 @@ class DataEditorPanel(BasePanel):
         return self.chk_first_row_header.isChecked()
 
     def restore_from_config(self) -> None:
-        """
-        從 AppContext 的 DataEditorConfig 還原面板初始狀態。
-        由 MainWindow._restore_all_panel_configs() 在啟動時呼叫。
-        """
         if not self.context:
             return
         checked = self.context.data_editor_config.first_row_header
-        # blockSignals 避免觸發 on_header_checkbox_changed 時誤設 dirty flag
         self.chk_first_row_header.blockSignals(True)
         self.chk_first_row_header.setChecked(checked)
-        self.table_model.set_is_header(checked)
+        if self.context.csv_data:
+            self.context.csv_data.set_is_header(checked)
         self.chk_first_row_header.blockSignals(False)
-
-    def clear(self):
-        self.table_model.set_data([], False)
-        self.lbl_status.setText("尚未載入資料")
-        self.set_modified(False)
 
     def set_table_editable(self, editable: bool):
         if not editable:
@@ -320,8 +263,3 @@ class DataEditorPanel(BasePanel):
                     QAbstractItemView.EditTrigger.EditKeyPressed | 
                     QAbstractItemView.EditTrigger.AnyKeyPressed
                 )
-
-    def set_csv_data(self, data: LoadedCSVData):
-        self.set_delimiter(data.delimiter)
-        self.load_data(data.all_rows, file_path=data.file_path)
-

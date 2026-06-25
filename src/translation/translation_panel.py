@@ -36,14 +36,31 @@ class TranslationPanel(BasePanel):
         self.translator.data_changed.connect(self._on_data_changed)
         
         self.init_ui()
+        if self.context and self.context.csv_data:
+            self.context.csv_data.data_loaded.connect(self.on_csv_data_refreshed)
+            self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
+
+    def on_csv_data_refreshed(self):
+        if self.context and self.context.csv_data:
+            csv_data = self.context.csv_data
+            if csv_data.all_rows:
+                if not self.controls_container.isVisible():
+                    self.show_controls()
+                self.update_column_dropdowns(csv_data.num_cols, csv_data.headers)
+            else:
+                self.reset_panel()
+
+    def update_column_dropdowns(self, num_cols, headers):
+        pass
+
 
     def _on_translation_done(self):
         self.request_silent_save.emit()
 
     def _on_data_changed(self):
-        if self.context and self.context._win:
-            self.context._win.edit_content_panel.set_modified(True)
-            self.context._win.edit_content_panel.table_model.layoutChanged.emit()
+        if self.context and self.context.csv_data:
+            self.context.csv_data.set_modified(True)
+            self.context.csv_data.data_changed.emit()
 
 
     def init_ui(self):

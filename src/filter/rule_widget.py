@@ -210,14 +210,25 @@ class RuleWidget(QWidget):
         self.cmb_range_start.clear()
         self.cmb_range_end.clear()
 
-        for i in range(num_cols):
-            text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
+        # 找出當前已選取的所有整數欄位 index，並計算 max_active_col
+        active_cols = []
+        if isinstance(old_col, int):
+            active_cols.append(old_col)
+        if isinstance(old_start, int):
+            active_cols.append(old_start)
+        if isinstance(old_end, int):
+            active_cols.append(old_end)
+            
+        max_active_col = max(active_cols) if active_cols else -1
+        limit = max(num_cols, max_active_col + 1)
+
+        csv_data = self.parent_panel.context.csv_data if self.parent_panel.context else None
+
+        for i in range(limit):
+            text = csv_data.get_column_header(i) if csv_data else f"第 {i+1} 欄"
             self.cmb_compare_col.addItem(text, i)
             self.cmb_range_start.addItem(text, i)
             self.cmb_range_end.addItem(text, i)
-
-        if isinstance(old_col, int) and (old_col >= num_cols or old_col < 0):
-            self.cmb_compare_col.addItem(f"欄位{old_col+1}", old_col)
 
         idx = self.cmb_compare_col.findData(old_col)
         self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
@@ -251,12 +262,19 @@ class RuleWidget(QWidget):
             self.cmb_compare_target.addItem("僅符號", "僅符號")
         else:
             self.cmb_compare_target.addItem("手動輸入", "manual")
-            for i in range(num_cols):
-                text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
+            
+            # 找出當前已選取的整數目標欄位，以做越界防護
+            active_target_cols = []
+            if isinstance(old_target, int):
+                active_target_cols.append(old_target)
+                
+            max_active_target = max(active_target_cols) if active_target_cols else -1
+            limit = max(num_cols, max_active_target + 1)
+            
+            csv_data = self.parent_panel.context.csv_data if self.parent_panel.context else None
+            for i in range(limit):
+                text = csv_data.get_column_header(i) if csv_data else f"第 {i+1} 欄"
                 self.cmb_compare_target.addItem(text, i)
-
-            if isinstance(old_target, int) and (old_target >= num_cols or old_target < 0):
-                self.cmb_compare_target.addItem(f"欄位{old_target+1}", old_target)
         
         idx = self.cmb_compare_target.findData(old_target)
         self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)

@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal
+from common_data.csv_data import LoadedCSVData
 
 from settings_manager import (
     WindowConfig, MainConfig, IoPanelConfig, DataEditorConfig,
@@ -63,19 +64,23 @@ class AppContext:
     def ai_panel_config(self) -> AiPanelConfig:
         return self._win._configs["ai_panel"]
 
-    # ── 執行時動態狀態存取（半直接存取 Widget 最新值）────────────────────────
+    # ── 執行時動態狀態存取（解耦資料編輯面板，統一由 LoadedCSVData Model 提供）──
+
+    @property
+    def csv_data(self) -> "LoadedCSVData":
+        return self._win.csv_data
+
+    def set_modified(self, modified: bool) -> None:
+        self.csv_data.set_modified(modified)
 
     @property
     def is_first_row_header(self) -> bool:
-        if hasattr(self._win, "edit_content_panel"):
-            return self._win.edit_content_panel.is_first_row_header()
-        return False
+        return self.csv_data.is_header
 
     @property
     def is_modified(self) -> bool:
-        if hasattr(self._win, "edit_content_panel"):
-            return getattr(self._win.edit_content_panel, "is_modified", False)
-        return False
+        return self.csv_data.is_modified
+
 
     @property
     def is_ui_locked(self) -> bool:
@@ -83,15 +88,11 @@ class AppContext:
 
     @property
     def is_data_loaded(self) -> bool:
-        if hasattr(self._win, "edit_content_panel"):
-            return len(self._win.edit_content_panel.get_all_rows()) > 0
-        return False
+        return bool(self.csv_data.all_rows)
 
     @property
     def all_rows(self) -> list:
-        if hasattr(self._win, "edit_content_panel"):
-            return self._win.edit_content_panel.get_all_rows()
-        return []
+        return self.csv_data.all_rows
 
 
 class BasePanel(QFrame):
@@ -102,6 +103,8 @@ class BasePanel(QFrame):
     request_start_worker = pyqtSignal(object)
 
     def __init__(self, parent=None, title_text="", require_data_loading=True, context: AppContext = None):
+
+
         super().__init__(parent)
         self.context = context
         self.setObjectName("grpFrame")

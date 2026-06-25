@@ -61,6 +61,20 @@ class AiPanel(BasePanel):
         self._last_checked_url = None
         
         self.init_ui()
+        if self.context and self.context.csv_data:
+            self.context.csv_data.data_loaded.connect(self.on_csv_data_refreshed)
+            self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
+
+    def on_csv_data_refreshed(self):
+        if self.context and self.context.csv_data:
+            csv_data = self.context.csv_data
+            if csv_data.all_rows:
+                if not self.controls_container.isVisible():
+                    self.show_controls()
+                self.update_column_dropdowns(csv_data.num_cols, csv_data.headers)
+            else:
+                self.reset_panel()
+
 
     def init_ui(self):
         # 建立 UI 配置
@@ -542,8 +556,8 @@ class AiPanel(BasePanel):
             return
 
         # 3. 獲取當前 CSV headers，點擊開始時才進行欄位正確性檢查
-        is_hdr = self.context.is_first_row_header
-        all_rows = self.context._win.edit_content_panel.get_all_rows()
+        is_hdr = self.context.csv_data.is_header
+        all_rows = self.context.csv_data.all_rows
         if not all_rows:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "資料錯誤", "CSV 資料尚未載入！")
@@ -590,7 +604,7 @@ class AiPanel(BasePanel):
             return
 
         # 4. 取得行索引與資料
-        visible_row_indices = list(self.context._win.edit_content_panel.table_model.visible_row_indices)
+        visible_row_indices = self.context.csv_data.get_visible_indices()
 
         # 4. 實例化 Worker
         self.worker = CSVAIWorker(
@@ -657,6 +671,6 @@ class AiPanel(BasePanel):
 
     def _on_data_changed(self):
         # 標記主資料已修改，觸發介面重繪
-        if self.context and self.context._win:
-            self.context._win.edit_content_panel.set_modified(True)
-            self.context._win.edit_content_panel.table_model.layoutChanged.emit()
+        if self.context and self.context.csv_data:
+            self.context.csv_data.set_modified(True)
+            self.context.csv_data.data_changed.emit()
