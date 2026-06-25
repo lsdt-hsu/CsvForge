@@ -75,35 +75,24 @@ class CSVAIWorker(QThread):
                 headers = [str(i + 1) for i in range(len(self.all_rows[0]))]
 
             # 2. 判定或建立目標寫回欄位索引
-            target_col_idx = -1
-            if self.target_col_name in headers:
-                target_col_idx = headers.index(self.target_col_name)
-            else:
-                # 目標欄位不存在，啟動自動新建欄位邏輯
-                self.log_emitted.emit("WARNING", f"目標欄位 '{self.target_col_name}' 不存在，將自動在資料尾端建立新欄位。")
-                if self.is_header:
-                    self.all_rows[0].append(self.target_col_name)
-                    target_col_idx = len(self.all_rows[0]) - 1
-                    # 補齊其他資料列的尾端空間
-                    for r_idx in range(1, len(self.all_rows)):
-                        self.all_rows[r_idx].append("")
-                else:
-                    # 首行不是表頭，檢查是否輸入的是代表數字索引的欄位
-                    try:
-                        idx_val = int(self.target_col_name) - 1
-                        if idx_val < 0:
-                            raise ValueError()
-                        target_col_idx = idx_val
-                        # 補齊所有行到該大小
-                        for r_idx in range(len(self.all_rows)):
-                            while len(self.all_rows[r_idx]) <= target_col_idx:
-                                self.all_rows[r_idx].append("")
-                    except ValueError:
-                        # 不是數字，一律在尾端追加
-                        for r_idx in range(len(self.all_rows)):
-                            self.all_rows[r_idx].append("")
-                        target_col_idx = len(self.all_rows[0]) - 1
+            try:
+                target_col_idx = int(self.target_col_name)
+                if target_col_idx < 0:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                # 若發生異常，回退至最尾端新建一欄
+                target_col_idx = len(self.all_rows[0])
 
+            if target_col_idx >= len(self.all_rows[0]):
+                # 目標欄位索引超出，啟動自動建立欄位邏輯
+                new_col_name = f"AI_Output_{target_col_idx + 1}" if self.is_header else f"第 {target_col_idx + 1} 欄"
+                self.log_emitted.emit("WARNING", f"目標欄號 {target_col_idx + 1} 不存在，將自動建立新欄位 '{new_col_name}'。")
+                if self.is_header:
+                    self.all_rows[0].append(new_col_name)
+                # 補齊所有資料列的空間
+                for r_idx in range(1 if self.is_header else 0, len(self.all_rows)):
+                    while len(self.all_rows[r_idx]) <= target_col_idx:
+                        self.all_rows[r_idx].append("")
                 # 表格結構變更，通知 UI 更新表頭與視圖
                 self.data_changed.emit()
 

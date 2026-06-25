@@ -191,17 +191,28 @@ class AiPromptWidget(QWidget):
             if w:
                 w.deleteLater()
 
-        # 2. 重新填充 QComboBox 下拉選單項目 (維持當前選擇)
+        # 2. 重新填充 QComboBox 下拉選單項目 (維持當前選擇的欄號)
         self.cb_target_col.blockSignals(True)
-        current_text = self.cb_target_col.currentText()
+        current_val = self.cb_target_col.currentData()
         self.cb_target_col.clear()
+        
+        # 預設 Placeholder，其 Data 為 -1
+        self.cb_target_col.addItem("請選擇寫回欄位...", -1)
+        
         if headers:
-            self.cb_target_col.addItems(headers)
-        if current_text:
-            # 如果原先選取的文字不在新載入的 headers 中，則暫存追加它，平常不檢查其正確性
-            if not headers or current_text not in headers:
-                self.cb_target_col.addItem(current_text)
-            self.cb_target_col.setCurrentText(current_text)
+            for i, header in enumerate(headers):
+                self.cb_target_col.addItem(header, i)
+                
+        # 還原當前選擇
+        if isinstance(current_val, int) and current_val >= 0:
+            idx = self.cb_target_col.findData(current_val)
+            if idx != -1:
+                self.cb_target_col.setCurrentIndex(idx)
+            else:
+                self.cb_target_col.setCurrentIndex(0)
+        else:
+            self.cb_target_col.setCurrentIndex(0)
+            
         self.cb_target_col.blockSignals(False)
 
         # 3. 動態繪製一排 QToolButton
@@ -248,11 +259,13 @@ class AiPromptWidget(QWidget):
         self.txt_prompt.setTextCursor(cursor)
         self.txt_prompt.setFocus()
 
-    def get_target_col(self) -> str:
+    def get_target_col(self) -> int:
         """
-        取得使用者選定或輸入的寫回目標欄位名稱。
+        取得使用者選定的寫回目標欄位索引 (0-based)。
+        若未選擇，則回傳 -1。
         """
-        return self.cb_target_col.currentText().strip()
+        val = self.cb_target_col.currentData()
+        return val if isinstance(val, int) else -1
 
     def get_prompt(self) -> str:
         """
@@ -260,14 +273,28 @@ class AiPromptWidget(QWidget):
         """
         return self.txt_prompt.toPlainText()
 
-    def set_target_col(self, col_name: str):
-        if not col_name:
+    def set_target_col(self, col_idx):
+        if col_idx is None:
+            self.cb_target_col.setCurrentIndex(0)
             return
-        # 平常還原設定時不比對正確性，若不在清單內，先暫存追加以防設定流失
-        idx = self.cb_target_col.findText(col_name)
-        if idx == -1:
-            self.cb_target_col.addItem(col_name)
-        self.cb_target_col.setCurrentText(col_name)
+            
+        if not isinstance(col_idx, int):
+            # 相容性轉換：試圖將字串轉換為整數 (舊設定或無效字串)
+            try:
+                col_idx = int(col_idx)
+            except (ValueError, TypeError):
+                col_idx = -1
+                
+        if col_idx < 0:
+            self.cb_target_col.setCurrentIndex(0) # 設為 "請選擇寫回欄位..."
+            return
+            
+        # 尋找該 0-based 欄位索引值是否存在於選單中
+        idx = self.cb_target_col.findData(col_idx)
+        if idx != -1:
+            self.cb_target_col.setCurrentIndex(idx)
+        else:
+            self.cb_target_col.setCurrentIndex(0)
 
     def set_prompt(self, text: str):
         self.txt_prompt.setPlainText(text)

@@ -546,7 +546,7 @@ class AiPanel(BasePanel):
         cfg = self.context.ai_panel_config
 
         # 2. 基本校驗
-        if not cfg.target_col:
+        if cfg.target_col is None or cfg.target_col < 0:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "參數錯誤", "請選擇輸出欄位！")
             return
@@ -568,13 +568,13 @@ class AiPanel(BasePanel):
         else:
             headers = [str(i + 1) for i in range(len(all_rows[0]))]
 
-        # 檢查 3.1: 輸出欄位正確性 (唯讀下拉選單中被選取的目標必須在當前 headers 清單中)
-        if cfg.target_col not in headers:
+        # 檢查 3.1: 輸出欄位正確性 (所選欄位索引必須小於當前 CSV 最大欄位數)
+        if cfg.target_col >= self.context.csv_data.num_cols:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(
                 self, 
                 "參數錯誤", 
-                f"輸出欄位 '{cfg.target_col}' 不存在於目前 CSV 檔案中，請重新選擇！"
+                f"輸出欄號 '{cfg.target_col + 1}' 不存在於目前 CSV 檔案中，請重新選擇！"
             )
             return
 
