@@ -27,15 +27,13 @@ class FilterWorker(QThread):
     filter_error = pyqtSignal(str)
 
     def __init__(self, all_rows, start_row, end_row, is_header, 
-                 src_col, tgt_col, filter_config, parent=None):
+                 filter_config, parent=None):
         super().__init__(parent)
         self.all_rows = all_rows
         self.start_row = start_row
         self.end_row = end_row
         self.is_header = is_header
         
-        self.src_col = src_col
-        self.tgt_col = tgt_col
         self.filter_config = filter_config
         
         self._is_cancelled = False
@@ -52,13 +50,18 @@ class FilterWorker(QThread):
     def cancel(self):
         self._is_cancelled = True
 
-    def check_row_match(self, row, compare_col, compare_method, compare_target, compare_value, regex_pattern):
+    def check_row_match(self, row, compare_col, compare_method, compare_target, compare_value, regex_pattern, range_start=None, range_end=None):
         # 決定比對範圍欄位索引集合
         if compare_col == "all":
             cols_to_check = list(range(len(row)))
         elif compare_col == "range":
-            start_c = max(0, self.src_col - 1)
-            end_c = min(len(row) - 1, self.tgt_col - 1)
+            start_c = range_start if range_start is not None else 0
+            end_c = range_end if range_end is not None else len(row) - 1
+            
+            # 防呆邊界
+            start_c = max(0, start_c)
+            end_c = min(len(row) - 1, end_c)
+            
             cols_to_check = list(range(start_c, end_c + 1))
         else:
             # 特定欄位 (整數)
@@ -352,7 +355,9 @@ class FilterWorker(QThread):
                     r_cfg.get("compare_method"),
                     r_cfg.get("compare_target"),
                     r_cfg.get("compare_value"),
-                    regex_patterns[j]
+                    regex_patterns[j],
+                    range_start=r_cfg.get("range_start"),
+                    range_end=r_cfg.get("range_end")
                 )
                 rule_results.append(match_res)
         

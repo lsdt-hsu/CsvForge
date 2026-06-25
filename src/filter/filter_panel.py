@@ -285,6 +285,15 @@ class FilterPanel(BasePanel):
                 QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：比對欄位「欄位{col+1}」在當前 CSV 中不存在。")
                 return
 
+            if col == "range":
+                range_start = cfg.get("range_start")
+                range_end = cfg.get("range_end")
+                start_val = range_start if range_start is not None else 0
+                end_val = range_end if range_end is not None else (self.num_cols - 1 if self.num_cols > 0 else 0)
+                if start_val > end_val:
+                    QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：欄位範圍「從欄位」不可大於「到欄位」。")
+                    return
+
             # 檢查比對目標欄位是否無法對應
             if method not in ("屬於", "不屬於") and isinstance(target, int) and (target >= self.num_cols or target < 0):
                 QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：比對目標「欄位{target+1}」在當前 CSV 中不存在。")
@@ -316,8 +325,8 @@ class FilterPanel(BasePanel):
             self.context,
             require_source_path=False,
             require_output_path=False,
-            require_source_col=True,
-            require_target_col=True,
+            require_source_col=False,
+            require_target_col=False,
         )
         if not is_valid:
             return
@@ -349,9 +358,6 @@ class FilterPanel(BasePanel):
         else:
             end_row_val = None
 
-        src_col = parsed["source_col"]
-        tgt_col = parsed["target_col"]
-
         is_header = self.context.is_first_row_header
 
         from filter.filter_worker import FilterWorker
@@ -360,8 +366,6 @@ class FilterPanel(BasePanel):
             start_row=start_row_val,
             end_row=end_row_val,
             is_header=is_header,
-            src_col=src_col,
-            tgt_col=tgt_col,
             filter_config=filter_config,
             parent=self.window()
         )

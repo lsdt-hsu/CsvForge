@@ -100,11 +100,44 @@ class RuleWidget(QWidget):
         self.cmb_compare_col = QComboBox()
         self.cmb_compare_col.addItem("不過濾", "none")
         self.cmb_compare_col.addItem("所有欄位", "all")
-        self.cmb_compare_col.addItem("來源-目標欄位", "range")
+        self.cmb_compare_col.addItem("欄位範圍", "range")
         self.cmb_compare_col.currentIndexChanged.connect(self.on_col_changed)
         row1.addWidget(lbl_col)
         row1.addWidget(self.cmb_compare_col)
         layout.addLayout(row1)
+
+        # 欄位範圍的「從欄位」與「到欄位」容器 (上下兩排)
+        self.range_cols_container = QWidget()
+        range_cols_layout = QVBoxLayout(self.range_cols_container)
+        range_cols_layout.setContentsMargins(20, 0, 0, 0)
+        range_cols_layout.setSpacing(6)
+        
+        # 第一排：從欄位
+        row_start = QHBoxLayout()
+        row_start.setContentsMargins(0, 0, 0, 0)
+        row_start.setSpacing(10)
+        lbl_range_start = QLabel("從欄位：")
+        lbl_range_start.setFixedWidth(55)
+        self.cmb_range_start = QComboBox()
+        self.cmb_range_start.currentIndexChanged.connect(self.parent_panel.on_rule_content_changed)
+        row_start.addWidget(lbl_range_start)
+        row_start.addWidget(self.cmb_range_start, stretch=1)
+        range_cols_layout.addLayout(row_start)
+        
+        # 第二排：到欄位
+        row_end = QHBoxLayout()
+        row_end.setContentsMargins(0, 0, 0, 0)
+        row_end.setSpacing(10)
+        lbl_range_end = QLabel("到欄位：")
+        lbl_range_end.setFixedWidth(55)
+        self.cmb_range_end = QComboBox()
+        self.cmb_range_end.currentIndexChanged.connect(self.parent_panel.on_rule_content_changed)
+        row_end.addWidget(lbl_range_end)
+        row_end.addWidget(self.cmb_range_end, stretch=1)
+        range_cols_layout.addLayout(row_end)
+        
+        layout.addWidget(self.range_cols_container)
+        self.range_cols_container.setVisible(False)
 
         # 2. 比對方式列
         row2 = QHBoxLayout()
@@ -161,17 +194,27 @@ class RuleWidget(QWidget):
     def update_columns(self, num_cols, headers=None):
         self.cmb_compare_col.blockSignals(True)
         self.cmb_compare_target.blockSignals(True)
+        self.cmb_range_start.blockSignals(True)
+        self.cmb_range_end.blockSignals(True)
         
         old_col = self.cmb_compare_col.currentData()
         old_target = self.cmb_compare_target.currentData()
+        old_start = self.cmb_range_start.currentData()
+        old_end = self.cmb_range_end.currentData()
 
         self.cmb_compare_col.clear()
         self.cmb_compare_col.addItem("不過濾", "none")
         self.cmb_compare_col.addItem("所有欄位", "all")
-        self.cmb_compare_col.addItem("來源-目標欄位", "range")
+        self.cmb_compare_col.addItem("欄位範圍", "range")
+        
+        self.cmb_range_start.clear()
+        self.cmb_range_end.clear()
+
         for i in range(num_cols):
             text = f"{i+1}. {headers[i]}" if headers and i < len(headers) else f"第 {i+1} 欄"
             self.cmb_compare_col.addItem(text, i)
+            self.cmb_range_start.addItem(text, i)
+            self.cmb_range_end.addItem(text, i)
 
         if isinstance(old_col, int) and (old_col >= num_cols or old_col < 0):
             self.cmb_compare_col.addItem(f"欄位{old_col+1}", old_col)
@@ -179,10 +222,20 @@ class RuleWidget(QWidget):
         idx = self.cmb_compare_col.findData(old_col)
         self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
 
+        # 回復 cmb_range_start 的舊值，預設為第一欄 (index 0)
+        idx_start = self.cmb_range_start.findData(old_start)
+        self.cmb_range_start.setCurrentIndex(idx_start if idx_start >= 0 else 0)
+
+        # 回復 cmb_range_end 的舊值，預設為最後一欄 (index num_cols - 1)
+        idx_end = self.cmb_range_end.findData(old_end)
+        self.cmb_range_end.setCurrentIndex(idx_end if idx_end >= 0 else (num_cols - 1 if num_cols > 0 else 0))
+
         self.update_target_options(num_cols, headers)
 
         self.cmb_compare_col.blockSignals(False)
         self.cmb_compare_target.blockSignals(False)
+        self.cmb_range_start.blockSignals(False)
+        self.cmb_range_end.blockSignals(False)
         self.update_belong_visibility()
 
     def update_target_options(self, num_cols, headers=None):
@@ -211,6 +264,13 @@ class RuleWidget(QWidget):
 
     def update_belong_visibility(self):
         col_type = self.cmb_compare_col.currentData()
+        
+        # 控制範圍容器的顯示
+        if col_type == "range":
+            self.range_cols_container.setVisible(True)
+        else:
+            self.range_cols_container.setVisible(False)
+
         if col_type is None or col_type == "none":
             self.cmb_compare_method.setEnabled(False)
             self.cmb_compare_target.setEnabled(False)
@@ -279,7 +339,9 @@ class RuleWidget(QWidget):
             "compare_method": self.cmb_compare_method.currentText(),
             "compare_target": self.cmb_compare_target.currentData(),
             "compare_value": val,
-            "belong_value_idx": self.cmb_belong_value.currentIndex()
+            "belong_value_idx": self.cmb_belong_value.currentIndex(),
+            "range_start": self.cmb_range_start.currentData(),
+            "range_end": self.cmb_range_end.currentData()
         }
 
     def set_config(self, cfg):
@@ -287,12 +349,16 @@ class RuleWidget(QWidget):
         self.cmb_compare_method.blockSignals(True)
         self.cmb_compare_target.blockSignals(True)
         self.cmb_belong_value.blockSignals(True)
+        self.cmb_range_start.blockSignals(True)
+        self.cmb_range_end.blockSignals(True)
 
         col = cfg.get("compare_col", "none")
         method = cfg.get("compare_method", "完全符合")
         target = cfg.get("compare_target", "manual")
         val = cfg.get("compare_value", "")
         b_idx = cfg.get("belong_value_idx", 0)
+        range_start = cfg.get("range_start")
+        range_end = cfg.get("range_end")
 
         idx = self.cmb_compare_col.findData(col)
         if idx < 0 and isinstance(col, int):
@@ -311,6 +377,27 @@ class RuleWidget(QWidget):
             idx = self.cmb_compare_target.findData(target)
         self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
 
+        # 回復 cmb_range_start 的選擇
+        if range_start is not None:
+            idx_start = self.cmb_range_start.findData(range_start)
+            if idx_start < 0 and isinstance(range_start, int):
+                self.cmb_range_start.addItem(f"欄位{range_start+1}", range_start)
+                idx_start = self.cmb_range_start.findData(range_start)
+            self.cmb_range_start.setCurrentIndex(idx_start if idx_start >= 0 else 0)
+        else:
+            self.cmb_range_start.setCurrentIndex(0)
+
+        # 回復 cmb_range_end 的選擇
+        if range_end is not None:
+            idx_end = self.cmb_range_end.findData(range_end)
+            if idx_end < 0 and isinstance(range_end, int):
+                self.cmb_range_end.addItem(f"欄位{range_end+1}", range_end)
+                idx_end = self.cmb_range_end.findData(range_end)
+            self.cmb_range_end.setCurrentIndex(idx_end if idx_end >= 0 else 0)
+        else:
+            num_cols = self.parent_panel.num_cols
+            self.cmb_range_end.setCurrentIndex(num_cols - 1 if num_cols > 0 else 0)
+
         self.update_belong_visibility()
 
         if method in ("屬於", "不屬於"):
@@ -322,3 +409,5 @@ class RuleWidget(QWidget):
         self.cmb_compare_method.blockSignals(False)
         self.cmb_compare_target.blockSignals(False)
         self.cmb_belong_value.blockSignals(False)
+        self.cmb_range_start.blockSignals(False)
+        self.cmb_range_end.blockSignals(False)
