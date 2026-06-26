@@ -36,22 +36,27 @@ class LoadedCSVData(QObject):
     def get_column_header(self, col: int) -> str:
         """
         即時取得第 col 欄的標頭（col 為 0-indexed 的欄位索引）。
-        如果 col >= self.num_cols，則一律回傳 "第 col+1 欄"。
 
-        [開發規範 - 一致性要求]：
+        傳回格式說明：
+        - 若 col 超過有效範圍，或未勾選「第一行為標題」，傳回「第 {col+1} 欄」。
+        - 若已勾選「第一行為標題」，傳回「{col+1}. {標題}」的格式（若標題為空則以「第 {col+1} 欄」代替標題）。
+
+        [開發規範 - 一致性要求 & 禁止變更]：
         此介面為所有面板取得單一欄位標題的標準介面。為了保持全域 UI 一致性，
-        各 Panel (如翻譯、過濾、編輯面板等) 在顯示欄位標題時，必須直接使用此
-        方法回傳的字串，嚴禁在各自 Panel 的程式碼中自行添加修飾性或裝飾性的
-        前綴/後綴 (如 "C1:" 或 "欄位 1" 等)。
+        各 Panel (如翻譯、過濾、編輯、AI 面板等) 在顯示或處理欄位標題時，必須直接使用此
+        方法回傳的字串，嚴禁在各自 Panel 的程式碼中自行添加或修改修飾性前綴/後綴，
+        亦禁止 AI 或 UI 元件任意變更此處定義的標準傳回格式。
         """
-        if col < 0:
+        if col < 0 or not self.all_rows or col >= len(self.all_rows[0]):
             return f"第 {col+1} 欄"
-            
-        if self.is_header and self.all_rows and col < len(self.all_rows[0]):
-            h = self.all_rows[0][col].strip()
-            return f"{col+1}. {h}" if h else f"{col+1}. 第 {col+1} 欄"
-            
-        return f"第 {col+1} 欄"
+
+        if not self.is_header:
+            return f"第 {col+1} 欄"
+
+        h = str(self.all_rows[0][col]).strip()
+        if not h:
+            h = f"第 {col+1} 欄"
+        return f"{col+1}. {h}"
 
     @property
     def headers(self) -> List[str]:

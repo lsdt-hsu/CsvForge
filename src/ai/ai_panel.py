@@ -598,10 +598,7 @@ class AiPanel(BasePanel):
             QMessageBox.warning(self, "資料錯誤", "CSV 資料尚未載入！")
             return
 
-        if is_hdr:
-            headers = [str(cell).strip() for cell in all_rows[0]]
-        else:
-            headers = [str(i + 1) for i in range(len(all_rows[0]))]
+        headers = self.context.csv_data.headers
 
         # 檢查 3.1: 輸出欄位正確性 (所選欄位索引必須小於當前 CSV 最大欄位數)
         if cfg.target_col >= self.context.csv_data.num_cols:
@@ -654,7 +651,8 @@ class AiPanel(BasePanel):
             local_server_url=cfg.local_server_url,
             local_model=cfg.local_model,
             num_ctx=cfg.advanced_num_ctx,
-            temperature=cfg.advanced_temperature
+            temperature=cfg.advanced_temperature,
+            headers=headers
         )
 
         # 連接完成與變更信號

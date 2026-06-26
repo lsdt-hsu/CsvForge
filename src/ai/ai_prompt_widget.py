@@ -144,7 +144,7 @@ class AiPromptWidget(QWidget):
         self.tags_scroll.setWidgetResizable(True)
         self.tags_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         self.tags_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.tags_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.tags_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.tags_scroll.setStyleSheet("background-color: transparent;")
 
         self.scroll_content = QWidget()
@@ -226,7 +226,7 @@ class AiPromptWidget(QWidget):
 
         for header in headers:
             btn = QToolButton()
-            btn.setText(f"[ {{{header}}} ]")
+            btn.setText(f"{{{header}}}")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QToolButton {

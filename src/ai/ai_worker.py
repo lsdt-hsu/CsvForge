@@ -28,7 +28,7 @@ class CSVAIWorker(QThread):
                  target_col_name, user_prompt, ai_service,
                  google_api_key="", google_model="",
                  local_server_url="", local_model="",
-                 num_ctx=4096, temperature=0.7):
+                 num_ctx=4096, temperature=0.7, headers=None):
         super().__init__()
         self.all_rows = all_rows
         self.visible_row_indices = visible_row_indices
@@ -42,6 +42,7 @@ class CSVAIWorker(QThread):
         self.local_model = local_model
         self.num_ctx = num_ctx
         self.temperature = temperature
+        self.headers = list(headers) if headers is not None else []
 
         self._is_cancelled = False
         self.prevent_sleep = True
@@ -68,33 +69,38 @@ class CSVAIWorker(QThread):
                 self.finished_with_error.emit("沒有可載入的 CSV 資料")
                 return
 
-            # 1. 根據首行是否為 Header，建立 headers 映射列表
-            if self.is_header:
-                headers = [str(cell).strip() for cell in self.all_rows[0]]
+            # 1. 取得標準 headers
+            if self.headers:
+                headers = self.headers
             else:
-                headers = [str(i + 1) for i in range(len(self.all_rows[0]))]
+                if self.is_header:
+                    headers = [str(cell).strip() for cell in self.all_rows[0]]
+                else:
+                    headers = [str(i + 1) for i in range(len(self.all_rows[0]))]
 
-            # 2. 判定或建立目標寫回欄位索引
+            # 2. 判定目標寫回欄位索引並驗證有效性
             try:
                 target_col_idx = int(self.target_col_name)
                 if target_col_idx < 0:
                     raise ValueError()
             except (ValueError, TypeError):
-                # 若發生異常，回退至最尾端新建一欄
-                target_col_idx = len(self.all_rows[0])
+                self.finished_with_error.emit("目標輸出欄號格式不正確")
+                return
 
+            # 若發現輸出欄位超出有效範圍，直接報錯
             if target_col_idx >= len(self.all_rows[0]):
-                # 目標欄位索引超出，啟動自動建立欄位邏輯
-                new_col_name = f"AI_Output_{target_col_idx + 1}" if self.is_header else f"第 {target_col_idx + 1} 欄"
-                self.log_emitted.emit("WARNING", f"目標欄號 {target_col_idx + 1} 不存在，將自動建立新欄位 '{new_col_name}'。")
-                if self.is_header:
-                    self.all_rows[0].append(new_col_name)
-                # 補齊所有資料列的空間
-                for r_idx in range(1 if self.is_header else 0, len(self.all_rows)):
-                    while len(self.all_rows[r_idx]) <= target_col_idx:
-                        self.all_rows[r_idx].append("")
-                # 表格結構變更，通知 UI 更新表頭與視圖
-                self.data_changed.emit()
+                self.finished_with_error.emit(f"目標輸出欄號 '{target_col_idx + 1}' 超出目前 CSV 的有效範圍，請先新增欄位或重新選擇！")
+                return
+
+            # 檢查 Prompt 內引用的欄位是否都存在於 headers 中
+            from ai.ai_utils import extract_referenced_fields
+            referenced_fields = extract_referenced_fields(self.user_prompt)
+            missing_fields = [f for f in referenced_fields if f not in headers]
+            if missing_fields:
+                self.finished_with_error.emit(
+                    f"自訂 Prompt 中引用了不存在於目前 CSV 的欄位：{', '.join(missing_fields)}"
+                )
+                return
 
             # 3. 取得需要執行的列索引清單，排列表頭行本身
             run_indices = [idx for idx in self.visible_row_indices]
