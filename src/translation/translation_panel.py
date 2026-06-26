@@ -30,8 +30,8 @@ class TranslatePanelConfig:
     batch_size: int = 18
     src_lang: str = "ja"
     tgt_lang: str = "zh-TW"
-    src_col: str = "1"
-    tgt_col: str = "2"
+    src_col: int = 0
+    tgt_col: int = 1
 
 
 class TranslationPanel(BasePanel):
@@ -66,7 +66,43 @@ class TranslationPanel(BasePanel):
                 self.reset_panel()
 
     def update_column_dropdowns(self, num_cols, headers):
-        pass
+        self.txt_src_col.blockSignals(True)
+        self.txt_tgt_col.blockSignals(True)
+        
+        self.txt_src_col.clear()
+        self.txt_tgt_col.clear()
+        
+        for i in range(num_cols):
+            if headers and i < len(headers) and headers[i]:
+                col_name = headers[i]
+            else:
+                col_name = f"第 {i+1} 欄"
+            self.txt_src_col.addItem(col_name, i)
+            self.txt_tgt_col.addItem(col_name, i)
+            
+        self.txt_src_col.blockSignals(False)
+        self.txt_tgt_col.blockSignals(False)
+        
+        self.restore_columns_from_config()
+
+    def restore_columns_from_config(self):
+        cfg = self.config
+        if self.txt_src_col.count() > 0:
+            idx = self.txt_src_col.findData(cfg.src_col)
+            if idx != -1:
+                self.txt_src_col.setCurrentIndex(idx)
+            else:
+                self.txt_src_col.setCurrentIndex(0)
+                
+        if self.txt_tgt_col.count() > 0:
+            idx = self.txt_tgt_col.findData(cfg.tgt_col)
+            if idx != -1:
+                self.txt_tgt_col.setCurrentIndex(idx)
+            else:
+                if self.txt_tgt_col.count() > 1:
+                    self.txt_tgt_col.setCurrentIndex(1)
+                else:
+                    self.txt_tgt_col.setCurrentIndex(0)
 
 
     def _on_translation_done(self):
@@ -103,12 +139,12 @@ class TranslationPanel(BasePanel):
         self.cb_tgt_lang.setCurrentIndex(1)
 
         lbl_src_col = QLabel("來源欄號：")
-        self.txt_src_col = QLineEdit("1")
-        self.txt_src_col.setValidator(QIntValidator(1, 9999))
+        self.txt_src_col = QComboBox()
+        self.txt_src_col.setStyleSheet(ThemeStyle.STYLE_COMBOBOX)
 
         lbl_tgt_col = QLabel("目標欄號：")
-        self.txt_tgt_col = QLineEdit("2")
-        self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
+        self.txt_tgt_col = QComboBox()
+        self.txt_tgt_col.setStyleSheet(ThemeStyle.STYLE_COMBOBOX)
 
         self.lbl_batch_title = QLabel("批次間隔：10 秒")
         self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
@@ -133,9 +169,9 @@ class TranslationPanel(BasePanel):
         grid.addWidget(lbl_tgt_lang, 1, 0)
         grid.addWidget(self.cb_tgt_lang, 1, 1)
         grid.addWidget(lbl_src_col, 2, 0)
-        grid.addWidget(self.txt_src_col, 2, 1, Qt.AlignmentFlag.AlignLeft)
+        grid.addWidget(self.txt_src_col, 2, 1)
         grid.addWidget(lbl_tgt_col, 3, 0)
-        grid.addWidget(self.txt_tgt_col, 3, 1, Qt.AlignmentFlag.AlignLeft)
+        grid.addWidget(self.txt_tgt_col, 3, 1)
         grid.addWidget(self.lbl_batch_title, 4, 0)
         grid.addWidget(self.slider_batch_interval, 4, 1)
         grid.addWidget(self.lbl_single_title, 5, 0)
@@ -154,8 +190,8 @@ class TranslationPanel(BasePanel):
         # 連接事件
         self.cb_src_lang.currentIndexChanged.connect(self._on_src_lang_changed)
         self.cb_tgt_lang.currentIndexChanged.connect(self._on_tgt_lang_changed)
-        self.txt_src_col.textChanged.connect(self._on_src_col_changed)
-        self.txt_tgt_col.textChanged.connect(self._on_tgt_col_changed)
+        self.txt_src_col.currentIndexChanged.connect(self._on_src_col_changed)
+        self.txt_tgt_col.currentIndexChanged.connect(self._on_tgt_col_changed)
 
     # ── Config 變動事件 Handler ───────────────────────────────────────────────
     # 各控件變動時直接寫入 TranslatePanelConfig，設定 dirty flag。
@@ -185,13 +221,17 @@ class TranslationPanel(BasePanel):
         self.config.tgt_lang = self.cb_tgt_lang.currentData()
         self.config.dirty = True
 
-    def _on_src_col_changed(self, val: str) -> None:
-        self.config.src_col = val
-        self.config.dirty = True
+    def _on_src_col_changed(self, idx: int) -> None:
+        val = self.txt_src_col.itemData(idx)
+        if val is not None:
+            self.config.src_col = val
+            self.config.dirty = True
 
-    def _on_tgt_col_changed(self, val: str) -> None:
-        self.config.tgt_col = val
-        self.config.dirty = True
+    def _on_tgt_col_changed(self, idx: int) -> None:
+        val = self.txt_tgt_col.itemData(idx)
+        if val is not None:
+            self.config.tgt_col = val
+            self.config.dirty = True
 
     # ── Interface 實作 ────────────────────────────────────────────────────────
     def get_package_name(self) -> str:
@@ -216,8 +256,8 @@ class TranslationPanel(BasePanel):
         cfg.batch_size = data.get("batch_size", 18)
         cfg.src_lang = data.get("src_lang", "ja")
         cfg.tgt_lang = data.get("tgt_lang", "zh-TW")
-        cfg.src_col = str(data.get("src_col", "1"))
-        cfg.tgt_col = str(data.get("tgt_col", "2"))
+        cfg.src_col = int(data.get("src_col", 0))
+        cfg.tgt_col = int(data.get("tgt_col", 1))
         self.restore_from_config()
 
     # ── Config 還原 ───────────────────────────────────────────────────────────
@@ -257,8 +297,7 @@ class TranslationPanel(BasePanel):
             if idx != -1:
                 self.cb_tgt_lang.setCurrentIndex(idx)
 
-            self.txt_src_col.setText(cfg.src_col)
-            self.txt_tgt_col.setText(cfg.tgt_col)
+            self.restore_columns_from_config()
         finally:
             self.slider_batch_interval.blockSignals(False)
             self.slider_single_interval.blockSignals(False)
@@ -289,11 +328,11 @@ class TranslationPanel(BasePanel):
     def get_batch_size(self):
         return self.slider_batch_size.value()
 
-    def get_src_col(self):
-        return self.txt_src_col.text().strip()
+    def get_src_col(self) -> int:
+        return self.txt_src_col.currentData() if self.txt_src_col.currentData() is not None else 0
 
-    def get_tgt_col(self):
-        return self.txt_tgt_col.text().strip()
+    def get_tgt_col(self) -> int:
+        return self.txt_tgt_col.currentData() if self.txt_tgt_col.currentData() is not None else 1
 
     def set_enabled(self, enabled):
         self.cb_src_lang.setEnabled(enabled)

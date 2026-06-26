@@ -37,6 +37,12 @@ class LoadedCSVData(QObject):
         """
         即時取得第 col 欄的標頭（col 為 0-indexed 的欄位索引）。
         如果 col >= self.num_cols，則一律回傳 "第 col+1 欄"。
+
+        [開發規範 - 一致性要求]：
+        此介面為所有面板取得單一欄位標題的標準介面。為了保持全域 UI 一致性，
+        各 Panel (如翻譯、過濾、編輯面板等) 在顯示欄位標題時，必須直接使用此
+        方法回傳的字串，嚴禁在各自 Panel 的程式碼中自行添加修飾性或裝飾性的
+        前綴/後綴 (如 "C1:" 或 "欄位 1" 等)。
         """
         if col < 0:
             return f"第 {col+1} 欄"
@@ -51,6 +57,12 @@ class LoadedCSVData(QObject):
     def headers(self) -> List[str]:
         """
         唯讀動態屬性，僅供需要列出所有標題的面板使用。
+
+        [開發規範 - 一致性要求]：
+        此屬性為所有面板列出全域欄位標題的標準介面。為了保持全域 UI 一致性，
+        各 Panel (如翻譯、過濾、編輯面板等) 在顯示欄位清單時，必須直接使用此
+        列表提供的字串，嚴禁在各自 Panel 的程式碼中自行添加修飾性或裝飾性的
+        前綴/後綴 (如 "C1:" 或 "欄位 1" 等)。
         """
         return [self.get_column_header(i) for i in range(self.num_cols)]
 

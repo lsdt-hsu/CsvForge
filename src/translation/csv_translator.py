@@ -37,8 +37,8 @@ class CSVTranslator(QObject):
         worker_instance = CSVTranslatorWorker(
             all_rows=all_rows,
             visible_row_indices=visible_row_indices,
-            source_col_idx=parsed["source_col"] - 1,
-            target_col_idx=parsed["target_col"] - 1,
+            source_col_idx=parsed["source_col"],
+            target_col_idx=parsed["target_col"],
             source_lang=src_lang,
             target_lang=tgt_lang,
             batch_interval=batch_interval,
