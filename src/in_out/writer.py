@@ -3,7 +3,7 @@ import csv
 import time
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
-from csv_worker import BaseCSVWorker
+from base.csv_worker import BaseCSVWorker
 from utils import ThrottledProgress
 
 def save_csv_file(out_path: str, all_rows: list, delimiter: str) -> None:

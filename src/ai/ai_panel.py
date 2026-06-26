@@ -6,7 +6,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIntValidator, QDoubleValidator
 
-from base_panel import BasePanel
+from dataclasses import dataclass
+from base.base_panel import BasePanel
+from base.theme import ThemeStyle
 from ai.ai_prompt_widget import AiPromptWidget
 from ai.ai_worker import CSVAIWorker
 from ai.ai_client import check_ollama_models
@@ -31,26 +33,33 @@ class ConnectionTester(QThread):
             self.failed.emit(str(e))
 
 
+@dataclass
+class AiPanelConfig:
+    dirty: bool = False
+    ai_service: str = "Google AI"
+    google_api_key: str = ""
+    google_model: str = "gemini-1.5-flash"
+    local_backend: str = "Ollama"
+    local_server_url: str = "http://localhost:11434"
+    local_model: str = ""
+    advanced_num_ctx: int = 4096
+    advanced_temperature: float = 0.7
+    target_col: str = ""
+    prompt_template: str = ""
+
+
 class AiPanel(BasePanel):
     """
     AiPanel — AI 處理面板。
     
     負責提供 UI 選項、連線測試交互、管理 VRAM 進階保護設定，
     並於啟動處理時建立 CSVAIWorker 背景線程進行運算。
-
-    設計決策（Config 存取方式）：
-      本面板採用「直接操作 Config 物件」的方式（資料相依性）。
-      當任何 UI 控制項變更時，會透過 _on_field_changed 立即呼叫 save_to_config() 
-      更新記憶體中的 Config 物件，並設定 dirty 旗標。
-      主程式（MainWindow / SettingsMixin）會控制何時呼叫 SettingsManager.save() 寫入 settings.json。
-      這樣設計可確保在任何時刻（如載入新 CSV 等呼叫 restore_from_config 時）記憶體中的 Config 都是最新狀態，
-      以避免使用者修改的 UI 設定因還原被舊值覆蓋。
     """
-    request_silent_save = pyqtSignal()
 
     def __init__(self, parent=None, context=None):
         # require_data_loading=True 代表必須在載入 CSV 後才展示控制項
         super().__init__(parent, title_text="AI 批次處理", require_data_loading=True, context=context)
+        self.config = AiPanelConfig()
         self.worker = None
         self.tester = None
         
@@ -379,12 +388,43 @@ class AiPanel(BasePanel):
             self.lbl_conn_status.setText(f"失敗: {msg}")
             self.lbl_conn_status.setStyleSheet("color: #f7768e; font-size: 11px;")
 
+    # ── Interface 實作 ────────────────────────────────────────────────────────
+    def get_package_name(self) -> str:
+        return "ai_panel"
+
+    def serialize_config(self) -> dict:
+        cfg = self.config
+        return {
+            "ai_service": cfg.ai_service,
+            "google_api_key": cfg.google_api_key,
+            "google_model": cfg.google_model,
+            "local_backend": cfg.local_backend,
+            "local_server_url": cfg.local_server_url,
+            "local_model": cfg.local_model,
+            "advanced_num_ctx": cfg.advanced_num_ctx,
+            "advanced_temperature": cfg.advanced_temperature,
+            "target_col": cfg.target_col,
+            "prompt_template": cfg.prompt_template,
+        }
+
+    def deserialize_config(self, data: dict) -> None:
+        cfg = self.config
+        cfg.ai_service = data.get("ai_service", "Google AI")
+        cfg.google_api_key = data.get("google_api_key", "")
+        cfg.google_model = data.get("google_model", "gemini-1.5-flash")
+        cfg.local_backend = data.get("local_backend", "Ollama")
+        cfg.local_server_url = data.get("local_server_url", "http://localhost:11434")
+        cfg.local_model = data.get("local_model", "")
+        cfg.advanced_num_ctx = data.get("advanced_num_ctx", 4096)
+        cfg.advanced_temperature = data.get("advanced_temperature", 0.7)
+        cfg.target_col = data.get("target_col", "")
+        cfg.prompt_template = data.get("prompt_template", "")
+        self.restore_from_config()
+
     # ── Config 管理 ───────────────────────────────────────────────────────────
 
     def _mark_dirty(self):
-        if self.context:
-            cfg = self.context.ai_panel_config
-            cfg.dirty = True
+        self.config.dirty = True
 
     def _on_field_changed(self):
         """
@@ -401,12 +441,9 @@ class AiPanel(BasePanel):
 
     def restore_from_config(self):
         """
-        從 AppContext 的 AiPanelConfig 還原元件設定。
+        從自有的 AiPanelConfig 還原元件設定。
         """
-        if not self.context:
-            return
-        
-        cfg = self.context.ai_panel_config
+        cfg = self.config
         
         # 阻擋所有子控制項的變更訊號，防止在還原過程中因觸發值變更而執行 _on_field_changed()
         # 進而導致以未還原完成的 UI 狀態覆寫記憶體 Config
@@ -469,11 +506,9 @@ class AiPanel(BasePanel):
 
     def save_to_config(self):
         """
-        將目前 UI 設定存回 AppContext 暫存，等待寫入 settings.json。
+        將目前 UI 設定存回自有的 AiPanelConfig 暫存。
         """
-        if not self.context:
-            return
-        cfg = self.context.ai_panel_config
+        cfg = self.config
         
         cfg.ai_service = self.cb_service.currentText()
         cfg.google_api_key = self.txt_api_key.text()
@@ -543,7 +578,7 @@ class AiPanel(BasePanel):
     def start_ai_task(self):
         # 1. 儲存設定至 config 以取得最新欄位
         self.save_to_config()
-        cfg = self.context.ai_panel_config
+        cfg = self.config
 
         # 2. 基本校驗
         if cfg.target_col is None or cfg.target_col < 0:
@@ -634,13 +669,13 @@ class AiPanel(BasePanel):
     def cancel_task(self):
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
-            style_disabled = "background-color: #24283b; color: #565f89;"
+            style_disabled = ThemeStyle.STYLE_BUTTON_DISABLED
             self.btn_start.setText("正在停止...")
             self.btn_start.setEnabled(False)
             self.btn_start.setStyleSheet(style_disabled)
 
     def _on_task_started(self):
-        style_critical = "background-color: #f7768e; color: #1a1b26;"
+        style_critical = ThemeStyle.STYLE_BUTTON_CRITICAL
         self.btn_start.setText("停止 AI 處理")
         self.btn_start.setEnabled(True)
         self.btn_start.setStyleSheet(style_critical)

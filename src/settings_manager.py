@@ -148,8 +148,7 @@ class AiPanelConfig:
 
 
 # ── 固定的序列化鍵值順序 ──────────────────────────────────────────────────────
-# 保存順序：window → main → side_panel → io_panel → data_editor_panel → status_panel
-#           → translate_panel → filter_panel → ai_panel
+# 只保留主程式本身的 Config
 _CONFIG_KEYS_ORDER = [
     "window",
     "main",
@@ -157,9 +156,6 @@ _CONFIG_KEYS_ORDER = [
     "io_panel",
     "data_editor_panel",
     "status_panel",
-    "translate_panel",
-    "filter_panel",
-    "ai_panel",
 ]
 
 # 每個 Key 對應的 Config 類別與 JSON 區段 Key 的映射
@@ -170,9 +166,6 @@ _CONFIG_CLASSES = {
     "io_panel":          IoPanelConfig,
     "data_editor_panel": DataEditorConfig,
     "status_panel":      StatusPanelConfig,
-    "translate_panel":   TranslatePanelConfig,
-    "filter_panel":      FilterPanelConfig,
-    "ai_panel":          AiPanelConfig,
 }
 
 
@@ -215,7 +208,6 @@ class SettingsManager:
         """
         讀取 settings.json，建立並回傳 Config 物件字典。
         若檔案不存在或解析失敗，回傳所有欄位為預設值的 Config 物件。
-        所有 Config 的 dirty 初始值為 False。
         """
         raw: dict = {}
         if os.path.exists(filepath):
@@ -226,36 +218,61 @@ class SettingsManager:
                 raw = {}
 
         configs = {}
+        # 1. 載入主程式核心 configs
         for key, cls in _CONFIG_CLASSES.items():
             section = raw.get(key, {})
             configs[key] = _from_dict(cls, section) if section else cls()
+
+        # 2. 將其他非 core 區段以 raw dict 形式保留並傳出
+        for key, val in raw.items():
+            if key not in _CONFIG_CLASSES:
+                configs[key] = val
 
         return configs
 
     @staticmethod
     def save(configs: dict, filepath: str) -> bool:
         """
-        檢查所有 Config 的 dirty flag。
-        若全部 dirty == False，忽略本次存檔請求，回傳 False。
-        若任一 dirty == True，序列化「所有」Config 物件（保持設定檔完整性），
-        按固定順序寫入 settings.json，存檔後清除所有 dirty flag，回傳 True。
+        比對當前與舊有設定檔內容，若有變化則序列化並寫入 settings.json，
+        存檔後清除所有 core config 的 dirty flag。
         """
-        if not any(configs[k].dirty for k in _CONFIG_KEYS_ORDER if k in configs):
-            return False
+        # 讀取現有 JSON 資料進行比對
+        old_data = {}
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    old_data = json.load(f)
+            except Exception:
+                old_data = {}
 
-        data = {}
+        # 準備即將寫入的資料
+        new_data = {}
+        
+        # 寫入 core configs
         for key in _CONFIG_KEYS_ORDER:
             if key in configs:
-                data[key] = _to_dict(configs[key])
+                new_data[key] = _to_dict(configs[key])
+                
+        # 寫入 non-core configs (功能 package 的 configs，格式為 dict)
+        for key, val in configs.items():
+            if key not in _CONFIG_CLASSES:
+                new_data[key] = val
 
+        # 若內容無變化，忽略本次存檔
+        if new_data == old_data:
+            return False
+
+        # 有變化，寫入檔案
         try:
             with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=4, ensure_ascii=False)
+                json.dump(new_data, f, indent=4, ensure_ascii=False)
         except Exception:
             return False
 
-        # 存檔成功後，清除所有 dirty flag
+        # 存檔成功後，清除 core configs 的 dirty flag
         for cfg in configs.values():
-            cfg.dirty = False
+            if hasattr(cfg, "dirty"):
+                cfg.dirty = False
 
         return True
+

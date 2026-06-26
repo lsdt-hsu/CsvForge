@@ -52,6 +52,15 @@ class SettingsMixin:
             self.left_panel.apply_config(self.context.side_panel_config, self.context.main_config)
             self.status_panel.apply_config(self.context.status_panel_config)
             self.edit_content_panel.restore_from_config()
+            
+            # 還原各個功能 Package 的設定
+            for name, panel in self.left_panel._panels.items():
+                pkg_name = panel.get_package_name()
+                if pkg_name in self._configs:
+                    try:
+                        panel.deserialize_config(self._configs[pkg_name])
+                    except Exception:
+                        pass
         except Exception:
             pass  # 設定還原失敗時靜默略過，避免影響程式啟動
 
@@ -68,12 +77,21 @@ class SettingsMixin:
         2. 關閉程式 — ui.py closeEvent()
 
         【忽略機制】
-        若所有 Config 的 dirty == False，SettingsManager.save() 將直接回傳，不寫入檔案。
+        若所有 Config 無任何變化，SettingsManager.save() 將直接回傳，不寫入檔案。
         """
         self._update_window_config()
         self.left_panel.update_config(self.context.side_panel_config, self.context.main_config)
         self.io_panel.update_config(self.context.io_panel_config)
         self.status_panel.update_config(self.context.status_panel_config, self.right_splitter.sizes())
+        
+        # 收集各個功能 Package 的最新設定
+        for name, panel in self.left_panel._panels.items():
+            pkg_name = panel.get_package_name()
+            try:
+                self._configs[pkg_name] = panel.serialize_config()
+            except Exception:
+                pass
+                
         SettingsManager.save(self._configs, self.settings_path)
 
     def _update_window_config(self: "MainWindow") -> None:

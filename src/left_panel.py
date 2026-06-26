@@ -10,6 +10,10 @@ from ui_constants import (
     ACTIVITY_BAR_WIDTH,
 )
 from settings_manager import SidePanelConfig, MainConfig
+from translation import PanelClass as TranslationPanel
+from ai import PanelClass as AiPanel
+from edit import PanelClass as EditPanel
+from filter import PanelClass as FilterPanel
 
 
 class LeftPanel(QFrame):
@@ -139,6 +143,12 @@ class LeftPanel(QFrame):
         left_layout.addWidget(self.sidebar)
 
         self._panels = {}
+        
+        # 實例化各個 Package 的 Panel 並註冊 (側面板按鈕對應關係)
+        self.add_panel("translate", TranslationPanel(context=self.context))
+        self.add_panel("ai", AiPanel(context=self.context))
+        self.add_panel("edit", EditPanel(context=self.context))
+        self.add_panel("filter", FilterPanel(context=self.context))
 
     def add_panel(self, name: str, panel: QWidget) -> None:
         self._panels[name] = panel
@@ -223,14 +233,11 @@ class LeftPanel(QFrame):
         side_cfg.dirty = True
 
         current_widget = self.sidebar_stacked.currentWidget()
-        if current_widget == self._panels.get("translate"):
-            active_tab = "translate"
-        elif current_widget == self._panels.get("ai"):
-            active_tab = "ai"
-        elif current_widget == self._panels.get("filter"):
-            active_tab = "filter"
-        else:
-            active_tab = "edit"
+        active_tab = "translate"
+        for name, panel in self._panels.items():
+            if current_widget == panel:
+                active_tab = name
+                break
         main_cfg.active_tab = active_tab
         main_cfg.dirty = True
 

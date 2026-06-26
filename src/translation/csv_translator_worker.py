@@ -2,7 +2,7 @@ import concurrent.futures
 import re
 from PyQt6.QtCore import QThread, pyqtSignal
 from deep_translator import GoogleTranslator
-from network import get_http_error_info
+from utils.network import get_http_error_info
 
 # --- CSV 翻譯執行緒工人類 ---
 class CSVTranslatorWorker(QThread):

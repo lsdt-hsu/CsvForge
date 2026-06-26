@@ -13,18 +13,33 @@ translation_panel.py — 翻譯面板
   欄位變更時編輯器能直接提示錯誤位置。
 """
 
+from dataclasses import dataclass
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator
-from base_panel import BasePanel
-from ui_constants import INPUT_COL_MAX_WIDTH
+from base.base_panel import BasePanel
+from base.theme import ThemeStyle
+
+
+
+@dataclass
+class TranslatePanelConfig:
+    dirty: bool = False
+    batch_interval: int = 10
+    single_interval: float = 1.0
+    batch_size: int = 18
+    src_lang: str = "ja"
+    tgt_lang: str = "zh-TW"
+    src_col: str = "1"
+    tgt_col: str = "2"
 
 
 class TranslationPanel(BasePanel):
-    request_silent_save = pyqtSignal()
+
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="翻譯", require_data_loading=True, context=context)
+        self.config = TranslatePanelConfig()
         
         from translation.csv_translator import CSVTranslator
         self.translator = CSVTranslator(parent=self, context=context)
@@ -90,12 +105,10 @@ class TranslationPanel(BasePanel):
         lbl_src_col = QLabel("來源欄號：")
         self.txt_src_col = QLineEdit("1")
         self.txt_src_col.setValidator(QIntValidator(1, 9999))
-        self.txt_src_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
 
         lbl_tgt_col = QLabel("目標欄號：")
         self.txt_tgt_col = QLineEdit("2")
         self.txt_tgt_col.setValidator(QIntValidator(1, 9999))
-        self.txt_tgt_col.setMaximumWidth(INPUT_COL_MAX_WIDTH)
 
         self.lbl_batch_title = QLabel("批次間隔：10 秒")
         self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
@@ -150,53 +163,71 @@ class TranslationPanel(BasePanel):
 
     def _on_batch_interval_changed(self, val: int) -> None:
         self.lbl_batch_title.setText(f"批次間隔：{val} 秒")
-        if self.context:
-            self.context.translate_panel_config.batch_interval = val
-            self.context.translate_panel_config.dirty = True
+        self.config.batch_interval = val
+        self.config.dirty = True
 
     def _on_single_interval_changed(self, val: int) -> None:
         seconds = val * 0.5
         self.lbl_single_title.setText(f"單筆間隔：{seconds:.1f} 秒")
-        if self.context:
-            self.context.translate_panel_config.single_interval = seconds
-            self.context.translate_panel_config.dirty = True
+        self.config.single_interval = seconds
+        self.config.dirty = True
 
     def _on_batch_size_changed(self, val: int) -> None:
         self.lbl_batch_size_title.setText(f"批次筆數：{val} 筆")
-        if self.context:
-            self.context.translate_panel_config.batch_size = val
-            self.context.translate_panel_config.dirty = True
+        self.config.batch_size = val
+        self.config.dirty = True
 
     def _on_src_lang_changed(self, idx: int) -> None:
-        if self.context:
-            self.context.translate_panel_config.src_lang = self.cb_src_lang.currentData()
-            self.context.translate_panel_config.dirty = True
+        self.config.src_lang = self.cb_src_lang.currentData()
+        self.config.dirty = True
 
     def _on_tgt_lang_changed(self, idx: int) -> None:
-        if self.context:
-            self.context.translate_panel_config.tgt_lang = self.cb_tgt_lang.currentData()
-            self.context.translate_panel_config.dirty = True
+        self.config.tgt_lang = self.cb_tgt_lang.currentData()
+        self.config.dirty = True
 
     def _on_src_col_changed(self, val: str) -> None:
-        if self.context:
-            self.context.translate_panel_config.src_col = val
-            self.context.translate_panel_config.dirty = True
+        self.config.src_col = val
+        self.config.dirty = True
 
     def _on_tgt_col_changed(self, val: str) -> None:
-        if self.context:
-            self.context.translate_panel_config.tgt_col = val
-            self.context.translate_panel_config.dirty = True
+        self.config.tgt_col = val
+        self.config.dirty = True
+
+    # ── Interface 實作 ────────────────────────────────────────────────────────
+    def get_package_name(self) -> str:
+        return "translate_panel"
+
+    def serialize_config(self) -> dict:
+        cfg = self.config
+        return {
+            "batch_interval": cfg.batch_interval,
+            "single_interval": cfg.single_interval,
+            "batch_size": cfg.batch_size,
+            "src_lang": cfg.src_lang,
+            "tgt_lang": cfg.tgt_lang,
+            "src_col": cfg.src_col,
+            "tgt_col": cfg.tgt_col,
+        }
+
+    def deserialize_config(self, data: dict) -> None:
+        cfg = self.config
+        cfg.batch_interval = data.get("batch_interval", 10)
+        cfg.single_interval = data.get("single_interval", 1.0)
+        cfg.batch_size = data.get("batch_size", 18)
+        cfg.src_lang = data.get("src_lang", "ja")
+        cfg.tgt_lang = data.get("tgt_lang", "zh-TW")
+        cfg.src_col = str(data.get("src_col", "1"))
+        cfg.tgt_col = str(data.get("tgt_col", "2"))
+        self.restore_from_config()
 
     # ── Config 還原 ───────────────────────────────────────────────────────────
 
     def restore_from_config(self) -> None:
         """
-        從 AppContext 的 TranslatePanelConfig 還原面板設定。
+        從自帶的 TranslatePanelConfig 還原面板設定。
         在 show_controls() 首次被呼叫後執行（即首次載入 CSV 後），確保只還原一次。
         """
-        if not self.context:
-            return
-        cfg = self.context.translate_panel_config
+        cfg = self.config
 
         # blockSignals 避免還原過程觸發 _on_xxx_changed 誤設 dirty flag
         self.slider_batch_interval.blockSignals(True)
@@ -290,7 +321,7 @@ class TranslationPanel(BasePanel):
             )
 
     def on_translator_started(self):
-        style_critical = "background-color: #f7768e; color: #1a1b26;"
+        style_critical = ThemeStyle.STYLE_BUTTON_CRITICAL
         self.btn_start.setText("停止翻譯")
         self.btn_start.setEnabled(True)
         self.btn_start.setStyleSheet(style_critical)
@@ -303,7 +334,7 @@ class TranslationPanel(BasePanel):
         self.set_enabled(True)
 
     def on_translator_cancelled(self):
-        style_disabled = "background-color: #24283b; color: #565f89;"
+        style_disabled = ThemeStyle.STYLE_BUTTON_DISABLED
         self.btn_start.setText("正在停止...")
         self.btn_start.setEnabled(False)
         self.btn_start.setStyleSheet(style_disabled)

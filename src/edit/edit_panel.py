@@ -1,4 +1,5 @@
-from base_panel import BasePanel
+from base.base_panel import BasePanel
+from base.theme import ThemeStyle
 from PyQt6.QtWidgets import QLabel
 from PyQt6.QtCore import Qt
 
@@ -10,10 +11,19 @@ class EditPanel(BasePanel):
     def init_ui(self):
         self.lbl_placeholder = QLabel("編輯功能\n(日後添加)")
         self.lbl_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_placeholder.setStyleSheet("color: #565f89; font-style: italic; font-size: 14px; margin-top: 20px;")
+        self.lbl_placeholder.setStyleSheet(f"color: {ThemeStyle.COLOR_TEXT_MUTED}; font-style: italic; font-size: 14px; margin-top: 20px;")
         
         self.controls_layout.addWidget(self.lbl_placeholder)
         self.controls_layout.addStretch()
+
+    def get_package_name(self) -> str:
+        return "edit_panel"
+
+    def serialize_config(self) -> dict:
+        return {}
+
+    def deserialize_config(self, data: dict) -> None:
+        pass
 
     def set_enabled(self, enabled):
         pass

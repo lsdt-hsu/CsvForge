@@ -11,7 +11,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon, QIntValidator
-from base_panel import BasePanel
+from dataclasses import dataclass, field
+from base.base_panel import BasePanel
+from base.theme import ThemeStyle
 
 from filter import logic_tree
 from filter.rule_widget import RuleWidget, CircularToggleButton
@@ -23,11 +25,22 @@ class CustomTextEdit(QTextEdit):
         super().focusOutEvent(event)
         self.focus_out_signal.emit()
 
+
+@dataclass
+class FilterPanelConfig:
+    dirty: bool = False
+    rules: list = field(default_factory=list)
+    logic_tree: dict = field(default_factory=dict)
+    expr_text: str = "#1"
+    start_row: str = "1"
+    end_row: str = ""
+
 class FilterPanel(BasePanel):
     request_filter = pyqtSignal(dict)
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="過濾", require_data_loading=True, context=context)
+        self.config = FilterPanelConfig()
         self.num_cols = 0
         self.headers = None
 
@@ -142,11 +155,10 @@ class FilterPanel(BasePanel):
         self.reset_panel()
 
     def _on_row_range_changed(self):
-        if self.context:
-            cfg = self.context.filter_panel_config
-            cfg.start_row = self.txt_filter_start_row.text().strip()
-            cfg.end_row = self.txt_filter_end_row.text().strip()
-            cfg.dirty = True
+        cfg = self.config
+        cfg.start_row = self.txt_filter_start_row.text().strip()
+        cfg.end_row = self.txt_filter_end_row.text().strip()
+        cfg.dirty = True
 
     def clear_layout(self, layout):
         while layout.count():
@@ -265,7 +277,7 @@ class FilterPanel(BasePanel):
             self.expression_is_valid = True
             self._sync_rules_to_config()
         except ValueError as e:
-            self.txt_expression.setStyleSheet("border: 2px solid #f7768e; border-radius: 4px;")
+            self.txt_expression.setStyleSheet(f"border: 2px solid {ThemeStyle.COLOR_TEXT_CRITICAL}; border-radius: 4px;")
             self.expression_is_valid = False
 
     def update_column_dropdowns(self, num_cols, headers=None):
@@ -400,10 +412,31 @@ class FilterPanel(BasePanel):
         for r in self.rules:
             r.setEnabled(enabled)
 
+    # ── Interface 實作 ────────────────────────────────────────────────────────
+    def get_package_name(self) -> str:
+        return "filter_panel"
+
+    def serialize_config(self) -> dict:
+        cfg = self.config
+        return {
+            "rules": cfg.rules,
+            "logic_tree": cfg.logic_tree,
+            "expr_text": cfg.expr_text,
+            "start_row": cfg.start_row,
+            "end_row": cfg.end_row,
+        }
+
+    def deserialize_config(self, data: dict) -> None:
+        cfg = self.config
+        cfg.rules = data.get("rules", [])
+        cfg.logic_tree = data.get("logic_tree", {})
+        cfg.expr_text = data.get("expr_text", "#1")
+        cfg.start_row = data.get("start_row", "1")
+        cfg.end_row = data.get("end_row", "")
+        self.restore_from_config()
+
     def _sync_rules_to_config(self) -> None:
-        if not self.context:
-            return
-        cfg = self.context.filter_panel_config
+        cfg = self.config
         cfg.rules = [r.get_config() for r in self.rules]
         cfg.logic_tree = logic_tree.serialize_tree(self.logic_tree)
         cfg.expr_text = self.txt_expression.toPlainText()
@@ -452,9 +485,7 @@ class FilterPanel(BasePanel):
         self.btn_add_rule.setVisible(len(self.rules) < 5)
 
     def restore_from_config(self) -> None:
-        if not self.context:
-            return
-        cfg = self.context.filter_panel_config
+        cfg = self.config
         config_dict = {
             "rules": cfg.rules,
             "logic_tree": cfg.logic_tree,

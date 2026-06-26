@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSize, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QIcon
-from base_panel import BasePanel
+from base.base_panel import BasePanel
 from common_data.csv_data import LoadedCSVData
 
 

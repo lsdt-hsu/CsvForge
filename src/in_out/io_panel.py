@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QIntValidator, QIcon
 
-from base_panel import BasePanel
+from base.base_panel import BasePanel
 from ui_constants import (
     INPUT_COL_MAX_WIDTH,
     START_BUTTON_MIN_WIDTH,

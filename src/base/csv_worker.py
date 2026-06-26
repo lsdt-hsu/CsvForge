@@ -55,4 +55,3 @@ class BaseCSVWorker(QThread):
 
     def get_error_message(self, err_msg):
         return "出錯", f"工作執行時發生錯誤：\n{err_msg}"
-

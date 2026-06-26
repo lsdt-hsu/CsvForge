@@ -2,7 +2,7 @@ import os
 import csv
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
-from csv_worker import BaseCSVWorker
+from base.csv_worker import BaseCSVWorker
 from common_data.csv_data import LoadedCSVData
 from utils import ThrottledProgress
 

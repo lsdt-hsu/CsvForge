@@ -1,11 +1,11 @@
+# src/base/base_panel.py
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal
 from common_data.csv_data import LoadedCSVData
 
 from settings_manager import (
     WindowConfig, MainConfig, IoPanelConfig, DataEditorConfig,
-    StatusPanelConfig, TranslatePanelConfig, FilterPanelConfig,
-    SidePanelConfig, AiPanelConfig,
+    StatusPanelConfig, SidePanelConfig
 )
 
 
@@ -52,18 +52,6 @@ class AppContext:
     def status_panel_config(self) -> StatusPanelConfig:
         return self._win._configs["status_panel"]
 
-    @property
-    def translate_panel_config(self) -> TranslatePanelConfig:
-        return self._win._configs["translate_panel"]
-
-    @property
-    def filter_panel_config(self) -> FilterPanelConfig:
-        return self._win._configs["filter_panel"]
-
-    @property
-    def ai_panel_config(self) -> AiPanelConfig:
-        return self._win._configs["ai_panel"]
-
     # ── 執行時動態狀態存取（解耦資料編輯面板，統一由 LoadedCSVData Model 提供）──
 
     @property
@@ -81,7 +69,6 @@ class AppContext:
     def is_modified(self) -> bool:
         return self.csv_data.is_modified
 
-
     @property
     def is_ui_locked(self) -> bool:
         return getattr(self._win, "_ui_locked", False)
@@ -96,15 +83,15 @@ class AppContext:
 
 
 class BasePanel(QFrame):
+    # ── 統一 Interface 通訊信號 ──
     request_lock_ui = pyqtSignal(bool)
     progress_updated = pyqtSignal(int, int)
     status_updated = pyqtSignal(str)
     log_emitted = pyqtSignal(str, str)
     request_start_worker = pyqtSignal(object)
+    request_silent_save = pyqtSignal()  # 統一的靜默存檔請求
 
     def __init__(self, parent=None, title_text="", require_data_loading=True, context: AppContext = None):
-
-
         super().__init__(parent)
         self.context = context
         self.setObjectName("grpFrame")
@@ -146,6 +133,20 @@ class BasePanel(QFrame):
         else:
             self.controls_layout = self.main_layout
 
+    # ── 所有 Package 必須實作的 Interface 方法 ──
+    def get_package_name(self) -> str:
+        """回傳此 Package 在設定檔中對應的識別名稱 (例如 'translate')"""
+        raise NotImplementedError("Subclasses must implement get_package_name")
+
+    def serialize_config(self) -> dict:
+        """將此面板當前設定狀態序列化為 dict"""
+        raise NotImplementedError("Subclasses must implement serialize_config")
+
+    def deserialize_config(self, data: dict) -> None:
+        """接受設定檔資料 dict，並套用/還原面板設定"""
+        raise NotImplementedError("Subclasses must implement deserialize_config")
+
+    # ── 共通輔助方法 ──
     def show_controls(self):
         if self.require_data_loading:
             self.lbl_no_data.setVisible(False)

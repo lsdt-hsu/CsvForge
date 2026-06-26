@@ -10,10 +10,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QIntValidator, QIcon
 
-from translation.translation_panel import TranslationPanel
-from edit.edit_panel import EditPanel
-from filter.filter_panel import FilterPanel
-from ai.ai_panel import AiPanel
 from settings_manager import SettingsManager
 from data_editor.data_editor_panel import DataEditorPanel
 from ui_constants import (
@@ -85,7 +81,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.csv_data = LoadedCSVData()
 
         # 建立 AppContext (必須先建立，因為面板需要使用)
-        from base_panel import AppContext
+        from base.base_panel import AppContext
         self.context = AppContext(self)
 
         main_widget = QWidget()
@@ -97,6 +93,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         main_layout.setSpacing(15)
 
         # 建立獨立面板
+        # 實例化包含所有子面板的功能 Package 的側面板
         self.left_panel = LeftPanel(parent=self, context=self.context)
         self.io_panel = IoPanel(parent=self, context=self.context)
         self.status_panel = StatusPanel(parent=self, context=self.context)
@@ -107,42 +104,20 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.io_panel.writer.request_start_worker.connect(self.on_request_start_worker)
         self.io_panel.writer.save_completed.connect(self.on_csv_save_completed)
 
-        # 建立子面板並註冊到 LeftPanel
-        self.translation_panel = TranslationPanel(context=self.context)
-        self.translation_panel.request_lock_ui.connect(self.lock_ui_from_panel)
-        self.translation_panel.progress_updated.connect(self.on_panel_progress)
-        self.translation_panel.status_updated.connect(self.on_panel_status)
-        self.translation_panel.log_emitted.connect(self.on_panel_log)
-        self.translation_panel.request_start_worker.connect(self.on_request_start_worker)
+        # 為了與主程式其他 Mixin/狀態管理保持相容，綁定屬性引用
+        self.translation_panel = self.left_panel._panels["translate"]
+        self.ai_panel = self.left_panel._panels["ai"]
+        self.edit_panel = self.left_panel._panels["edit"]
+        self.filter_panel = self.left_panel._panels["filter"]
 
-        self.edit_panel = EditPanel(context=self.context)
-        self.edit_panel.request_lock_ui.connect(self.lock_ui_from_panel)
-        self.edit_panel.progress_updated.connect(self.on_panel_progress)
-        self.edit_panel.status_updated.connect(self.on_panel_status)
-        self.edit_panel.log_emitted.connect(self.on_panel_log)
-        self.edit_panel.request_start_worker.connect(self.on_request_start_worker)
-
-        self.filter_panel = FilterPanel(context=self.context)
-        self.filter_panel.request_lock_ui.connect(self.lock_ui_from_panel)
-        self.filter_panel.progress_updated.connect(self.on_panel_progress)
-        self.filter_panel.status_updated.connect(self.on_panel_status)
-        self.filter_panel.log_emitted.connect(self.on_panel_log)
-        self.filter_panel.request_start_worker.connect(self.on_request_start_worker)
-
-        self.ai_panel = AiPanel(context=self.context)
-        self.ai_panel.request_lock_ui.connect(self.lock_ui_from_panel)
-        self.ai_panel.progress_updated.connect(self.on_panel_progress)
-        self.ai_panel.status_updated.connect(self.on_panel_status)
-        self.ai_panel.log_emitted.connect(self.on_panel_log)
-        self.ai_panel.request_start_worker.connect(self.on_request_start_worker)
-        self.ai_panel.request_silent_save.connect(self.silent_save_edit_data)
-        
-        self.translation_panel.request_silent_save.connect(self.silent_save_edit_data)
-
-        self.left_panel.add_panel("translate", self.translation_panel)
-        self.left_panel.add_panel("ai", self.ai_panel)
-        self.left_panel.add_panel("edit", self.edit_panel)
-        self.left_panel.add_panel("filter", self.filter_panel)
+        # 遍歷功能面板，自動連接標準 Interface 信號
+        for name, panel in self.left_panel._panels.items():
+            panel.request_lock_ui.connect(self.lock_ui_from_panel)
+            panel.progress_updated.connect(self.on_panel_progress)
+            panel.status_updated.connect(self.on_panel_status)
+            panel.log_emitted.connect(self.on_panel_log)
+            panel.request_start_worker.connect(self.on_request_start_worker)
+            panel.request_silent_save.connect(self.silent_save_edit_data)
 
         main_layout.addWidget(self.left_panel)
 
