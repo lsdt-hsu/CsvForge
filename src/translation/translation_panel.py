@@ -237,6 +237,9 @@ class TranslationPanel(BasePanel):
     def get_package_name(self) -> str:
         return "translate_panel"
 
+    def run_main_action(self) -> None:
+        self.on_start_clicked()
+
     def serialize_config(self) -> dict:
         cfg = self.config
         return {

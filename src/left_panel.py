@@ -67,6 +67,21 @@ class LeftPanel(QFrame):
         activity_layout.setSpacing(10)
         activity_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
+        # 註解：過濾面板是第一個功能，不得任意變更。
+        # 過濾按鈕
+        filter_icon_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "filter.png"
+        )
+        self.btn_filter = QPushButton()
+        self.btn_filter.setObjectName("btnActivityFilter")
+        self.btn_filter.setFixedSize(40, 40)
+        self.btn_filter.setIcon(QIcon(filter_icon_path))
+        self.btn_filter.setIconSize(QSize(40, 40))
+        self.btn_filter.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_filter.clicked.connect(lambda: self.switch_sidebar_tab("filter"))
+        self.btn_filter.setProperty("active", True)
+        activity_layout.addWidget(self.btn_filter)
+
         # 翻譯按鈕
         translate_icon_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "translate.png"
@@ -78,7 +93,7 @@ class LeftPanel(QFrame):
         self.btn_translate.setIconSize(QSize(40, 40))
         self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_translate.clicked.connect(lambda: self.switch_sidebar_tab("translate"))
-        self.btn_translate.setProperty("active", True)
+        self.btn_translate.setProperty("active", False)
         activity_layout.addWidget(self.btn_translate)
 
         # AI 按鈕
@@ -106,20 +121,6 @@ class LeftPanel(QFrame):
         self.btn_edit.setProperty("active", False)
         activity_layout.addWidget(self.btn_edit)
 
-        # 過濾按鈕
-        filter_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "filter.png"
-        )
-        self.btn_filter = QPushButton()
-        self.btn_filter.setObjectName("btnActivityFilter")
-        self.btn_filter.setFixedSize(40, 40)
-        self.btn_filter.setIcon(QIcon(filter_icon_path))
-        self.btn_filter.setIconSize(QSize(40, 40))
-        self.btn_filter.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_filter.clicked.connect(lambda: self.switch_sidebar_tab("filter"))
-        self.btn_filter.setProperty("active", False)
-        activity_layout.addWidget(self.btn_filter)
-
         activity_layout.addStretch()
         left_layout.addWidget(self.activity_bar)
 
@@ -144,11 +145,12 @@ class LeftPanel(QFrame):
 
         self._panels = {}
         
+        # 註解：過濾面板是第一個功能，不得任意變更。
         # 實例化各個 Package 的 Panel 並註冊 (側面板按鈕對應關係)
+        self.add_panel("filter", FilterPanel(context=self.context))
         self.add_panel("translate", TranslationPanel(context=self.context))
         self.add_panel("ai", AiPanel(context=self.context))
         self.add_panel("edit", EditPanel(context=self.context))
-        self.add_panel("filter", FilterPanel(context=self.context))
 
     def add_panel(self, name: str, panel: QWidget) -> None:
         self._panels[name] = panel
@@ -233,7 +235,7 @@ class LeftPanel(QFrame):
         side_cfg.dirty = True
 
         current_widget = self.sidebar_stacked.currentWidget()
-        active_tab = "translate"
+        active_tab = "filter"
         for name, panel in self._panels.items():
             if current_widget == panel:
                 active_tab = name

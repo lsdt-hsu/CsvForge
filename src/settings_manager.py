@@ -51,7 +51,7 @@ class MainConfig:
     寫入擁有者：MainWindow（SettingsMixin）。
     """
     dirty: bool = False
-    active_tab: str = "translate"
+    active_tab: str = "filter"
 
 
 @dataclass

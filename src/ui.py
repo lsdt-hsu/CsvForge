@@ -193,6 +193,10 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         if data.all_rows:
             self.translation_panel.show_controls()
             self.ai_panel.show_controls()
+            
+            # 自動展開側面板，切換到第一個功能（過濾），並呼叫其主要功能
+            self.left_panel.switch_sidebar_tab("filter", force_expand=True)
+            self.filter_panel.run_main_action()
 
     def on_source_file_changed(self, file_path: str) -> None:
         self.csv_data.set_csv_data([], ",", "utf-8", None)

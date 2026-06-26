@@ -138,6 +138,10 @@ class BasePanel(QFrame):
         """回傳此 Package 在設定檔中對應的識別名稱 (例如 'translate')"""
         raise NotImplementedError("Subclasses must implement get_package_name")
 
+    def run_main_action(self) -> None:
+        """執行該面板的主要功能，例如開始翻譯、開始過濾"""
+        pass
+
     def serialize_config(self) -> dict:
         """將此面板當前設定狀態序列化為 dict"""
         raise NotImplementedError("Subclasses must implement serialize_config")
