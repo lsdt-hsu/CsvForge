@@ -19,6 +19,9 @@ class EditPanel(BasePanel):
     def get_package_name(self) -> str:
         return "edit_panel"
 
+    def get_uuid(self) -> str:
+        return "4e47a9e3-8287-48f8-b39f-26b669fcf72a"
+
     def serialize_config(self) -> dict:
         return {}
 

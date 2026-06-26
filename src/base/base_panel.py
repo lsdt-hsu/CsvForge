@@ -1,6 +1,7 @@
 # src/base/base_panel.py
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from common_data.csv_data import LoadedCSVData
 
 from settings_manager import (
@@ -133,7 +134,52 @@ class BasePanel(QFrame):
         else:
             self.controls_layout = self.main_layout
 
+        # 訂閱全域資料載入信號以自動調整載入/未載入狀態 (解耦設計)
+        if self.context and self.context.csv_data:
+            self.context.csv_data.data_loaded.connect(self._on_global_data_loaded)
+
+    def _on_global_data_loaded(self) -> None:
+        """全域資料載入/解除載入信號的自動響應槽函數"""
+        if self.require_data_loading:
+            if self.context.is_data_loaded:
+                self.show_controls()
+            else:
+                self.reset_panel()
+
     # ── 所有 Package 必須實作的 Interface 方法 ──
+    def get_uuid(self) -> str:
+        """回傳此面板的唯一識別 UUID 字串"""
+        raise NotImplementedError("Subclasses must implement get_uuid")
+
+    def get_icon(self) -> QIcon:
+        """動態生成一個帶有包名縮寫的圓角背景 QIcon"""
+        pixmap = QPixmap(40, 40)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # 繪製圓角背景 (東京夜色風格暗灰/藍)
+        painter.setBrush(QColor("#3b4261"))
+        painter.setPen(QColor("#7aa2f7"))
+        painter.drawRoundedRect(2, 2, 36, 36, 6, 6)
+        
+        # 繪製文字
+        name = self.get_package_name()
+        short_name = name[:2].upper() if name else "PL"
+        
+        font = QFont("Arial")
+        font.setPointSize(12)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#ffffff"))
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, short_name)
+        painter.end()
+        
+        icon = QIcon()
+        icon.addPixmap(pixmap)
+        return icon
+
     def get_package_name(self) -> str:
         """回傳此 Package 在設定檔中對應的識別名稱 (例如 'translate')"""
         raise NotImplementedError("Subclasses must implement get_package_name")

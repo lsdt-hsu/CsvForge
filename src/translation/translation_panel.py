@@ -237,6 +237,9 @@ class TranslationPanel(BasePanel):
     def get_package_name(self) -> str:
         return "translate_panel"
 
+    def get_uuid(self) -> str:
+        return "c7a10787-8df1-4340-974a-4e6f47721867"
+
     def run_main_action(self) -> None:
         self.on_start_clicked()
 

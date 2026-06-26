@@ -57,11 +57,12 @@ class MainConfig:
 @dataclass
 class SidePanelConfig:
     """
-    側邊欄組態（折疊狀態）。
+    側邊欄組態（折疊狀態與外掛路徑）。
     寫入擁有者：MainWindow（SettingsMixin）。
     """
     dirty: bool = False
     collapsed: bool = False
+    plugins: list = field(default_factory=list)
 
 @dataclass
 class IoPanelConfig:

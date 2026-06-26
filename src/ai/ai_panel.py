@@ -392,6 +392,9 @@ class AiPanel(BasePanel):
     def get_package_name(self) -> str:
         return "ai_panel"
 
+    def get_uuid(self) -> str:
+        return "8f521c7d-3047-4929-873b-eb8df0b5c1a7"
+
     def run_main_action(self) -> None:
         self.on_start_clicked()
 

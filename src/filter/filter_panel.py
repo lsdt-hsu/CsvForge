@@ -416,6 +416,9 @@ class FilterPanel(BasePanel):
     def get_package_name(self) -> str:
         return "filter_panel"
 
+    def get_uuid(self) -> str:
+        return "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+
     def run_main_action(self) -> None:
         self.on_filter_clicked()
 
