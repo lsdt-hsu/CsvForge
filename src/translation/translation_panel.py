@@ -185,6 +185,7 @@ class TranslationPanel(BasePanel):
         self.controls_layout.addStretch()
 
         self.btn_start = QPushButton("開始翻譯")
+        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.on_start_clicked)
         self.controls_layout.addWidget(self.btn_start)
@@ -368,21 +369,18 @@ class TranslationPanel(BasePanel):
             )
 
     def on_translator_started(self):
-        style_critical = ThemeStyle.STYLE_BUTTON_CRITICAL
         self.btn_start.setText("停止翻譯")
         self.btn_start.setEnabled(True)
-        self.btn_start.setStyleSheet(style_critical)
+        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=True)
         self.set_enabled(False)
 
     def on_translator_finished(self):
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
-        self.btn_start.setStyleSheet("")
+        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
         self.set_enabled(True)
 
     def on_translator_cancelled(self):
-        style_disabled = ThemeStyle.STYLE_BUTTON_DISABLED
         self.btn_start.setText("正在停止...")
         self.btn_start.setEnabled(False)
-        self.btn_start.setStyleSheet(style_disabled)
 

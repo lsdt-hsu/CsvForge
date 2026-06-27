@@ -137,6 +137,7 @@ class FilterPanel(BasePanel):
         self.controls_layout.addWidget(self.scroll_area, stretch=1)
 
         self.btn_start_filter = QPushButton("開始過濾")
+        ThemeStyle.apply_primary_button_style(self.btn_start_filter, is_running=False)
         self.btn_start_filter.clicked.connect(self.on_filter_clicked)
         self.controls_layout.addWidget(self.btn_start_filter)
 

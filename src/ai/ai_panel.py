@@ -262,6 +262,7 @@ class AiPanel(BasePanel):
 
         # 6. 開始 AI 處理按鈕
         self.btn_start = QPushButton("開始 AI 處理")
+        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.controls_layout.addWidget(self.btn_start)
 
@@ -675,22 +676,19 @@ class AiPanel(BasePanel):
     def cancel_task(self):
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
-            style_disabled = ThemeStyle.STYLE_BUTTON_DISABLED
             self.btn_start.setText("正在停止...")
             self.btn_start.setEnabled(False)
-            self.btn_start.setStyleSheet(style_disabled)
 
     def _on_task_started(self):
-        style_critical = ThemeStyle.STYLE_BUTTON_CRITICAL
         self.btn_start.setText("停止 AI 處理")
         self.btn_start.setEnabled(True)
-        self.btn_start.setStyleSheet(style_critical)
+        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=True)
         self.set_enabled(False)
 
     def _on_task_finished(self):
         self.btn_start.setText("開始 AI 處理")
         self.btn_start.setEnabled(True)
-        self.btn_start.setStyleSheet("")
+        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
         self.set_enabled(True)
         self.worker = None
         # 自動存檔 (跟 translation 面板行為保持一致)
@@ -699,7 +697,7 @@ class AiPanel(BasePanel):
     def _on_task_error(self, err_msg):
         self.btn_start.setText("開始 AI 處理")
         self.btn_start.setEnabled(True)
-        self.btn_start.setStyleSheet("")
+        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
         self.set_enabled(True)
         self.worker = None
 
