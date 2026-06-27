@@ -189,9 +189,9 @@ class RuleWidget(QWidget):
         self.belong_container.setVisible(False)
 
         if self.parent_panel.num_cols > 0:
-            self.update_columns(self.parent_panel.num_cols, self.parent_panel.headers)
+            self.update_columns(self.parent_panel.num_cols)
 
-    def update_columns(self, num_cols, headers=None):
+    def update_columns(self, num_cols, active_cols=None):
         self.cmb_compare_col.blockSignals(True)
         self.cmb_compare_target.blockSignals(True)
         self.cmb_range_start.blockSignals(True)
@@ -211,24 +211,28 @@ class RuleWidget(QWidget):
         self.cmb_range_end.clear()
 
         # 找出當前已選取的所有整數欄位 index，並計算 max_active_col
-        active_cols = []
-        if isinstance(old_col, int):
-            active_cols.append(old_col)
-        if isinstance(old_start, int):
-            active_cols.append(old_start)
-        if isinstance(old_end, int):
-            active_cols.append(old_end)
+        if active_cols is None:
+            active_cols = []
+            if isinstance(old_col, int):
+                active_cols.append(old_col)
+            if isinstance(old_start, int):
+                active_cols.append(old_start)
+            if isinstance(old_end, int):
+                active_cols.append(old_end)
+            if isinstance(old_target, int):
+                active_cols.append(old_target)
             
         max_active_col = max(active_cols) if active_cols else -1
         limit = max(num_cols, max_active_col + 1)
 
-        csv_data = self.parent_panel.context.csv_data if self.parent_panel.context else None
+        csv_data = self.parent_panel.context.csv_data if (self.parent_panel and self.parent_panel.context) else None
 
-        for i in range(limit):
-            text = csv_data.get_column_header(i) if csv_data else f"第 {i+1} 欄"
-            self.cmb_compare_col.addItem(text, i)
-            self.cmb_range_start.addItem(text, i)
-            self.cmb_range_end.addItem(text, i)
+        if csv_data:
+            for i in range(limit):
+                text = csv_data.get_column_header(i)
+                self.cmb_compare_col.addItem(text, i)
+                self.cmb_range_start.addItem(text, i)
+                self.cmb_range_end.addItem(text, i)
 
         idx = self.cmb_compare_col.findData(old_col)
         self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
@@ -241,7 +245,7 @@ class RuleWidget(QWidget):
         idx_end = self.cmb_range_end.findData(old_end)
         self.cmb_range_end.setCurrentIndex(idx_end if idx_end >= 0 else (num_cols - 1 if num_cols > 0 else 0))
 
-        self.update_target_options(num_cols, headers)
+        self.update_target_options(num_cols, active_cols)
 
         self.cmb_compare_col.blockSignals(False)
         self.cmb_compare_target.blockSignals(False)
@@ -249,7 +253,7 @@ class RuleWidget(QWidget):
         self.cmb_range_end.blockSignals(False)
         self.update_belong_visibility()
 
-    def update_target_options(self, num_cols, headers=None):
+    def update_target_options(self, num_cols, active_cols=None):
         self.cmb_compare_target.blockSignals(True)
         old_target = self.cmb_compare_target.currentData()
         self.cmb_compare_target.clear()
@@ -264,17 +268,21 @@ class RuleWidget(QWidget):
             self.cmb_compare_target.addItem("手動輸入", "manual")
             
             # 找出當前已選取的整數目標欄位，以做越界防護
-            active_target_cols = []
-            if isinstance(old_target, int):
-                active_target_cols.append(old_target)
+            if active_cols is None:
+                active_target_cols = []
+                if isinstance(old_target, int):
+                    active_target_cols.append(old_target)
+                max_active_target = max(active_target_cols) if active_target_cols else -1
+            else:
+                max_active_target = max(active_cols) if active_cols else -1
                 
-            max_active_target = max(active_target_cols) if active_target_cols else -1
             limit = max(num_cols, max_active_target + 1)
             
-            csv_data = self.parent_panel.context.csv_data if self.parent_panel.context else None
-            for i in range(limit):
-                text = csv_data.get_column_header(i) if csv_data else f"第 {i+1} 欄"
-                self.cmb_compare_target.addItem(text, i)
+            csv_data = self.parent_panel.context.csv_data if (self.parent_panel and self.parent_panel.context) else None
+            if csv_data:
+                for i in range(limit):
+                    text = csv_data.get_column_header(i)
+                    self.cmb_compare_target.addItem(text, i)
         
         idx = self.cmb_compare_target.findData(old_target)
         self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
@@ -335,7 +343,7 @@ class RuleWidget(QWidget):
         self.parent_panel.on_rule_content_changed()
 
     def on_method_changed(self, idx):
-        self.update_target_options(self.parent_panel.num_cols, self.parent_panel.headers)
+        self.update_target_options(self.parent_panel.num_cols)
         self.update_belong_visibility()
         self.parent_panel.on_rule_content_changed()
 
@@ -352,10 +360,23 @@ class RuleWidget(QWidget):
             val = self.cmb_belong_value.currentText()
         else:
             val = self.txt_compare_value.text()
+            
+        col = self.cmb_compare_col.currentData()
+        if col == "none":
+            col = -1
+        elif col == "all":
+            col = -2
+        elif col == "range":
+            col = -3
+            
+        target = self.cmb_compare_target.currentData()
+        if target == "manual":
+            target = -1
+            
         return {
-            "compare_col": self.cmb_compare_col.currentData(),
+            "compare_col": col,
             "compare_method": self.cmb_compare_method.currentText(),
-            "compare_target": self.cmb_compare_target.currentData(),
+            "compare_target": target,
             "compare_value": val,
             "belong_value_idx": self.cmb_belong_value.currentIndex(),
             "range_start": self.cmb_range_start.currentData(),
@@ -370,56 +391,85 @@ class RuleWidget(QWidget):
         self.cmb_range_start.blockSignals(True)
         self.cmb_range_end.blockSignals(True)
 
-        col = cfg.get("compare_col", "none")
+        col = cfg.get("compare_col", -1)
         method = cfg.get("compare_method", "完全符合")
-        target = cfg.get("compare_target", "manual")
+        target = cfg.get("compare_target", -1)
         val = cfg.get("compare_value", "")
         b_idx = cfg.get("belong_value_idx", 0)
-        range_start = cfg.get("range_start")
-        range_end = cfg.get("range_end")
+        range_start = cfg.get("range_start", 0)
+        range_end = cfg.get("range_end", 0)
 
-        idx = self.cmb_compare_col.findData(col)
-        if idx < 0 and isinstance(col, int):
-            self.cmb_compare_col.addItem(f"欄位{col+1}", col)
-            idx = self.cmb_compare_col.findData(col)
+        # 1. 處理 compare_col 的對應與驗證
+        if col == "none":
+            col = -1
+        elif col == "all":
+            col = -2
+        elif col == "range":
+            col = -3
+            
+        if not isinstance(col, int):
+            col = 0
+        elif col < 0 and col not in (-1, -2, -3):
+            col = 0
+            
+        ui_col = col
+        if col == -1:
+            ui_col = "none"
+        elif col == -2:
+            ui_col = "all"
+        elif col == -3:
+            ui_col = "range"
+
+        # 2. 處理 compare_target 的對應與驗證
+        if target == "manual":
+            target = -1
+            
+        if not isinstance(target, int):
+            target = 0
+        elif target < 0 and target != -1:
+            target = 0
+            
+        ui_target = target
+        if target == -1:
+            ui_target = "manual"
+
+        # 3. 處理 range_start 的驗證
+        if not isinstance(range_start, int) or range_start < 0:
+            range_start = 0
+
+        # 4. 處理 range_end 的驗證
+        if not isinstance(range_end, int) or range_end < 0:
+            range_end = 0
+
+        # 預先依照 config 中的值更新下拉選單選項，以防 configured columns 超出 num_cols
+        active_cols = []
+        for v in (col, target, range_start, range_end):
+            if isinstance(v, int) and v >= 0:
+                active_cols.append(v)
+        self.update_columns(self.parent_panel.num_cols, active_cols)
+
+        idx = self.cmb_compare_col.findData(ui_col)
         self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
 
         idx = self.cmb_compare_method.findText(method)
         self.cmb_compare_method.setCurrentIndex(idx if idx >= 0 else 0)
 
-        self.update_target_options(self.parent_panel.num_cols, self.parent_panel.headers)
-
-        idx = self.cmb_compare_target.findData(target)
-        if idx < 0 and isinstance(target, int) and method not in ("屬於", "不屬於"):
-            self.cmb_compare_target.addItem(f"欄位{target+1}", target)
-            idx = self.cmb_compare_target.findData(target)
+        idx = self.cmb_compare_target.findData(ui_target)
         self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
 
         # 回復 cmb_range_start 的選擇
-        if range_start is not None:
-            idx_start = self.cmb_range_start.findData(range_start)
-            if idx_start < 0 and isinstance(range_start, int):
-                self.cmb_range_start.addItem(f"欄位{range_start+1}", range_start)
-                idx_start = self.cmb_range_start.findData(range_start)
-            self.cmb_range_start.setCurrentIndex(idx_start if idx_start >= 0 else 0)
-        else:
-            self.cmb_range_start.setCurrentIndex(0)
+        idx_start = self.cmb_range_start.findData(range_start)
+        self.cmb_range_start.setCurrentIndex(idx_start if idx_start >= 0 else 0)
 
         # 回復 cmb_range_end 的選擇
-        if range_end is not None:
-            idx_end = self.cmb_range_end.findData(range_end)
-            if idx_end < 0 and isinstance(range_end, int):
-                self.cmb_range_end.addItem(f"欄位{range_end+1}", range_end)
-                idx_end = self.cmb_range_end.findData(range_end)
-            self.cmb_range_end.setCurrentIndex(idx_end if idx_end >= 0 else 0)
-        else:
-            num_cols = self.parent_panel.num_cols
-            self.cmb_range_end.setCurrentIndex(num_cols - 1 if num_cols > 0 else 0)
+        idx_end = self.cmb_range_end.findData(range_end)
+        self.cmb_range_end.setCurrentIndex(idx_end if idx_end >= 0 else 0)
 
         self.update_belong_visibility()
 
         if method in ("屬於", "不屬於"):
-            self.cmb_belong_value.setCurrentIndex(b_idx)
+            if 0 <= b_idx < self.cmb_belong_value.count():
+                self.cmb_belong_value.setCurrentIndex(b_idx)
         else:
             self.txt_compare_value.setText(val)
 

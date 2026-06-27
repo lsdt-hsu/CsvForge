@@ -180,7 +180,7 @@ class AiPromptWidget(QWidget):
         self.txt_prompt.setMaximumHeight(10 * fm.lineSpacing() + 16)
         layout.addWidget(self.txt_prompt)
 
-    def update_headers(self, headers: list[str]):
+    def update_columns(self, limit, csv_data):
         """
         當載入 CSV 完成時被呼叫，清空舊標籤與下拉選單，並依最新 Header 重新渲染。
         """
@@ -191,32 +191,22 @@ class AiPromptWidget(QWidget):
             if w:
                 w.deleteLater()
 
-        # 2. 重新填充 QComboBox 下拉選單項目 (維持當前選擇的欄號)
+        # 2. 重新填充 QComboBox 下拉選單項目
         self.cb_target_col.blockSignals(True)
-        current_val = self.cb_target_col.currentData()
         self.cb_target_col.clear()
         
         # 預設 Placeholder，其 Data 為 -1
         self.cb_target_col.addItem("請選擇寫回欄位...", -1)
         
-        if headers:
-            for i, header in enumerate(headers):
+        if csv_data and limit > 0:
+            for i in range(limit):
+                header = csv_data.get_column_header(i)
                 self.cb_target_col.addItem(header, i)
                 
-        # 還原當前選擇
-        if isinstance(current_val, int) and current_val >= 0:
-            idx = self.cb_target_col.findData(current_val)
-            if idx != -1:
-                self.cb_target_col.setCurrentIndex(idx)
-            else:
-                self.cb_target_col.setCurrentIndex(0)
-        else:
-            self.cb_target_col.setCurrentIndex(0)
-            
         self.cb_target_col.blockSignals(False)
 
         # 3. 動態繪製一排 QToolButton
-        if not headers:
+        if not csv_data or limit == 0:
             # 若無 headers，顯示簡單提示標記
             lbl_tip = QLabel("（CSV 未包含欄位標記）")
             lbl_tip.setStyleSheet("color: #565f89; font-style: italic;")
@@ -224,7 +214,8 @@ class AiPromptWidget(QWidget):
             self.adjust_tags_height()
             return
 
-        for header in headers:
+        for i in range(limit):
+            header = csv_data.get_column_header(i)
             btn = QToolButton()
             btn.setText(f"{{{header}}}")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)

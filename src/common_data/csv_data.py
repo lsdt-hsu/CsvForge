@@ -45,7 +45,7 @@ class LoadedCSVData(QObject):
         此介面為所有面板取得單一欄位標題的標準介面。為了保持全域 UI 一致性，
         各 Panel (如翻譯、過濾、編輯、AI 面板等) 在顯示或處理欄位標題時，必須直接使用此
         方法回傳的字串，嚴禁在各自 Panel 的程式碼中自行添加或修改修飾性前綴/後綴，
-        亦禁止 AI 或 UI 元件任意變更此處定義的標準傳回格式。
+        亦禁止 AI 主動提議變更此處定義的標準傳回格式。
         """
         if col < 0 or not self.all_rows or col >= len(self.all_rows[0]):
             return f"第 {col+1} 欄"
@@ -57,19 +57,6 @@ class LoadedCSVData(QObject):
         if not h:
             h = f"第 {col+1} 欄"
         return f"{col+1}. {h}"
-
-    @property
-    def headers(self) -> List[str]:
-        """
-        唯讀動態屬性，僅供需要列出所有標題的面板使用。
-
-        [開發規範 - 一致性要求]：
-        此屬性為所有面板列出全域欄位標題的標準介面。為了保持全域 UI 一致性，
-        各 Panel (如翻譯、過濾、編輯面板等) 在顯示欄位清單時，必須直接使用此
-        列表提供的字串，嚴禁在各自 Panel 的程式碼中自行添加修飾性或裝飾性的
-        前綴/後綴 (如 "C1:" 或 "欄位 1" 等)。
-        """
-        return [self.get_column_header(i) for i in range(self.num_cols)]
 
     def set_csv_data(self, all_rows: List[List[str]], delimiter: str, encoding: str, file_path: Optional[str] = None, num_cols: Optional[int] = None):
         self.all_rows = all_rows

@@ -42,7 +42,6 @@ class FilterPanel(BasePanel):
         super().__init__(parent, title_text="過濾", require_data_loading=True, context=context)
         self.config = FilterPanelConfig()
         self.num_cols = 0
-        self.headers = None
 
         self.rules = []
         self.logic_tree = None
@@ -59,7 +58,7 @@ class FilterPanel(BasePanel):
             if csv_data.all_rows:
                 if not self.controls_container.isVisible():
                     self.show_controls()
-                self.update_column_dropdowns(csv_data.num_cols, csv_data.headers)
+                self.update_column_dropdowns(csv_data.num_cols)
             else:
                 self.reset_panel()
 
@@ -169,7 +168,6 @@ class FilterPanel(BasePanel):
     def reset_panel(self):
         super().reset_panel()
         self.num_cols = 0
-        self.headers = None
 
         self.clear_layout(self.rule_list_layout)
         self.rules.clear()
@@ -280,12 +278,11 @@ class FilterPanel(BasePanel):
             self.txt_expression.setStyleSheet(f"border: 2px solid {ThemeStyle.COLOR_TEXT_CRITICAL}; border-radius: 4px;")
             self.expression_is_valid = False
 
-    def update_column_dropdowns(self, num_cols, headers=None):
+    def update_column_dropdowns(self, num_cols):
         self.num_cols = num_cols
-        self.headers = headers
 
         for r in self.rules:
-            r.update_columns(num_cols, headers)
+            r.update_columns(num_cols)
 
     def on_filter_clicked(self):
         if not self.check_expression_validity():
@@ -302,6 +299,17 @@ class FilterPanel(BasePanel):
             method = cfg["compare_method"]
             target = cfg["compare_target"]
             val = cfg["compare_value"]
+
+            # 正規化以供後續驗證與比較
+            if col == -1:
+                col = "none"
+            elif col == -2:
+                col = "all"
+            elif col == -3:
+                col = "range"
+                
+            if target == -1:
+                target = "manual"
 
             # 檢查比對欄位是否無法對應
             if isinstance(col, int) and (col >= self.num_cols or col < 0):
@@ -336,8 +344,23 @@ class FilterPanel(BasePanel):
                             QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：欄位比對不可選擇相同的欄位。")
                             return
 
+        # 正規化 rules 設定以符合 FilterWorker 所需的舊版字串格式規格
+        normalized_rules = []
+        for r in self.rules:
+            rc = r.get_config().copy()
+            if rc["compare_col"] == -1:
+                rc["compare_col"] = "none"
+            elif rc["compare_col"] == -2:
+                rc["compare_col"] = "all"
+            elif rc["compare_col"] == -3:
+                rc["compare_col"] = "range"
+                
+            if rc["compare_target"] == -1:
+                rc["compare_target"] = "manual"
+            normalized_rules.append(rc)
+
         filter_config = {
-            "rules": [r.get_config() for r in self.rules],
+            "rules": normalized_rules,
             "logic_tree": logic_tree.serialize_tree(self.logic_tree)
         }
 

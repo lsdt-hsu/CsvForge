@@ -34,14 +34,14 @@ class TranslatePanelConfig:
     tgt_col: int = 1
 
 
-class TranslationPanel(BasePanel):
+class PanelClass(BasePanel):
 
 
     def __init__(self, parent=None, context=None):
-        super().__init__(parent, title_text="翻譯", require_data_loading=True, context=context)
+        super().__init__(parent, title_text="翻譯外掛 2", require_data_loading=True, context=context)
         self.config = TranslatePanelConfig()
         
-        from translation.csv_translator import CSVTranslator
+        from csv_translator import CSVTranslator
         self.translator = CSVTranslator(parent=self, context=context)
         self.translator.request_start_worker.connect(self.request_start_worker.emit)
         self.translator.started.connect(self.on_translator_started)
@@ -128,7 +128,7 @@ class TranslationPanel(BasePanel):
             ("ko", "ko (韓文)"),
         ]
 
-        lbl_src_lang = QLabel("來源語言：")
+        lbl_src_lang = QLabel("來源語言？")
         self.cb_src_lang = QComboBox()
         for code, name in self.langs:
             self.cb_src_lang.addItem(name, code)
@@ -237,10 +237,10 @@ class TranslationPanel(BasePanel):
 
     # ── Interface 實作 ────────────────────────────────────────────────────────
     def get_package_name(self) -> str:
-        return "translate_panel"
+        return "translation2"
 
     def get_uuid(self) -> str:
-        return "c7a10787-8df1-4340-974a-4e6f47721867"
+        return "a9b8c7d6-e5f4-3210-fedc-ba9876543210"
 
     def run_main_action(self) -> None:
         self.on_start_clicked()

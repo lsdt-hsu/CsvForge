@@ -80,7 +80,7 @@ class AiPanel(BasePanel):
             if csv_data.all_rows:
                 if not self.controls_container.isVisible():
                     self.show_controls()
-                self.update_column_dropdowns(csv_data.num_cols, csv_data.headers)
+                self.update_column_dropdowns(csv_data.num_cols)
             else:
                 self.reset_panel()
 
@@ -542,11 +542,13 @@ class AiPanel(BasePanel):
         super().show_controls()
         self.restore_from_config()
 
-    def update_column_dropdowns(self, num_cols, headers):
+    def update_column_dropdowns(self, num_cols):
         """
         當 CSV 載入成功時，由 MainWindow 呼叫，用以更新 PromptWidget 的可用欄位與目標寫回選單。
         """
-        self.prompt_widget.update_headers(headers)
+        limit = max(num_cols, self.config.target_col + 1)
+        self.prompt_widget.update_columns(limit, self.context.csv_data)
+        self.prompt_widget.set_target_col(self.config.target_col)
 
     def set_enabled(self, enabled):
         """
@@ -604,7 +606,7 @@ class AiPanel(BasePanel):
             QMessageBox.warning(self, "資料錯誤", "CSV 資料尚未載入！")
             return
 
-        headers = self.context.csv_data.headers
+        headers = [self.context.csv_data.get_column_header(i) for i in range(self.context.csv_data.num_cols)]
 
         # 檢查 3.1: 輸出欄位正確性 (所選欄位索引必須小於當前 CSV 最大欄位數)
         if cfg.target_col >= self.context.csv_data.num_cols:
