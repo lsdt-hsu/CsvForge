@@ -90,6 +90,7 @@ class LeftPanel(QFrame):
         )
         self.btn_filter = QPushButton()
         self.btn_filter.setObjectName("btnActivityFilter")
+        self.btn_filter.setProperty("type", "activity")
         self.btn_filter.setFixedSize(40, 40)
         self.btn_filter.setIcon(QIcon(filter_icon_path))
         self.btn_filter.setIconSize(QSize(40, 40))
@@ -104,6 +105,7 @@ class LeftPanel(QFrame):
         )
         self.btn_translate = QPushButton()
         self.btn_translate.setObjectName("btnActivityTranslate")
+        self.btn_translate.setProperty("type", "activity")
         self.btn_translate.setFixedSize(40, 40)
         self.btn_translate.setIcon(QIcon(translate_icon_path))
         self.btn_translate.setIconSize(QSize(40, 40))
@@ -115,6 +117,7 @@ class LeftPanel(QFrame):
         # AI 按鈕
         self.btn_ai = QPushButton()
         self.btn_ai.setObjectName("btnActivityAi")
+        self.btn_ai.setProperty("type", "activity")
         self.btn_ai.setFixedSize(40, 40)
         self.btn_ai.setIcon(self.create_ai_icon())
         self.btn_ai.setIconSize(QSize(40, 40))
@@ -129,6 +132,7 @@ class LeftPanel(QFrame):
         )
         self.btn_edit = QPushButton()
         self.btn_edit.setObjectName("btnActivityEdit")
+        self.btn_edit.setProperty("type", "activity")
         self.btn_edit.setFixedSize(40, 40)
         self.btn_edit.setIcon(QIcon(edit_icon_path))
         self.btn_edit.setIconSize(QSize(40, 40))
@@ -140,6 +144,7 @@ class LeftPanel(QFrame):
         # 添加外掛 (圓圈+) 按鈕
         self.btn_add_plugin = QPushButton()
         self.btn_add_plugin.setObjectName("btnActivityAddPlugin")
+        self.btn_add_plugin.setProperty("type", "activity")
         self.btn_add_plugin.setFixedSize(40, 40)
         self.btn_add_plugin.setIcon(self.create_add_plugin_icon())
         self.btn_add_plugin.setIconSize(QSize(40, 40))
@@ -390,6 +395,7 @@ class LeftPanel(QFrame):
         # 建立活動列按鈕
         btn = QPushButton()
         btn.setObjectName(f"btnActivity_{uuid_str}")
+        btn.setProperty("type", "activity")
         btn.setFixedSize(40, 40)
         btn.setIcon(panel.get_icon())
         btn.setIconSize(QSize(40, 40))

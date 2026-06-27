@@ -152,17 +152,12 @@ class BasePanel(QFrame):
         raise NotImplementedError("Subclasses must implement get_uuid")
 
     def get_icon(self) -> QIcon:
-        """動態生成一個帶有包名縮寫的圓角背景 QIcon"""
+        """動態生成一個帶有包名縮寫的無邊框、透明背景 QIcon"""
         pixmap = QPixmap(40, 40)
         pixmap.fill(Qt.GlobalColor.transparent)
         
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # 繪製圓角背景 (東京夜色風格暗灰/藍)
-        painter.setBrush(QColor("#3b4261"))
-        painter.setPen(QColor("#7aa2f7"))
-        painter.drawRoundedRect(2, 2, 36, 36, 6, 6)
         
         # 繪製文字
         name = self.get_package_name()
