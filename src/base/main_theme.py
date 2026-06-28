@@ -78,60 +78,6 @@ class ThemeStyle:
     """
 
     @staticmethod
-    def apply_primary_button_style(button, is_running: bool = False) -> None:
-        """
-        為側面板的主要按鈕（例如「開始翻譯」）提供完整的建議樣式。
-        - is_running = False: 一般狀態（例如「開始翻譯」，使用亮藍/青色系）
-        - is_running = True: 停止狀態（例如「停止」，使用紅色系）
-        禁用狀態由按鈕本身的 setEnabled(False) 控制，並在此樣式中處理。
-        """
-        if is_running:
-            button.setStyleSheet("""
-                QPushButton {
-                    background-color: #f7768e;
-                    color: #1a1b26;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 8px 15px;
-                    font-weight: bold;
-                    font-size: 13px;
-                }
-                QPushButton:hover {
-                    background-color: #ff9eaf;
-                }
-                QPushButton:pressed {
-                    background-color: #db4b66;
-                }
-                QPushButton:disabled {
-                    background-color: #24283b;
-                    color: #565f89;
-                }
-            """)
-        else: # 一般狀態 (is_running = False)
-            button.setStyleSheet("""
-                QPushButton {
-                    background-color: #7aa2f7;
-                    color: #1a1b26;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 8px 15px;
-                    font-weight: bold;
-                    font-size: 13px;
-                }
-                QPushButton:hover {
-                    background-color: #89ddff;
-                }
-                QPushButton:pressed {
-                    background-color: #3b4261;
-                    color: #c0caf5;
-                }
-                QPushButton:disabled {
-                    background-color: #24283b;
-                    color: #565f89;
-                }
-            """)
-
-    @staticmethod
     def get_standard_font() -> QFont:
         font = QFont("Microsoft JhengHei")
         font.setPointSize(ThemeStyle.FONT_SIZE_STANDARD)

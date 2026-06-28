@@ -13,7 +13,7 @@ from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon, QIntValidator
 from dataclasses import dataclass, field
 from plugin_sdk.panel_base import BasePluginPanel
-from plugin_sdk.theme import applyStandardButtonStyle, applyStandardLabelStyle, applyStandardLineEditStyle
+from plugin_sdk.theme import applyStandardLabelStyle, applyStandardLineEditStyle, applyPrimaryButtonStyle
 
 from filter import logic_tree
 from filter.rule_widget import RuleWidget, CircularToggleButton
@@ -139,7 +139,7 @@ class FilterPanel(BasePluginPanel):
         self.controls_layout.addWidget(self.scroll_area, stretch=1)
 
         self.btn_start_filter = QPushButton("開始過濾")
-        applyStandardButtonStyle(self.btn_start_filter, is_running=False)
+        applyPrimaryButtonStyle(self.btn_start_filter, is_running=False)
         self.btn_start_filter.clicked.connect(self.on_filter_clicked)
         self.controls_layout.addWidget(self.btn_start_filter)
 

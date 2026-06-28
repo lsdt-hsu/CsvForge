@@ -17,10 +17,10 @@ from dataclasses import dataclass
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator
+# pyrefly: ignore [missing-import]
 from plugin_sdk.panel_base import BasePluginPanel
-from plugin_sdk.theme import applyStandardButtonStyle, applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardSliderStyle
-
-
+# pyrefly: ignore [missing-import]
+from plugin_sdk.theme import applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardSliderStyle, applyPrimaryButtonStyle
 
 @dataclass
 class TranslatePanelConfig:
@@ -181,7 +181,7 @@ class PanelClass(BasePluginPanel):
         self.controls_layout.addStretch()
 
         self.btn_start = QPushButton("開始翻譯")
-        applyStandardButtonStyle(self.btn_start, is_running=False)
+        applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.on_start_clicked)
         self.controls_layout.addWidget(self.btn_start)
@@ -363,13 +363,13 @@ class PanelClass(BasePluginPanel):
     def on_translator_started(self):
         self.btn_start.setText("停止翻譯")
         self.btn_start.setEnabled(True)
-        applyStandardButtonStyle(self.btn_start, is_running=True)
+        applyPrimaryButtonStyle(self.btn_start, is_running=True)
         self.set_enabled(False)
 
     def on_translator_finished(self):
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
-        applyStandardButtonStyle(self.btn_start, is_running=False)
+        applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self.set_enabled(True)
 
     def on_translator_cancelled(self):
