@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator
-from base.base_panel import BasePanel
-from base.theme import ThemeStyle
+from base.main_base_panel import BasePanel
+from base.main_theme import ThemeStyle
 
 
 

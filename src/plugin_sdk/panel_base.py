@@ -1,13 +1,11 @@
-# src/base/base_panel.py
+# src/plugin_sdk/panel_base.py
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-from common_data.csv_data import CsvData
-
 from common_data.app_context import AppContext
 
 
-class BasePanel(QFrame):
+class BasePluginPanel(QFrame):
     # ── 統一 Interface 通訊信號 ──
     request_lock_ui = pyqtSignal(bool)
     progress_updated = pyqtSignal(int, int)

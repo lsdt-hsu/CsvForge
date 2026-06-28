@@ -2,7 +2,7 @@ import time
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QTextEdit, QPushButton
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from base.base_panel import BasePanel
+from base.main_base_panel import BasePanel
 from ui_constants import PROGRESS_BAR_WIDTH
 from settings_manager import StatusPanelConfig
 

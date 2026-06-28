@@ -12,8 +12,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon, QIntValidator
 from dataclasses import dataclass, field
-from base.base_panel import BasePanel
-from base.theme import ThemeStyle
+from base.main_base_panel import BasePanel
+from base.main_theme import ThemeStyle
 
 from filter import logic_tree
 from filter.rule_widget import RuleWidget, CircularToggleButton

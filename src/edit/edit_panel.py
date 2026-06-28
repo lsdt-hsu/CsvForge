@@ -1,5 +1,5 @@
-from base.base_panel import BasePanel
-from base.theme import ThemeStyle
+from base.main_base_panel import BasePanel
+from base.main_theme import ThemeStyle
 from PyQt6.QtWidgets import QLabel
 from PyQt6.QtCore import Qt
 

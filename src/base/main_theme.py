@@ -1,4 +1,4 @@
-# src/base/theme.py
+# src/base/main_theme.py
 from PyQt6.QtGui import QFont
 
 # 佈局常數

@@ -5,8 +5,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from base.base_panel import BasePanel
-from base.theme import ThemeStyle
+from base.main_base_panel import BasePanel
+from base.main_theme import ThemeStyle
 from ai.ai_prompt_widget import AiPromptWidget
 from ai.google_ai_widget import GoogleAiWidget
 from ai.local_ai_widget import LocalAiWidget

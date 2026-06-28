@@ -1,6 +1,6 @@
 # demo_plugin/plugin.py
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QLineEdit
-from base.base_panel import BasePanel
+from base.main_base_panel import BasePanel
 
 class PanelClass(BasePanel):
     def __init__(self, parent=None, context=None):
