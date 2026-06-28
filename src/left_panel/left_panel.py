@@ -1,6 +1,5 @@
 import os
 import sys
-import importlib.util
 from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QWidget, QPushButton,
     QStackedWidget, QFileDialog, QMessageBox
@@ -20,6 +19,9 @@ from ai import PanelClass as AiPanel
 from edit import PanelClass as EditPanel
 from filter import PanelClass as FilterPanel
 
+from .plugin_manager import PluginManager, PluginWarning, PluginError
+from .plugin_ui import create_add_plugin_icon, create_plugin_button
+
 # 內建面板的 UUID 集合
 BUILTIN_UUIDS = {
     "c7a10787-8df1-4340-974a-4e6f47721867",  # translate
@@ -35,6 +37,7 @@ class LeftPanel(QFrame):
         super().__init__(parent)
         self.main_window = parent
         self.context = context
+        self.plugin_manager = PluginManager(context=self.context)
         self._plugin_buttons = {}
         self._loaded_plugins = []  # 儲存 (plugin_key, path) 元組，維護外掛載入順序
         self.setObjectName("leftContainer")
@@ -86,7 +89,7 @@ class LeftPanel(QFrame):
         # 註解：過濾面板是第一個功能，不得任意變更。
         # 過濾按鈕
         filter_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "filter.png"
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "filter.png"
         )
         self.btn_filter = QPushButton()
         self.btn_filter.setObjectName("btnActivityFilter")
@@ -101,7 +104,7 @@ class LeftPanel(QFrame):
 
         # 翻譯按鈕
         translate_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "translate.png"
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "translate.png"
         )
         self.btn_translate = QPushButton()
         self.btn_translate.setObjectName("btnActivityTranslate")
@@ -128,7 +131,7 @@ class LeftPanel(QFrame):
 
         # 編輯按鈕
         edit_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "edit.png"
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "edit.png"
         )
         self.btn_edit = QPushButton()
         self.btn_edit.setObjectName("btnActivityEdit")
@@ -146,7 +149,7 @@ class LeftPanel(QFrame):
         self.btn_add_plugin.setObjectName("btnActivityAddPlugin")
         self.btn_add_plugin.setProperty("type", "activity")
         self.btn_add_plugin.setFixedSize(40, 40)
-        self.btn_add_plugin.setIcon(self.create_add_plugin_icon())
+        self.btn_add_plugin.setIcon(create_add_plugin_icon())
         self.btn_add_plugin.setIconSize(QSize(40, 40))
         self.btn_add_plugin.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add_plugin.clicked.connect(self.on_add_plugin_clicked)
@@ -290,48 +293,6 @@ class LeftPanel(QFrame):
 
     # ── 外掛相關繪圖與動態載入邏輯 ───────────────────────────────────────────────
 
-    def create_add_plugin_icon(self) -> QIcon:
-        """動態繪製加載外掛（圓圈+）的圖示"""
-        pixmap = QPixmap(40, 40)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # 畫圓圈
-        painter.setPen(QColor("#565f89"))
-        painter.setBrush(QColor("#24283b"))
-        painter.drawEllipse(2, 2, 36, 36)
-        
-        # 畫加號
-        painter.setPen(QColor("#7aa2f7"))
-        painter.drawLine(12, 20, 28, 20)
-        painter.drawLine(20, 12, 20, 28)
-        painter.end()
-        
-        icon = QIcon()
-        icon.addPixmap(pixmap)
-        return icon
-
-    def create_remove_plugin_icon(self) -> QIcon:
-        """動態繪製移除外掛（圓圈-）的小圖示"""
-        pixmap = QPixmap(14, 14)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # 畫圓圈 (紅色)
-        painter.setPen(QColor("#f7768e"))
-        painter.setBrush(QColor("#f7768e"))
-        painter.drawEllipse(0, 0, 13, 13)
-        
-        # 畫減號 (白色)
-        painter.setPen(QColor("#ffffff"))
-        painter.drawLine(3, 7, 10, 7)
-        painter.end()
-        
-        icon = QIcon()
-        icon.addPixmap(pixmap)
-        return icon
 
     def on_add_plugin_clicked(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "選擇外掛資料夾")
@@ -341,77 +302,33 @@ class LeftPanel(QFrame):
     def load_plugin_by_path(self, path: str, auto_save: bool = True) -> bool:
         path = os.path.normpath(path)
         
-        # 防止重複載入相同路徑的外掛
-        for _, existing_path in self._loaded_plugins:
-            if existing_path == path:
-                QMessageBox.warning(self, "警告", "該外掛路徑已在載入列表中。")
-                return False
-
-        if not os.path.exists(path):
-            return False
-
-        entry_file = os.path.join(path, "plugin.py")
-        if not os.path.exists(entry_file):
-            if auto_save: # 只有手動點擊載入時才彈出警告
-                QMessageBox.warning(self, "警告", f"在選擇的資料夾中找不到標準入口檔 `plugin.py`。")
-            return False
+        # 1. 取得現有面板 UUID 集合
+        existing_uuids = {p.get_uuid() for p in self._panels.values()}
 
         try:
-            # 將外掛所在目錄加入至 sys.path，支援外掛內部的自訂模組導入
-            if path not in sys.path:
-                sys.path.insert(0, path)
-
-            # 動態載入 plugin.py
-            spec = importlib.util.spec_from_file_location("plugin_module", entry_file)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-
-            panel_class = getattr(module, "PanelClass", None)
-            if not panel_class:
-                if auto_save:
-                    QMessageBox.warning(self, "警告", "外掛入口檔 `plugin.py` 中找不到 `PanelClass` 類別。")
-                return False
-
-            panel = panel_class(context=self.context)
-        except Exception as e:
+            plugin_key, panel = self.plugin_manager.load_plugin(path, existing_uuids)
+        except PluginWarning as w:
             if auto_save:
-                QMessageBox.critical(self, "錯誤", f"載入外掛時發生錯誤：\n{str(e)}")
+                QMessageBox.warning(self, "警告", str(w))
+            return False
+        except PluginError as e:
+            if auto_save:
+                QMessageBox.critical(self, "錯誤", str(e))
             return False
 
-        uuid_str = panel.get_uuid()
-        
-        # 檢查 UUID 是否與現有面板重複
-        for name, existing_panel in self._panels.items():
-            if existing_panel.get_uuid() == uuid_str:
-                QMessageBox.critical(self, "錯誤", f"外掛 UUID 重複，拒絕載入。\n重複的 UUID: {uuid_str}")
-                panel.deleteLater()
-                return False
-
         # 註冊外掛面板
-        plugin_key = f"PLUGIN-{uuid_str}"
+        uuid_str = panel.get_uuid()
         self._panels[plugin_key] = panel
         self.sidebar_stacked.addWidget(panel)
 
-        # 建立活動列按鈕
-        btn = QPushButton()
-        btn.setObjectName(f"btnActivity_{uuid_str}")
-        btn.setProperty("type", "activity")
-        btn.setFixedSize(40, 40)
-        btn.setIcon(panel.get_icon())
-        btn.setIconSize(QSize(40, 40))
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.clicked.connect(lambda: self.switch_sidebar_tab(plugin_key))
-        btn.setProperty("active", False)
-
-        # 建立圓圈減移除按鈕
-        btn_remove = QPushButton(btn)
-        btn_remove.setFixedSize(14, 14)
-        btn_remove.setIcon(self.create_remove_plugin_icon())
-        btn_remove.setIconSize(QSize(14, 14))
-        btn_remove.setStyleSheet("border: none; background: transparent;")
-        btn_remove.move(0, 26)
-        btn_remove.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_remove.clicked.connect(lambda: self.remove_plugin(plugin_key))
+        # 建立活動列按鈕與圓圈減移除按鈕
+        btn = create_plugin_button(
+            parent_widget=self,
+            uuid_str=uuid_str,
+            icon=panel.get_icon(),
+            on_click=lambda: self.switch_sidebar_tab(plugin_key),
+            on_remove_click=lambda: self.remove_plugin(plugin_key)
+        )
 
         # 將按鈕插入到活動列（圓圈+按鈕的前面）
         layout = self.activity_bar.layout()
@@ -452,7 +369,9 @@ class LeftPanel(QFrame):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        panel = self._panels.pop(plugin_key, None)
+        path, panel = self.plugin_manager.remove_plugin(plugin_key)
+        
+        self._panels.pop(plugin_key, None)
         if panel:
             if self.sidebar_stacked.currentWidget() == panel:
                 self.switch_sidebar_tab("filter", force_expand=True)
@@ -477,4 +396,3 @@ class LeftPanel(QFrame):
 
         if self.main_window and hasattr(self.main_window, "save_settings"):
             self.main_window.save_settings()
-
