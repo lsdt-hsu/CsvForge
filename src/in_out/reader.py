@@ -2,11 +2,11 @@ import os
 import csv
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
-from base.csv_worker import BaseCSVWorker
+from .csv_worker import CSVWorker
 from common_data.csv_data import LoadedCSVData
 from utils import ThrottledProgress
 
-class CSVEditWorker(BaseCSVWorker):
+class CSVEditWorker(CSVWorker):
     def __init__(self, source_path, output_path):
         super().__init__(source_path, output_path)
         self.loaded_rows = []

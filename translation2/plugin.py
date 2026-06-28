@@ -130,12 +130,14 @@ class PanelClass(BasePanel):
 
         lbl_src_lang = QLabel("來源語言？")
         self.cb_src_lang = QComboBox()
+        self.cb_src_lang.setStyleSheet(ThemeStyle.STYLE_COMBOBOX)
         for code, name in self.langs:
             self.cb_src_lang.addItem(name, code)
         self.cb_src_lang.setCurrentIndex(0)
 
         lbl_tgt_lang = QLabel("目標語言：")
         self.cb_tgt_lang = QComboBox()
+        self.cb_tgt_lang.setStyleSheet(ThemeStyle.STYLE_COMBOBOX)
         for code, name in self.langs:
             self.cb_tgt_lang.addItem(name, code)
         self.cb_tgt_lang.setCurrentIndex(1)

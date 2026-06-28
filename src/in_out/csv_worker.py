@@ -3,7 +3,7 @@ import csv
 from PyQt6.QtCore import QThread, pyqtSignal
 from utils import detect_encoding, detect_delimiter
 
-class BaseCSVWorker(QThread):
+class CSVWorker(QThread):
     progress_updated = pyqtSignal(int, int)      # 已處理列數, 總列數
     status_updated = pyqtSignal(str)             # 狀態欄更新日誌
     log_emitted = pyqtSignal(str, str)           # 級別 (INFO/SUCCESS/WARNING/ERROR), 訊息
