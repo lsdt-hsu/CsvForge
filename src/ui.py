@@ -136,7 +136,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         # 內容面板
         self.edit_content_panel = DataEditorPanel(context=self.context)
         self.csv_data.modified_changed.connect(self.io_panel.on_modified_changed)
-        self.edit_content_panel.request_start_worker.connect(self.on_request_start_worker)
 
         self.status_panel.setMinimumHeight(140)
         # 連接 StatusPanel 訊號
