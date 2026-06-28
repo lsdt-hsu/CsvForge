@@ -1,36 +1,17 @@
 import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
-    QLineEdit, QPushButton, QFormLayout, QFrame, QScrollArea
+    QPushButton, QFrame, QScrollArea
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QIntValidator, QDoubleValidator
+from PyQt6.QtCore import Qt
 
 from dataclasses import dataclass
 from base.base_panel import BasePanel
 from base.theme import ThemeStyle
 from ai.ai_prompt_widget import AiPromptWidget
+from ai.google_ai_widget import GoogleAiWidget
+from ai.local_ai_widget import LocalAiWidget
 from ai.ai_worker import CSVAIWorker
-from ai.ai_client import check_ollama_models
-
-
-class ConnectionTester(QThread):
-    """
-    ConnectionTester — 非同步測試 Ollama 連線並拉取模型列表。
-    """
-    success = pyqtSignal(list)
-    failed = pyqtSignal(str)
-
-    def __init__(self, url):
-        super().__init__()
-        self.url = url
-
-    def run(self):
-        try:
-            models = check_ollama_models(self.url)
-            self.success.emit(models)
-        except Exception as e:
-            self.failed.emit(str(e))
 
 
 @dataclass
@@ -44,7 +25,7 @@ class AiPanelConfig:
     local_model: str = ""
     advanced_num_ctx: int = 4096
     advanced_temperature: float = 0.7
-    target_col: str = ""
+    target_col: int = -1
     prompt_template: str = ""
 
 
@@ -52,7 +33,7 @@ class AiPanel(BasePanel):
     """
     AiPanel — AI 處理面板。
     
-    負責提供 UI 選項、連線測試交互、管理 VRAM 進階保護設定，
+    負責提供 UI 選項、連線測試交互、管理 VRAM 進階設定，
     並於啟動處理時建立 CSVAIWorker 背景線程進行運算。
     """
 
@@ -61,13 +42,6 @@ class AiPanel(BasePanel):
         super().__init__(parent, title_text="AI 批次處理", require_data_loading=True, context=context)
         self.config = AiPanelConfig()
         self.worker = None
-        self.tester = None
-        
-        # 記錄是否已進行過連線測試
-        self._has_checked_ai_conn = False
-        # 記錄上一次執行連線測試時的後端設定，以避免重複探測
-        self._last_checked_service = None
-        self._last_checked_url = None
         
         self.init_ui()
         if self.context and self.context.csv_data:
@@ -111,7 +85,7 @@ class AiPanel(BasePanel):
 
         # 1. AI 服務選擇
         service_layout = QHBoxLayout()
-        lbl_service = QLabel("AI 服務服務：")
+        lbl_service = QLabel("AI 服務：")
         lbl_service.setStyleSheet("color: #c0caf5;")
         self.cb_service = QComboBox()
         self.cb_service.addItems(["Google AI", "Local AI"])
@@ -120,132 +94,12 @@ class AiPanel(BasePanel):
         self.controls_layout.addLayout(service_layout)
 
         # 2. Google AI 設定容器
-        self.google_widget = QWidget()
-        google_layout = QFormLayout(self.google_widget)
-        google_layout.setContentsMargins(0, 0, 0, 0)
-        google_layout.setSpacing(8)
-
-        lbl_api_key = QLabel("API KEY：")
-        lbl_api_key.setStyleSheet("color: #a9b1d6;")
-        self.txt_api_key = QLineEdit()
-        self.txt_api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self.txt_api_key.setPlaceholderText("請輸入 Gemini API KEY")
-        self.txt_api_key.setStyleSheet("background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;")
-        google_layout.addRow(lbl_api_key, self.txt_api_key)
-
-        lbl_google_model = QLabel("使用模型：")
-        lbl_google_model.setStyleSheet("color: #a9b1d6;")
-        self.cb_google_model = QComboBox()
-        self.cb_google_model.setEditable(True)
-        self.cb_google_model.addItems(["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"])
-        self.cb_google_model.setStyleSheet("background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;")
-        google_layout.addRow(lbl_google_model, self.cb_google_model)
-
+        self.google_widget = GoogleAiWidget()
         self.controls_layout.addWidget(self.google_widget)
 
         # 3. Local AI 設定容器
-        self.local_widget = QWidget()
-        local_layout = QFormLayout(self.local_widget)
-        local_layout.setContentsMargins(0, 0, 0, 0)
-        local_layout.setSpacing(8)
-
-        lbl_backend = QLabel("後端選擇：")
-        lbl_backend.setStyleSheet("color: #a9b1d6;")
-        self.cb_local_backend = QComboBox()
-        self.cb_local_backend.addItems(["Ollama"])
-        self.cb_local_backend.setStyleSheet("background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;")
-        local_layout.addRow(lbl_backend, self.cb_local_backend)
-
-        lbl_url = QLabel("伺服器網址：")
-        lbl_url.setStyleSheet("color: #a9b1d6;")
-        self.txt_local_url = QLineEdit("http://localhost:11434")
-        self.txt_local_url.setStyleSheet("background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;")
-        local_layout.addRow(lbl_url, self.txt_local_url)
-
-        # 連線狀態與測試按鈕
-        conn_layout = QHBoxLayout()
-        conn_layout.setSpacing(10)
-        
-        self.btn_test_conn = QPushButton("測試連線")
-        self.btn_test_conn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_test_conn.setStyleSheet("""
-            QPushButton {
-                background-color: #3b4261;
-                color: #c0caf5;
-                border: 1px solid #565f89;
-                border-radius: 4px;
-                padding: 4px 12px;
-            }
-            QPushButton:hover {
-                background-color: #565f89;
-            }
-        """)
-        
-        # 連線圓點指示燈
-        self.lbl_status_dot = QLabel()
-        self.lbl_status_dot.setFixedSize(12, 12)
-        # 預設為灰色指示燈 (未連線)
-        self.lbl_status_dot.setStyleSheet("background-color: #565f89; border-radius: 6px;")
-        
-        self.lbl_conn_status = QLabel("尚未測試")
-        self.lbl_conn_status.setStyleSheet("color: #565f89; font-size: 11px;")
-        
-        conn_layout.addWidget(self.btn_test_conn)
-        conn_layout.addWidget(self.lbl_status_dot)
-        conn_layout.addWidget(self.lbl_conn_status)
-        conn_layout.addStretch()
-        local_layout.addRow("", conn_layout)
-
-        lbl_local_model = QLabel("使用模型：")
-        lbl_local_model.setStyleSheet("color: #a9b1d6;")
-        self.cb_local_model = QComboBox()
-        self.cb_local_model.setStyleSheet("background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;")
-        self.cb_local_model.setPlaceholderText("請點擊測試連線拉取模型")
-        local_layout.addRow(lbl_local_model, self.cb_local_model)
-
+        self.local_widget = LocalAiWidget()
         self.controls_layout.addWidget(self.local_widget)
-
-        # 4. 可收合進階設定區塊 (保護 VRAM)
-        self.btn_advanced_toggle = QPushButton("▶ 進階設定 (VRAM 防護)")
-        self.btn_advanced_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_advanced_toggle.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #bb9af3;
-                text-align: left;
-                border: none;
-                font-weight: bold;
-                padding: 4px 0px;
-            }
-            QPushButton:hover {
-                color: #ff9e64;
-            }
-        """)
-        self.controls_layout.addWidget(self.btn_advanced_toggle)
-
-        self.advanced_widget = QWidget()
-        advanced_layout = QFormLayout(self.advanced_widget)
-        advanced_layout.setContentsMargins(10, 0, 10, 0)
-        advanced_layout.setSpacing(6)
-
-        # Context Length (防過大爆 VRAM)
-        lbl_ctx = QLabel("最大 Context 長度：")
-        lbl_ctx.setStyleSheet("color: #a9b1d6;")
-        self.txt_ctx = QLineEdit("4096")
-        self.txt_ctx.setValidator(QIntValidator(128, 65536))
-        self.txt_ctx.setStyleSheet("background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;")
-        advanced_layout.addRow(lbl_ctx, self.txt_ctx)
-
-        # 創意發散度 (底層對應 LLM temperature，控制隨機性與多樣性)
-        lbl_temp = QLabel("創意發散度：")
-        lbl_temp.setStyleSheet("color: #a9b1d6;")
-        self.txt_temp = QLineEdit("0.7")
-        self.txt_temp.setValidator(QDoubleValidator(0.0, 2.0, 2))
-        self.txt_temp.setStyleSheet("background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;")
-        advanced_layout.addRow(lbl_temp, self.txt_temp)
-
-        self.advanced_widget.setVisible(False)  # 預設折疊隱藏
-        self.controls_layout.addWidget(self.advanced_widget)
 
         # 分割線
         sep = QFrame()
@@ -254,13 +108,13 @@ class AiPanel(BasePanel):
         sep.setStyleSheet("background-color: #3b4261;")
         self.controls_layout.addWidget(sep)
 
-        # 5. 嵌入欄位動態映射與 Prompt 輸入區
+        # 4. 嵌入欄位動態映射與 Prompt 輸入區
         self.prompt_widget = AiPromptWidget()
         self.controls_layout.addWidget(self.prompt_widget)
 
         self.controls_layout.addStretch()
 
-        # 6. 開始 AI 處理按鈕
+        # 5. 開始 AI 處理按鈕
         self.btn_start = QPushButton("開始 AI 處理")
         ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -268,25 +122,14 @@ class AiPanel(BasePanel):
 
         # --- 事件信號連接 ---
         self.cb_service.currentIndexChanged.connect(self._on_service_combo_changed)
-        self.btn_test_conn.clicked.connect(lambda: self.start_connection_test(force=True))
-        self.btn_advanced_toggle.clicked.connect(self.toggle_advanced)
         self.btn_start.clicked.connect(self.on_start_clicked)
 
-        # 欄位值變更時自動同步回 Config 記憶體並標記 dirty
-        self.cb_service.currentIndexChanged.connect(self._on_field_changed)
-        self.txt_api_key.textChanged.connect(self._on_field_changed)
-        self.cb_google_model.currentIndexChanged.connect(self._on_field_changed)
-        self.cb_google_model.lineEdit().textChanged.connect(self._on_field_changed)
-        self.cb_local_backend.currentIndexChanged.connect(self._on_field_changed)
-        self.txt_local_url.textChanged.connect(self._on_field_changed)
-        self.cb_local_model.currentIndexChanged.connect(self._on_field_changed)
-        self.txt_ctx.textChanged.connect(self._on_field_changed)
-        self.txt_temp.textChanged.connect(self._on_field_changed)
-        self.prompt_widget.cb_target_col.currentIndexChanged.connect(self._on_field_changed)
-        self.prompt_widget.txt_prompt.textChanged.connect(self._on_field_changed)
-
-        # 當伺服器網址文字框按 Enter 或編輯完成時，也非同步探測一下
-        self.txt_local_url.editingFinished.connect(self.start_connection_test)
+        # 欄位值變更時即時、獨立地同步回 Config 記憶體並標記 dirty
+        self.cb_service.currentIndexChanged.connect(self._on_service_changed)
+        self.google_widget.field_changed.connect(self._on_google_fields_changed)
+        self.local_widget.field_changed.connect(self._on_local_fields_changed)
+        self.prompt_widget.cb_target_col.currentIndexChanged.connect(self._on_target_col_changed)
+        self.prompt_widget.txt_prompt.textChanged.connect(self._on_prompt_changed)
 
     # ── UI 互動 Slot ──────────────────────────────────────────────────────────
 
@@ -299,95 +142,7 @@ class AiPanel(BasePanel):
         self.local_widget.setVisible(not is_google)
         
         if not is_google:
-            self.start_connection_test()
-
-    def toggle_advanced(self):
-        """
-        摺疊與收合進階設定區
-        """
-        visible = not self.advanced_widget.isVisible()
-        self.advanced_widget.setVisible(visible)
-        self.btn_advanced_toggle.setText("▼ 進階設定 (VRAM 防護)" if visible else "▶ 進階設定 (VRAM 防護)")
-
-    def start_connection_test(self, force=False):
-        """
-        非同步探測 Local AI (Ollama) Port 是否可用。
-
-        【連線測試防重複機制】：
-        若 force=False 且已執行過檢查 (_has_checked_ai_conn == True)，
-        僅在當前 AI 服務或網址與上一次檢查不同（即後端變更）時，才發起測試。
-        若 force=True（如手動點擊「測試連線」），則強制發起測試。
-        """
-        if self.cb_service.currentText() == "Google AI":
-            return
-
-        # 避免重複測試
-        if self.tester and self.tester.isRunning():
-            return
-
-        url = self.txt_local_url.text().strip()
-        service = self.cb_service.currentText()
-
-        # 判斷是否略過連線測試
-        if not force and self._has_checked_ai_conn:
-            if service == self._last_checked_service and url == self._last_checked_url:
-                return
-
-        if not url:
-            self._update_conn_ui(state="failed", msg="網址不能為空")
-            return
-
-        self._update_conn_ui(state="connecting")
-
-        # 記錄本次發起測試的後端設定資訊
-        self._has_checked_ai_conn = True
-        self._last_checked_service = service
-        self._last_checked_url = url
-
-        self.tester = ConnectionTester(url)
-        self.tester.success.connect(self._on_test_success)
-        self.tester.failed.connect(self._on_test_failed)
-        self.tester.start()
-
-    def _on_test_success(self, models):
-        self._update_conn_ui(state="success")
-        # 載入模型到下拉選單
-        self.cb_local_model.blockSignals(True)
-        current_sel = self.cb_local_model.currentText()
-        self.cb_local_model.clear()
-        if models:
-            self.cb_local_model.addItems(models)
-            if current_sel in models:
-                self.cb_local_model.setCurrentText(current_sel)
-            else:
-                self.cb_local_model.setCurrentIndex(0)
-        else:
-            self.cb_local_model.setPlaceholderText("連線成功但無本機模型")
-        self.cb_local_model.blockSignals(False)
-        self._mark_dirty()
-
-    def _on_test_failed(self, error_msg):
-        # 限制長度避免爆 UI
-        err_brief = error_msg[:60] + "..." if len(error_msg) > 60 else error_msg
-        self._update_conn_ui(state="failed", msg=err_brief)
-        self.cb_local_model.blockSignals(True)
-        self.cb_local_model.clear()
-        self.cb_local_model.setPlaceholderText("連線失敗")
-        self.cb_local_model.blockSignals(False)
-
-    def _update_conn_ui(self, state, msg=""):
-        if state == "connecting":
-            self.lbl_status_dot.setStyleSheet("background-color: #e0af68; border-radius: 6px;") # 黃燈
-            self.lbl_conn_status.setText("連線探測中...")
-            self.lbl_conn_status.setStyleSheet("color: #e0af68; font-size: 11px;")
-        elif state == "success":
-            self.lbl_status_dot.setStyleSheet("background-color: #9ece6a; border-radius: 6px;") # 綠燈
-            self.lbl_conn_status.setText("連線成功")
-            self.lbl_conn_status.setStyleSheet("color: #9ece6a; font-size: 11px;")
-        elif state == "failed":
-            self.lbl_status_dot.setStyleSheet("background-color: #f7768e; border-radius: 6px;") # 紅燈
-            self.lbl_conn_status.setText(f"失敗: {msg}")
-            self.lbl_conn_status.setStyleSheet("color: #f7768e; font-size: 11px;")
+            self.local_widget.start_connection_test()
 
     # ── Interface 實作 ────────────────────────────────────────────────────────
     def get_package_name(self) -> str:
@@ -422,9 +177,22 @@ class AiPanel(BasePanel):
         cfg.local_backend = data.get("local_backend", "Ollama")
         cfg.local_server_url = data.get("local_server_url", "http://localhost:11434")
         cfg.local_model = data.get("local_model", "")
-        cfg.advanced_num_ctx = data.get("advanced_num_ctx", 4096)
-        cfg.advanced_temperature = data.get("advanced_temperature", 0.7)
-        cfg.target_col = data.get("target_col", "")
+        
+        try:
+            cfg.advanced_num_ctx = int(data.get("advanced_num_ctx", 4096))
+        except (ValueError, TypeError):
+            cfg.advanced_num_ctx = 4096
+            
+        try:
+            cfg.advanced_temperature = float(data.get("advanced_temperature", 0.7))
+        except (ValueError, TypeError):
+            cfg.advanced_temperature = 0.7
+            
+        try:
+            cfg.target_col = int(data.get("target_col", -1))
+        except (ValueError, TypeError):
+            cfg.target_col = -1
+            
         cfg.prompt_template = data.get("prompt_template", "")
         self.restore_from_config()
 
@@ -433,17 +201,28 @@ class AiPanel(BasePanel):
     def _mark_dirty(self):
         self.config.dirty = True
 
-    def _on_field_changed(self):
-        """
-        欄位值變更時的 Slot 函式。
+    def _on_service_changed(self):
+        self.config.ai_service = self.cb_service.currentText()
+        self._mark_dirty()
+        self._on_service_combo_changed(self.cb_service.currentIndex())
 
-        【設計決策（設定即時同步）】：
-        當 UI 控制項變更時，立即呼叫 save_to_config() 將最新值寫入記憶體組態（ai_panel_config），
-        並標記 dirty。這可確保記憶體資料即時更新，避免在其他操作（如載入 CSV）
-        觸發 restore_from_config() 時，因記憶體仍保留舊資料而被舊設定覆蓋。
-        主程式會統一控制硬碟存檔（settings.json）的寫入時機。
-        """
-        self.save_to_config()
+    def _on_google_fields_changed(self):
+        self.google_widget.save_to_config(self.config)
+        self._mark_dirty()
+
+    def _on_local_fields_changed(self):
+        self.local_widget.save_to_config(self.config)
+        self._mark_dirty()
+
+    def _on_target_col_changed(self):
+        # 只有在已載入資料時，才從選單儲存 target_col。
+        # 避免在 clear/addItem 或剛啟動尚未載入資料時，因索引變化而誤將 -1 寫入。
+        if self.context and self.context.is_data_loaded:
+            self.config.target_col = self.prompt_widget.get_target_col()
+            self._mark_dirty()
+
+    def _on_prompt_changed(self):
+        self.config.prompt_template = self.prompt_widget.get_prompt()
         self._mark_dirty()
 
     def restore_from_config(self):
@@ -452,18 +231,7 @@ class AiPanel(BasePanel):
         """
         cfg = self.config
         
-        # 阻擋所有子控制項的變更訊號，防止在還原過程中因觸發值變更而執行 _on_field_changed()
-        # 進而導致以未還原完成的 UI 狀態覆寫記憶體 Config
         self.cb_service.blockSignals(True)
-        self.txt_api_key.blockSignals(True)
-        self.cb_google_model.blockSignals(True)
-        if self.cb_google_model.lineEdit():
-            self.cb_google_model.lineEdit().blockSignals(True)
-        self.cb_local_backend.blockSignals(True)
-        self.txt_local_url.blockSignals(True)
-        self.cb_local_model.blockSignals(True)
-        self.txt_ctx.blockSignals(True)
-        self.txt_temp.blockSignals(True)
         self.prompt_widget.cb_target_col.blockSignals(True)
         self.prompt_widget.txt_prompt.blockSignals(True)
         
@@ -474,22 +242,10 @@ class AiPanel(BasePanel):
                 self.cb_service.setCurrentIndex(idx)
             
             # Google AI 部分
-            self.txt_api_key.setText(cfg.google_api_key)
-            self.cb_google_model.setCurrentText(cfg.google_model)
+            self.google_widget.restore_from_config(cfg)
             
             # Local AI 部分
-            idx = self.cb_local_backend.findText(cfg.local_backend)
-            if idx != -1:
-                self.cb_local_backend.setCurrentIndex(idx)
-            self.txt_local_url.setText(cfg.local_server_url)
-            
-            # 填回可能之前存的模型名稱
-            if cfg.local_model:
-                self.cb_local_model.setCurrentText(cfg.local_model)
-                
-            # 進階設定部分
-            self.txt_ctx.setText(str(cfg.advanced_num_ctx))
-            self.txt_temp.setText(str(cfg.advanced_temperature))
+            self.local_widget.restore_from_config(cfg)
             
             # Prompt widget 部分
             self.prompt_widget.set_target_col(cfg.target_col)
@@ -499,45 +255,8 @@ class AiPanel(BasePanel):
             self._on_service_combo_changed(self.cb_service.currentIndex())
         finally:
             self.cb_service.blockSignals(False)
-            self.txt_api_key.blockSignals(False)
-            self.cb_google_model.blockSignals(False)
-            if self.cb_google_model.lineEdit():
-                self.cb_google_model.lineEdit().blockSignals(False)
-            self.cb_local_backend.blockSignals(False)
-            self.txt_local_url.blockSignals(False)
-            self.cb_local_model.blockSignals(False)
-            self.txt_ctx.blockSignals(False)
-            self.txt_temp.blockSignals(False)
             self.prompt_widget.cb_target_col.blockSignals(False)
             self.prompt_widget.txt_prompt.blockSignals(False)
-
-    def save_to_config(self):
-        """
-        將目前 UI 設定存回自有的 AiPanelConfig 暫存。
-        """
-        cfg = self.config
-        
-        cfg.ai_service = self.cb_service.currentText()
-        cfg.google_api_key = self.txt_api_key.text()
-        cfg.google_model = self.cb_google_model.currentText()
-        
-        cfg.local_backend = self.cb_local_backend.currentText()
-        cfg.local_server_url = self.txt_local_url.text().strip()
-        cfg.local_model = self.cb_local_model.currentText()
-        
-        # 進階
-        try:
-            cfg.advanced_num_ctx = int(self.txt_ctx.text())
-        except ValueError:
-            cfg.advanced_num_ctx = 4096
-            
-        try:
-            cfg.advanced_temperature = float(self.txt_temp.text())
-        except ValueError:
-            cfg.advanced_temperature = 0.7
-            
-        cfg.target_col = self.prompt_widget.get_target_col()
-        cfg.prompt_template = self.prompt_widget.get_prompt()
 
     def show_controls(self):
         super().show_controls()
@@ -556,19 +275,12 @@ class AiPanel(BasePanel):
         當任務執行中，鎖定所有輸入控制項防呆。
         """
         self.cb_service.setEnabled(enabled)
-        self.txt_api_key.setEnabled(enabled)
-        self.cb_google_model.setEnabled(enabled)
-        self.cb_local_backend.setEnabled(enabled)
-        self.txt_local_url.setEnabled(enabled)
-        self.cb_local_model.setEnabled(enabled)
-        self.btn_test_conn.setEnabled(enabled)
-        self.txt_ctx.setEnabled(enabled)
-        self.txt_temp.setEnabled(enabled)
+        self.google_widget.set_enabled(enabled)
+        self.local_widget.set_enabled(enabled)
         self.prompt_widget.set_enabled(enabled)
         
         if not self.is_running():
             self.btn_start.setEnabled(enabled)
-
     # ── 背景執行緒控制 ────────────────────────────────────────────────────────
 
     def is_running(self) -> bool:
@@ -585,8 +297,7 @@ class AiPanel(BasePanel):
         self.start_ai_task()
 
     def start_ai_task(self):
-        # 1. 儲存設定至 config 以取得最新欄位
-        self.save_to_config()
+        # 1. 設定即時同步已由各控制項處理，直接讀取當前 config 物件
         cfg = self.config
 
         # 2. 基本校驗
