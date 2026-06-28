@@ -65,6 +65,7 @@ class LocalAiWidget(QWidget):
         applyStandardLabelStyle(lbl_backend)
         self.cb_local_backend = QComboBox()
         applyStandardComboBoxStyle(self.cb_local_backend)
+        self.cb_local_backend.addItems(["Ollama"])
         local_layout.addRow(lbl_backend, self.cb_local_backend)
 
         lbl_url = QLabel("伺服器網址：")
