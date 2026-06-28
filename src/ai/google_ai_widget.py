@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QFormLayout, QLabel, QLineEdit, QComboBox
 from PyQt6.QtCore import pyqtSignal
+from plugin_sdk.theme import applyStandardLabelStyle, applyStandardLineEditStyle, applyStandardComboBoxStyle
 
 
 class GoogleAiWidget(QWidget):
@@ -20,23 +21,21 @@ class GoogleAiWidget(QWidget):
         google_layout.setSpacing(8)
 
         lbl_api_key = QLabel("API KEY：")
-        lbl_api_key.setStyleSheet("color: #a9b1d6;")
+        applyStandardLabelStyle(lbl_api_key)
         self.txt_api_key = QLineEdit()
         self.txt_api_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.txt_api_key.setPlaceholderText("請輸入 Gemini API KEY")
-        self.txt_api_key.setStyleSheet(
-            "background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;"
-        )
+        applyStandardLineEditStyle(self.txt_api_key)
+        
         google_layout.addRow(lbl_api_key, self.txt_api_key)
 
         lbl_google_model = QLabel("使用模型：")
-        lbl_google_model.setStyleSheet("color: #a9b1d6;")
+        applyStandardLabelStyle(lbl_google_model)
         self.cb_google_model = QComboBox()
         self.cb_google_model.setEditable(True)
         self.cb_google_model.addItems(["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"])
-        self.cb_google_model.setStyleSheet(
-            "background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;"
-        )
+        applyStandardComboBoxStyle(self.cb_google_model)
+        
         google_layout.addRow(lbl_google_model, self.cb_google_model)
 
         # 信號連接，向外轉發為 field_changed

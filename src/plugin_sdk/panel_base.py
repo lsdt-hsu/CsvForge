@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 from common_data.app_context import AppContext
+from plugin_sdk.theme import applyTitleLabel, applyHintLabel
 
 
 class BasePluginPanel(QFrame):
@@ -29,13 +30,14 @@ class BasePluginPanel(QFrame):
         if title_text:
             self.lbl_title = QLabel(title_text)
             self.lbl_title.setObjectName("sectionHeader")
+            applyTitleLabel(self.lbl_title)
             self.main_layout.addWidget(self.lbl_title)
             
         if self.require_data_loading:
             # 3. 建立「尚未載入資料」提示
             self.lbl_no_data = QLabel("尚未載入資料")
             self.lbl_no_data.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            self.lbl_no_data.setStyleSheet("color: #565f89; font-style: italic; margin-top: 5px;")
+            applyHintLabel(self.lbl_no_data)
             self.main_layout.addWidget(self.lbl_no_data)
             
             # 4. 建立供子類別使用的控制項容器與佈局

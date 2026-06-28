@@ -205,3 +205,29 @@ def applyStandardSliderStyle(widget) -> None:
         }
     """
     widget.setStyleSheet(qss)
+
+
+def applyTitleLabel(widget) -> None:
+    """套用面板中的標題樣式 (如「翻譯」字樣)"""
+    qss = """
+        QLabel {
+            color: #7aa2f7;
+            font-family: "Microsoft JhengHei", "Segoe UI", sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+        }
+    """
+    widget.setStyleSheet(qss)
+
+
+def applyHintLabel(widget) -> None:
+    """套用獨立的提示文字樣式 (如「尚未載入資料」)"""
+    qss = """
+        QLabel {
+            color: #565f89;
+            font-family: "Microsoft JhengHei", "Segoe UI", sans-serif;
+            font-size: 13px;
+            font-style: italic;
+        }
+    """
+    widget.setStyleSheet(qss)

@@ -7,6 +7,7 @@
 - The AI MUST explicitly declare that it has loaded and is adhering to the rules in .agents/AGENTS.md only once, in the first response to the user's initial prompt of each conversation. Do not repeat this declaration in subsequent steps or intermediate tool execution explanations within the same conversation.
 
 ## 2. Action Flow & Git Policy
+- **Codebase Baseline**: ALWAYS read and use the current local files in the working directory as the absolute baseline for analysis, planning, and editing. Do NEVER use `git commit` versions or git history as your codebase reference unless explicitly instructed by the developer to analyze git history.
 - **If Minor Changes** (constants, strings, assets, variable/function renaming):
   - Direct edit allowed (no prior plan needed).
   - Auto local `git commit` allowed. No auto `git push`.

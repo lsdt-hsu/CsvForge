@@ -6,6 +6,10 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIntValidator, QDoubleValidator
 
 from ai.ai_client import check_ollama_models
+from plugin_sdk.theme import (
+    applyStandardLabelStyle, applyStandardLineEditStyle, 
+    applyStandardComboBoxStyle, applyStandardButtonStyle
+)
 
 
 class ConnectionTester(QThread):
@@ -58,20 +62,15 @@ class LocalAiWidget(QWidget):
         local_layout.setSpacing(8)
 
         lbl_backend = QLabel("後端選擇：")
-        lbl_backend.setStyleSheet("color: #a9b1d6;")
+        applyStandardLabelStyle(lbl_backend)
         self.cb_local_backend = QComboBox()
-        self.cb_local_backend.addItems(["Ollama"])
-        self.cb_local_backend.setStyleSheet(
-            "background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;"
-        )
+        applyStandardComboBoxStyle(self.cb_local_backend)
         local_layout.addRow(lbl_backend, self.cb_local_backend)
 
         lbl_url = QLabel("伺服器網址：")
-        lbl_url.setStyleSheet("color: #a9b1d6;")
+        applyStandardLabelStyle(lbl_url)
         self.txt_local_url = QLineEdit("http://localhost:11434")
-        self.txt_local_url.setStyleSheet(
-            "background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;"
-        )
+        applyStandardLineEditStyle(self.txt_local_url)
         local_layout.addRow(lbl_url, self.txt_local_url)
 
         # 連線狀態與測試按鈕
@@ -80,18 +79,7 @@ class LocalAiWidget(QWidget):
         
         self.btn_test_conn = QPushButton("測試連線")
         self.btn_test_conn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_test_conn.setStyleSheet("""
-            QPushButton {
-                background-color: #3b4261;
-                color: #c0caf5;
-                border: 1px solid #565f89;
-                border-radius: 4px;
-                padding: 4px 12px;
-            }
-            QPushButton:hover {
-                background-color: #565f89;
-            }
-        """)
+        applyStandardButtonStyle(self.btn_test_conn)
         
         # 連線圓點指示燈
         self.lbl_status_dot = QLabel()
@@ -100,7 +88,8 @@ class LocalAiWidget(QWidget):
         self.lbl_status_dot.setStyleSheet("background-color: #565f89; border-radius: 6px;")
         
         self.lbl_conn_status = QLabel("尚未測試")
-        self.lbl_conn_status.setStyleSheet("color: #565f89; font-size: 11px;")
+        applyStandardLabelStyle(self.lbl_conn_status)
+        self.lbl_conn_status.setStyleSheet(self.lbl_conn_status.styleSheet() + " font-size: 11px;")
         
         conn_layout.addWidget(self.btn_test_conn)
         conn_layout.addWidget(self.lbl_status_dot)
@@ -109,11 +98,9 @@ class LocalAiWidget(QWidget):
         local_layout.addRow("", conn_layout)
 
         lbl_local_model = QLabel("使用模型：")
-        lbl_local_model.setStyleSheet("color: #a9b1d6;")
+        applyStandardLabelStyle(lbl_local_model)
         self.cb_local_model = QComboBox()
-        self.cb_local_model.setStyleSheet(
-            "background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;"
-        )
+        applyStandardComboBoxStyle(self.cb_local_model)
         self.cb_local_model.setPlaceholderText("請點擊測試連線拉取模型")
         local_layout.addRow(lbl_local_model, self.cb_local_model)
 
@@ -145,22 +132,18 @@ class LocalAiWidget(QWidget):
 
         # Context Length (防過大爆 VRAM)
         lbl_ctx = QLabel("最大 Context 長度：")
-        lbl_ctx.setStyleSheet("color: #a9b1d6;")
+        applyStandardLabelStyle(lbl_ctx)
         self.txt_ctx = QLineEdit("4096")
         self.txt_ctx.setValidator(QIntValidator(128, 65536))
-        self.txt_ctx.setStyleSheet(
-            "background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;"
-        )
+        applyStandardLineEditStyle(self.txt_ctx)
         advanced_layout.addRow(lbl_ctx, self.txt_ctx)
 
         # 創意發散度
         lbl_temp = QLabel("創意發散度：")
-        lbl_temp.setStyleSheet("color: #a9b1d6;")
+        applyStandardLabelStyle(lbl_temp)
         self.txt_temp = QLineEdit("0.7")
         self.txt_temp.setValidator(QDoubleValidator(0.0, 2.0, 2))
-        self.txt_temp.setStyleSheet(
-            "background-color: #1a1b26; color: #c0caf5; border: 1px solid #3b4261; padding: 4px; border-radius: 4px;"
-        )
+        applyStandardLineEditStyle(self.txt_temp)
         advanced_layout.addRow(lbl_temp, self.txt_temp)
 
         self.advanced_widget.setVisible(False)  # 預設折疊隱藏

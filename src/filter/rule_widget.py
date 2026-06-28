@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QPen, QColor
+from plugin_sdk.theme import applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardLineEditStyle
 
 class CircularToggleButton(QPushButton):
     def __init__(self, parent=None):
@@ -75,7 +76,8 @@ class RuleWidget(QWidget):
         title_layout.setContentsMargins(0, 0, 0, 0)
         
         self.lbl_rule_title = QLabel(f"規則 #{self.index}")
-        self.lbl_rule_title.setStyleSheet("font-weight: bold; color: #a9b1d6;")
+        applyStandardLabelStyle(self.lbl_rule_title)
+        self.lbl_rule_title.setStyleSheet(self.lbl_rule_title.styleSheet() + " font-weight: bold;")
         title_layout.addWidget(self.lbl_rule_title)
         
         title_layout.addStretch()
@@ -96,8 +98,10 @@ class RuleWidget(QWidget):
         row1.setContentsMargins(0, 0, 0, 0)
         row1.setSpacing(10)
         lbl_col = QLabel("比對欄位：")
+        applyStandardLabelStyle(lbl_col)
         lbl_col.setFixedWidth(75)
         self.cmb_compare_col = QComboBox()
+        applyStandardComboBoxStyle(self.cmb_compare_col)
         self.cmb_compare_col.addItem("不過濾", "none")
         self.cmb_compare_col.addItem("所有欄位", "all")
         self.cmb_compare_col.addItem("欄位範圍", "range")
@@ -117,8 +121,10 @@ class RuleWidget(QWidget):
         row_start.setContentsMargins(0, 0, 0, 0)
         row_start.setSpacing(10)
         lbl_range_start = QLabel("從欄位：")
+        applyStandardLabelStyle(lbl_range_start)
         lbl_range_start.setFixedWidth(55)
         self.cmb_range_start = QComboBox()
+        applyStandardComboBoxStyle(self.cmb_range_start)
         self.cmb_range_start.currentIndexChanged.connect(self.parent_panel.on_rule_content_changed)
         row_start.addWidget(lbl_range_start)
         row_start.addWidget(self.cmb_range_start, stretch=1)
@@ -129,8 +135,10 @@ class RuleWidget(QWidget):
         row_end.setContentsMargins(0, 0, 0, 0)
         row_end.setSpacing(10)
         lbl_range_end = QLabel("到欄位：")
+        applyStandardLabelStyle(lbl_range_end)
         lbl_range_end.setFixedWidth(55)
         self.cmb_range_end = QComboBox()
+        applyStandardComboBoxStyle(self.cmb_range_end)
         self.cmb_range_end.currentIndexChanged.connect(self.parent_panel.on_rule_content_changed)
         row_end.addWidget(lbl_range_end)
         row_end.addWidget(self.cmb_range_end, stretch=1)
@@ -144,8 +152,10 @@ class RuleWidget(QWidget):
         row2.setContentsMargins(0, 0, 0, 0)
         row2.setSpacing(10)
         lbl_method = QLabel("比對方式：")
+        applyStandardLabelStyle(lbl_method)
         lbl_method.setFixedWidth(75)
         self.cmb_compare_method = QComboBox()
+        applyStandardComboBoxStyle(self.cmb_compare_method)
         self.cmb_compare_method.addItems(["完全符合", "包含", "未包含", "正規表達式", "屬於", "不屬於"])
         self.cmb_compare_method.currentIndexChanged.connect(self.on_method_changed)
         row2.addWidget(lbl_method)
@@ -157,8 +167,10 @@ class RuleWidget(QWidget):
         row3.setContentsMargins(0, 0, 0, 0)
         row3.setSpacing(10)
         lbl_target = QLabel("比對目標：")
+        applyStandardLabelStyle(lbl_target)
         lbl_target.setFixedWidth(75)
         self.cmb_compare_target = QComboBox()
+        applyStandardComboBoxStyle(self.cmb_compare_target)
         self.cmb_compare_target.addItem("手動輸入", "manual")
         self.cmb_compare_target.currentIndexChanged.connect(self.on_target_changed)
         row3.addWidget(lbl_target)
@@ -171,6 +183,7 @@ class RuleWidget(QWidget):
         value_layout.setContentsMargins(20, 0, 0, 0)
         value_layout.setSpacing(0)
         self.txt_compare_value = QLineEdit()
+        applyStandardLineEditStyle(self.txt_compare_value)
         self.txt_compare_value.setPlaceholderText("輸入比對值或正規表達式")
         self.txt_compare_value.textChanged.connect(self.parent_panel.on_rule_content_changed)
         value_layout.addWidget(self.txt_compare_value)
@@ -182,6 +195,7 @@ class RuleWidget(QWidget):
         belong_layout.setContentsMargins(20, 0, 0, 0)
         belong_layout.setSpacing(0)
         self.cmb_belong_value = QComboBox()
+        applyStandardComboBoxStyle(self.cmb_belong_value)
         self.cmb_belong_value.currentIndexChanged.connect(self.parent_panel.on_rule_content_changed)
         belong_layout.addWidget(self.cmb_belong_value)
         layout.addWidget(self.belong_container)

@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator
-from base.main_base_panel import BasePanel
-from base.main_theme import ThemeStyle
+from plugin_sdk.panel_base import BasePluginPanel
+from plugin_sdk.theme import applyStandardButtonStyle, applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardSliderStyle
 
 
 
@@ -34,7 +34,7 @@ class TranslatePanelConfig:
     tgt_col: int = 1
 
 
-class TranslationPanel(BasePanel):
+class TranslationPanel(BasePluginPanel):
 
 
     def __init__(self, parent=None, context=None):
@@ -113,39 +113,51 @@ class TranslationPanel(BasePanel):
         ]
 
         lbl_src_lang = QLabel("來源語言：")
+        applyStandardLabelStyle(lbl_src_lang)
         self.cb_src_lang = QComboBox()
+        applyStandardComboBoxStyle(self.cb_src_lang)
         for code, name in self.langs:
             self.cb_src_lang.addItem(name, code)
         self.cb_src_lang.setCurrentIndex(0)
 
         lbl_tgt_lang = QLabel("目標語言：")
+        applyStandardLabelStyle(lbl_tgt_lang)
         self.cb_tgt_lang = QComboBox()
+        applyStandardComboBoxStyle(self.cb_tgt_lang)
         for code, name in self.langs:
             self.cb_tgt_lang.addItem(name, code)
         self.cb_tgt_lang.setCurrentIndex(1)
 
         lbl_src_col = QLabel("來源欄號：")
+        applyStandardLabelStyle(lbl_src_col)
         self.txt_src_col = QComboBox()
-        self.txt_src_col.setStyleSheet(ThemeStyle.STYLE_COMBOBOX)
+        applyStandardComboBoxStyle(self.txt_src_col)
 
         lbl_tgt_col = QLabel("目標欄號：")
+        applyStandardLabelStyle(lbl_tgt_col)
         self.txt_tgt_col = QComboBox()
-        self.txt_tgt_col.setStyleSheet(ThemeStyle.STYLE_COMBOBOX)
+        applyStandardComboBoxStyle(self.txt_tgt_col)
 
         self.lbl_batch_title = QLabel("批次間隔：10 秒")
+        applyStandardLabelStyle(self.lbl_batch_title)
         self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
+        applyStandardSliderStyle(self.slider_batch_interval)
         self.slider_batch_interval.setRange(10, 30)
         self.slider_batch_interval.setValue(10)
         self.slider_batch_interval.valueChanged.connect(self._on_batch_interval_changed)
 
         self.lbl_single_title = QLabel("單筆間隔：1.0 秒")
+        applyStandardLabelStyle(self.lbl_single_title)
         self.slider_single_interval = QSlider(Qt.Orientation.Horizontal)
+        applyStandardSliderStyle(self.slider_single_interval)
         self.slider_single_interval.setRange(2, 10)
         self.slider_single_interval.setValue(2)
         self.slider_single_interval.valueChanged.connect(self._on_single_interval_changed)
 
         self.lbl_batch_size_title = QLabel("批次筆數：18 筆")
+        applyStandardLabelStyle(self.lbl_batch_size_title)
         self.slider_batch_size = QSlider(Qt.Orientation.Horizontal)
+        applyStandardSliderStyle(self.slider_batch_size)
         self.slider_batch_size.setRange(10, 20)
         self.slider_batch_size.setValue(18)
         self.slider_batch_size.valueChanged.connect(self._on_batch_size_changed)
@@ -169,7 +181,7 @@ class TranslationPanel(BasePanel):
         self.controls_layout.addStretch()
 
         self.btn_start = QPushButton("開始翻譯")
-        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
+        applyStandardButtonStyle(self.btn_start, is_running=False)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.on_start_clicked)
         self.controls_layout.addWidget(self.btn_start)
@@ -351,13 +363,13 @@ class TranslationPanel(BasePanel):
     def on_translator_started(self):
         self.btn_start.setText("停止翻譯")
         self.btn_start.setEnabled(True)
-        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=True)
+        applyStandardButtonStyle(self.btn_start, is_running=True)
         self.set_enabled(False)
 
     def on_translator_finished(self):
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
-        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
+        applyStandardButtonStyle(self.btn_start, is_running=False)
         self.set_enabled(True)
 
     def on_translator_cancelled(self):

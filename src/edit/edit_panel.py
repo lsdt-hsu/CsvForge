@@ -1,20 +1,13 @@
-from base.main_base_panel import BasePanel
-from base.main_theme import ThemeStyle
+# src/edit/edit_panel.py
+from plugin_sdk.panel_base import BasePluginPanel
+from plugin_sdk.theme import applyHintLabel
 from PyQt6.QtWidgets import QLabel
 from PyQt6.QtCore import Qt
 
-class EditPanel(BasePanel):
-    def __init__(self, parent=None, context=None):
-        super().__init__(parent, title_text="編輯", require_data_loading=False, context=context)
-        self.init_ui()
 
-    def init_ui(self):
-        self.lbl_placeholder = QLabel("編輯功能\n(日後添加)")
-        self.lbl_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_placeholder.setStyleSheet(f"color: {ThemeStyle.COLOR_TEXT_MUTED}; font-style: italic; font-size: 14px; margin-top: 20px;")
-        
-        self.controls_layout.addWidget(self.lbl_placeholder)
-        self.controls_layout.addStretch()
+class EditPanel(BasePluginPanel):
+    def __init__(self, parent=None, context=None):
+        super().__init__(parent, title_text="編輯(施工中)", require_data_loading=False, context=context)
 
     def get_package_name(self) -> str:
         return "edit_panel"
@@ -26,7 +19,4 @@ class EditPanel(BasePanel):
         return {}
 
     def deserialize_config(self, data: dict) -> None:
-        pass
-
-    def set_enabled(self, enabled):
         pass

@@ -12,8 +12,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon, QIntValidator
 from dataclasses import dataclass, field
-from base.main_base_panel import BasePanel
-from base.main_theme import ThemeStyle
+from plugin_sdk.panel_base import BasePluginPanel
+from plugin_sdk.theme import applyStandardButtonStyle, applyStandardLabelStyle, applyStandardLineEditStyle
 
 from filter import logic_tree
 from filter.rule_widget import RuleWidget, CircularToggleButton
@@ -35,7 +35,7 @@ class FilterPanelConfig:
     start_row: str = "1"
     end_row: str = ""
 
-class FilterPanel(BasePanel):
+class FilterPanel(BasePluginPanel):
     request_filter = pyqtSignal(dict)
 
     def __init__(self, parent=None, context=None):
@@ -68,15 +68,19 @@ class FilterPanel(BasePanel):
         range_layout.setSpacing(10)
 
         lbl_start = QLabel("行號：")
+        applyStandardLabelStyle(lbl_start)
         self.txt_filter_start_row = QLineEdit("1")
+        applyStandardLineEditStyle(self.txt_filter_start_row)
         self.txt_filter_start_row.setPlaceholderText("1")
         self.txt_filter_start_row.setValidator(QIntValidator(1, 9999999))
         self.txt_filter_start_row.setFixedWidth(80)
         self.txt_filter_start_row.textChanged.connect(self._on_row_range_changed)
 
         lbl_end = QLabel("~")
+        applyStandardLabelStyle(lbl_end)
         lbl_end.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.txt_filter_end_row = QLineEdit()
+        applyStandardLineEditStyle(self.txt_filter_end_row)
         self.txt_filter_end_row.setPlaceholderText("檔尾")
         self.txt_filter_end_row.setValidator(QIntValidator(1, 9999999))
         self.txt_filter_end_row.setFixedWidth(80)
@@ -135,15 +139,17 @@ class FilterPanel(BasePanel):
         self.controls_layout.addWidget(self.scroll_area, stretch=1)
 
         self.btn_start_filter = QPushButton("開始過濾")
-        ThemeStyle.apply_primary_button_style(self.btn_start_filter, is_running=False)
+        applyStandardButtonStyle(self.btn_start_filter, is_running=False)
         self.btn_start_filter.clicked.connect(self.on_filter_clicked)
         self.controls_layout.addWidget(self.btn_start_filter)
 
         self.lbl_expr_title = QLabel("當前規則邏輯 (可編輯)：")
-        self.lbl_expr_title.setStyleSheet("font-weight: bold; color: #565f89; margin-top: 5px;")
+        applyStandardLabelStyle(self.lbl_expr_title)
+        self.lbl_expr_title.setStyleSheet(self.lbl_expr_title.styleSheet() + " font-weight: bold; margin-top: 5px;")
         self.controls_layout.addWidget(self.lbl_expr_title)
 
         self.txt_expression = CustomTextEdit()
+        applyStandardLineEditStyle(self.txt_expression)
         self.txt_expression.setPlaceholderText("例如: #1 AND (#2 OR #3)")
         self.txt_expression.setFixedHeight(45)
         self.txt_expression.setAcceptRichText(False)
@@ -268,13 +274,13 @@ class FilterPanel(BasePanel):
             formatted_expr = logic_tree.to_string(tree)
             self.txt_expression.blockSignals(True)
             self.txt_expression.setPlainText(formatted_expr)
-            self.txt_expression.setStyleSheet("")
+            applyStandardLineEditStyle(self.txt_expression)
             self.txt_expression.blockSignals(False)
 
             self.expression_is_valid = True
             self._sync_rules_to_config()
         except ValueError as e:
-            self.txt_expression.setStyleSheet(f"border: 2px solid {ThemeStyle.COLOR_TEXT_CRITICAL}; border-radius: 4px;")
+            self.txt_expression.setStyleSheet("border: 2px solid #f7768e; border-radius: 6px;")
             self.expression_is_valid = False
 
     def update_column_dropdowns(self, num_cols):

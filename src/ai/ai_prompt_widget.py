@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (
     QToolButton, QTextEdit, QScrollArea, QFrame, QLayout, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QPoint, QRect, QSize
+from plugin_sdk.theme import applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardLineEditStyle
 
 
 class FlowLayout(QLayout):
@@ -112,23 +113,12 @@ class AiPromptWidget(QWidget):
         target_layout.setSpacing(8)
         
         lbl_target = QLabel("輸出欄位：")
-        lbl_target.setStyleSheet("color: #c0caf5;")
+        applyStandardLabelStyle(lbl_target)
         
         # 目標寫入欄位選單，限制為唯讀下拉選單
         self.cb_target_col = QComboBox()
         self.cb_target_col.setPlaceholderText("選擇欄位名稱")
-        self.cb_target_col.setStyleSheet("""
-            QComboBox {
-                background-color: #1a1b26;
-                color: #c0caf5;
-                border: 1px solid #3b4261;
-                border-radius: 4px;
-                padding: 4px;
-            }
-            QComboBox:focus {
-                border: 1px solid #7aa2f7;
-            }
-        """)
+        applyStandardComboBoxStyle(self.cb_target_col)
         
         target_layout.addWidget(lbl_target)
         target_layout.addWidget(self.cb_target_col, 1)
@@ -136,7 +126,7 @@ class AiPromptWidget(QWidget):
 
         # 2. 可用欄位標籤 (QToolButton 水平滾動區)
         lbl_tags_title = QLabel("可用欄位快選：")
-        lbl_tags_title.setStyleSheet("color: #c0caf5;")
+        applyStandardLabelStyle(lbl_tags_title)
         layout.addWidget(lbl_tags_title)
 
         # 使用 QScrollArea 裝載多列折行的 QToolButtons
@@ -156,26 +146,17 @@ class AiPromptWidget(QWidget):
 
         # 3. AI 指示 (Prompt)
         lbl_prompt_title = QLabel("AI 指示（Prompt）：")
-        lbl_prompt_title.setStyleSheet("color: #c0caf5;")
+        applyStandardLabelStyle(lbl_prompt_title)
         layout.addWidget(lbl_prompt_title)
 
         self.txt_prompt = QTextEdit()
         self.txt_prompt.setPlaceholderText("請輸入 AI 指導語，例如：\n根據 {姓名} 與 {生日}，以紫微斗數判斷今日運勢。\n嚴格限制：只能傳回「吉」、「普通」、「兇」其中一個詞。")
         self.txt_prompt.setAcceptRichText(False)
         self.txt_prompt.setMinimumHeight(100)
-        self.txt_prompt.setStyleSheet("""
-            QTextEdit {
-                background-color: #1a1b26;
-                color: #c0caf5;
-                border: 1px solid #3b4261;
-                border-radius: 4px;
-                padding: 6px;
-                font-family: Consolas, 'Courier New', monospace;
-            }
-            QTextEdit:focus {
-                border: 1px solid #7aa2f7;
-            }
-        """)
+        applyStandardLineEditStyle(self.txt_prompt)
+        self.txt_prompt.setStyleSheet(
+            self.txt_prompt.styleSheet() + " font-family: Consolas, 'Courier New', monospace;"
+        )
         fm = self.txt_prompt.fontMetrics()
         self.txt_prompt.setMaximumHeight(10 * fm.lineSpacing() + 16)
         layout.addWidget(self.txt_prompt)

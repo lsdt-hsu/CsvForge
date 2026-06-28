@@ -5,15 +5,15 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from base.main_base_panel import BasePanel
-from base.main_theme import ThemeStyle
+from plugin_sdk.panel_base import BasePluginPanel
+from plugin_sdk.theme import applyStandardButtonStyle, applyStandardLabelStyle, applyStandardComboBoxStyle
 from ai.ai_prompt_widget import AiPromptWidget
 from ai.google_ai_widget import GoogleAiWidget
 from ai.local_ai_widget import LocalAiWidget
 from ai.ai_worker import CSVAIWorker
 from ai.ai_config import AiPanelConfig
 
-class AiPanel(BasePanel):
+class AiPanel(BasePluginPanel):
     """
     AiPanel — AI 處理面板。
     
@@ -67,9 +67,10 @@ class AiPanel(BasePanel):
         # 1. AI 服務選擇
         service_layout = QHBoxLayout()
         lbl_service = QLabel("AI 服務：")
-        lbl_service.setStyleSheet("color: #c0caf5;")
+        applyStandardLabelStyle(lbl_service)
         self.cb_service = QComboBox()
         self.cb_service.addItems(["Google AI", "Local AI"])
+        applyStandardComboBoxStyle(self.cb_service)
         service_layout.addWidget(lbl_service)
         service_layout.addWidget(self.cb_service)
         self.controls_layout.addLayout(service_layout)
@@ -97,7 +98,7 @@ class AiPanel(BasePanel):
 
         # 5. 開始 AI 處理按鈕
         self.btn_start = QPushButton("開始 AI 處理")
-        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
+        applyStandardButtonStyle(self.btn_start, is_running=False)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.controls_layout.addWidget(self.btn_start)
 
@@ -341,13 +342,13 @@ class AiPanel(BasePanel):
     def _on_task_started(self):
         self.btn_start.setText("停止 AI 處理")
         self.btn_start.setEnabled(True)
-        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=True)
+        applyStandardButtonStyle(self.btn_start, is_running=True)
         self.set_enabled(False)
 
     def _on_task_finished(self):
         self.btn_start.setText("開始 AI 處理")
         self.btn_start.setEnabled(True)
-        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
+        applyStandardButtonStyle(self.btn_start, is_running=False)
         self.set_enabled(True)
         self.worker = None
         # 自動存檔 (跟 translation 面板行為保持一致)
@@ -356,7 +357,7 @@ class AiPanel(BasePanel):
     def _on_task_error(self, err_msg):
         self.btn_start.setText("開始 AI 處理")
         self.btn_start.setEnabled(True)
-        ThemeStyle.apply_primary_button_style(self.btn_start, is_running=False)
+        applyStandardButtonStyle(self.btn_start, is_running=False)
         self.set_enabled(True)
         self.worker = None
 
