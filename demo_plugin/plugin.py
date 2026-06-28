@@ -1,32 +1,46 @@
 # demo_plugin/plugin.py
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QLineEdit
-from base.main_base_panel import BasePanel
+from plugin_sdk.panel_base import BasePluginPanel
+from plugin_sdk.theme import (
+    applyStandardLabelStyle,
+    applyStandardLineEditStyle,
+    applyStandardButtonStyle,
+    applyPrimaryButtonStyle
+)
 
-class PanelClass(BasePanel):
+class PanelClass(BasePluginPanel):
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="外掛示範面板", require_data_loading=True, context=context)
         
         # 1. 說明文字
         label = QLabel("這是一個功能完整的測試外掛")
+        applyStandardLabelStyle(label)
         self.controls_layout.addWidget(label)
         
         # 2. 測試設定檔還原與儲存
-        self.controls_layout.addWidget(QLabel("外掛自訂設定輸入欄："))
+        lbl_hint = QLabel("外掛自訂設定輸入欄：")
+        applyStandardLabelStyle(lbl_hint)
+        self.controls_layout.addWidget(lbl_hint)
+        
         self.txt_test = QLineEdit()
+        applyStandardLineEditStyle(self.txt_test)
         self.txt_test.setPlaceholderText("請輸入測試文字...")
         self.controls_layout.addWidget(self.txt_test)
         
         # 3. 測試修改資料
         btn_modify = QPushButton("測試：修改 CSV 第 1 列第 1 欄資料")
+        applyStandardButtonStyle(btn_modify)
         btn_modify.clicked.connect(self.modify_data)
         self.controls_layout.addWidget(btn_modify)
         
+        # 將 btn_filter 固定在面板最下方，利用 addStretch 進行擠壓
+        self.controls_layout.addStretch()
+        
         # 4. 測試過濾資料
         btn_filter = QPushButton("測試：僅保留第 1, 3 列資料 (0-indexed 0, 2)")
+        applyPrimaryButtonStyle(btn_filter, is_running=False)
         btn_filter.clicked.connect(self.apply_custom_filter)
         self.controls_layout.addWidget(btn_filter)
-        
-        self.controls_layout.addStretch()
 
     def get_uuid(self) -> str:
         return "test-plugin-uuid-12345"

@@ -355,6 +355,12 @@ class LeftPanel(QFrame):
             self.context.side_panel_config.plugins = [p for _, p in self._loaded_plugins]
             self.context.side_panel_config.dirty = True
 
+        # 若當前已載入資料，主動通知新載入的外掛面板更新狀態
+        if self.context and self.context.is_data_loaded:
+            if hasattr(panel, "_on_global_data_loaded"):
+                panel._on_global_data_loaded()
+            panel.on_csv_data_refreshed()
+
         if auto_save and self.main_window and hasattr(self.main_window, "save_settings"):
             self.main_window.save_settings()
 

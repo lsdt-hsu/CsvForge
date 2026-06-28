@@ -28,9 +28,6 @@ class AiPanel(BasePluginPanel):
         self.worker = None
         
         self.init_ui()
-        if self.context and self.context.csv_data:
-            self.context.csv_data.data_loaded.connect(self.on_csv_data_refreshed)
-            self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
 
     def on_csv_data_refreshed(self):
         if self.context and self.context.is_data_loaded:

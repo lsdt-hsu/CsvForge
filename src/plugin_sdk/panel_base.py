@@ -61,6 +61,8 @@ class BasePluginPanel(QFrame):
         # 訂閱全域資料載入信號以自動調整載入/未載入狀態 (解耦設計)
         if self.context and self.context.csv_data:
             self.context.csv_data.data_loaded.connect(self._on_global_data_loaded)
+            self.context.csv_data.data_loaded.connect(self.on_csv_data_refreshed)
+            self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
 
     def _on_global_data_loaded(self) -> None:
         """全域資料載入/解除載入信號的自動響應槽函數"""
@@ -69,6 +71,10 @@ class BasePluginPanel(QFrame):
                 self.show_controls()
             else:
                 self.reset_panel()
+
+    def on_csv_data_refreshed(self) -> None:
+        """全域資料載入或標頭狀態變更時，由基底類別自動觸發。子類別可複寫此方法以更新 UI 數據。"""
+        pass
 
     # ── 所有 Package 必須實作的 Interface 方法 ──
     def get_uuid(self) -> str:
