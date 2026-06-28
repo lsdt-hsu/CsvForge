@@ -81,7 +81,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.csv_data = LoadedCSVData()
 
         # 建立 AppContext (必須先建立，因為面板需要使用)
-        from base.base_panel import AppContext
+        from common_data.app_context import AppContext
         self.context = AppContext(self)
 
         main_widget = QWidget()
