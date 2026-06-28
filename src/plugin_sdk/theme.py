@@ -4,7 +4,6 @@ from enum import Enum
 # 側面板最大寬度限制 (對應原本的 SIDEBAR_FULL_WIDTH)
 SIDEBAR_MAX_WIDTH = 341
 
-
 class WidgetType(Enum):
     STD_LABEL = "label"
     STD_BUTTON = "button"
@@ -13,11 +12,9 @@ class WidgetType(Enum):
     STD_CHECK_BOX = "check_box"
     STD_SLIDER = "slider"
 
-
 def getStandardFontSize(widget_type: WidgetType) -> int:
     """獲取常用元件的標準字型大小"""
     return 13
-
 
 def getStandardTextColor(widget_type: WidgetType, state: str = "normal") -> str:
     """獲取常用元件在特定狀態下的文字色彩"""
@@ -45,22 +42,9 @@ def getStandardBgColor(widget_type: WidgetType, state: str = "normal") -> str:
             return "#3b4261"
         elif state == "disabled":
             return "#24283b"
-        elif state == "running":
-            return "#f7768e"
-        elif state == "running_hover":
-            return "#ff9eaf"
-        elif state == "running_pressed":
-            return "#db4b66"
-        elif state == "primary":
-            return "#7aa2f7"
-        elif state == "primary_hover":
-            return "#89ddff"
-        elif state == "primary_pressed":
-            return "#3b4261"
     elif widget_type in (WidgetType.STD_LINE_EDIT, WidgetType.STD_COMBO_BOX):
         return "#16161e"
     return "transparent"
-
 
 def getStandardBorder(widget_type: WidgetType, state: str = "normal") -> str:
     """獲取常用元件在特定狀態下的外框邊線樣式"""
@@ -70,11 +54,9 @@ def getStandardBorder(widget_type: WidgetType, state: str = "normal") -> str:
         return "1px solid #2f3047"
     return "none"
 
-
 def getStandardBorderRadius(widget_type: WidgetType) -> str:
     """獲取常用元件的標準圓角半徑"""
     return "6px"
-
 
 def applyStandardLabelStyle(widget) -> None:
     """套用標準 Label 樣式"""
