@@ -56,14 +56,12 @@ class PanelClass(BasePanel):
             self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
 
     def on_csv_data_refreshed(self):
-        if self.context and self.context.csv_data:
-            csv_data = self.context.csv_data
-            if csv_data.all_rows:
-                if not self.controls_container.isVisible():
-                    self.show_controls()
-                self.update_column_dropdowns()
-            else:
-                self.reset_panel()
+        if self.context and self.context.is_data_loaded:
+            if not self.controls_container.isVisible():
+                self.show_controls()
+            self.update_column_dropdowns()
+        else:
+            self.reset_panel()
 
     def update_column_dropdowns(self):
         if not self.context or not self.context.csv_data:
@@ -82,29 +80,15 @@ class PanelClass(BasePanel):
             self.txt_src_col.addItem(col_name, i)
             self.txt_tgt_col.addItem(col_name, i)
             
+        self.restore_columns_from_config()
+        
         self.txt_src_col.blockSignals(False)
         self.txt_tgt_col.blockSignals(False)
-        
-        self.restore_columns_from_config()
 
     def restore_columns_from_config(self):
         cfg = self.config
-        if self.txt_src_col.count() > 0:
-            idx = self.txt_src_col.findData(cfg.src_col)
-            if idx != -1:
-                self.txt_src_col.setCurrentIndex(idx)
-            else:
-                self.txt_src_col.setCurrentIndex(0)
-                
-        if self.txt_tgt_col.count() > 0:
-            idx = self.txt_tgt_col.findData(cfg.tgt_col)
-            if idx != -1:
-                self.txt_tgt_col.setCurrentIndex(idx)
-            else:
-                if self.txt_tgt_col.count() > 1:
-                    self.txt_tgt_col.setCurrentIndex(1)
-                else:
-                    self.txt_tgt_col.setCurrentIndex(0)
+        self.txt_src_col.setCurrentIndex(cfg.src_col)
+        self.txt_tgt_col.setCurrentIndex(cfg.tgt_col)
 
 
     def _on_translation_done(self):
@@ -308,7 +292,7 @@ class PanelClass(BasePanel):
             if idx != -1:
                 self.cb_tgt_lang.setCurrentIndex(idx)
 
-            self.restore_columns_from_config()
+            self.update_column_dropdowns()
         finally:
             self.slider_batch_interval.blockSignals(False)
             self.slider_single_interval.blockSignals(False)
@@ -317,10 +301,6 @@ class PanelClass(BasePanel):
             self.cb_tgt_lang.blockSignals(False)
             self.txt_src_col.blockSignals(False)
             self.txt_tgt_col.blockSignals(False)
-
-    def show_controls(self):
-        super().show_controls()
-        self.restore_from_config()
 
     # ── 便捷讀取方法（供 start_translation_task 使用）────────────────────────
 

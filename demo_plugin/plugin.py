@@ -45,12 +45,12 @@ class PanelClass(BasePanel):
 
     def modify_data(self) -> None:
         if self.context and self.context.is_data_loaded:
-            # 修改 LoadedCSVData 中的資料並觸發更新
+            # 修改 CsvData 中的資料並觸發更新
             self.context.csv_data.update_cell(0, 0, "外掛修改成功！")
             self.write_log("INFO", "外掛已修改 CSV 第 1 列第 1 欄資料")
 
     def apply_custom_filter(self) -> None:
         if self.context and self.context.is_data_loaded:
-            # 對 LoadedCSVData 套用自訂列索引過濾
+            # 對 CsvData 套用自訂列索引過濾
             self.context.csv_data.set_filtered_indices([0, 2])
             self.write_log("INFO", "外掛已套用自訂資料過濾（僅保留第 0、2 列）")

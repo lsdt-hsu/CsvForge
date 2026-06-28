@@ -24,7 +24,6 @@ from dataclasses import dataclass, field
 
 from ui_constants import WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT
 
-
 # ── Config 資料類別 ────────────────────────────────────────────────────────────
 # 每個 Config 對應 settings.json 中的一個第一階層物件。
 # dirty flag：從設定檔讀入時預設為 False，各模組修改組態時設為 True，存檔後清為 False。
@@ -43,7 +42,6 @@ class WindowConfig:
     height: int = WINDOW_DEFAULT_HEIGHT
     is_maximized: bool = False
 
-
 @dataclass
 class MainConfig:
     """
@@ -52,7 +50,6 @@ class MainConfig:
     """
     dirty: bool = False
     active_tab: str = "filter"
-
 
 @dataclass
 class SidePanelConfig:
@@ -77,7 +74,6 @@ class IoPanelConfig:
     output_path: str = ""
     collapsed: bool = False
 
-
 @dataclass
 class DataEditorConfig:
     """
@@ -86,7 +82,6 @@ class DataEditorConfig:
     """
     dirty: bool = False
     first_row_header: bool = False
-
 
 @dataclass
 class StatusPanelConfig:
@@ -97,9 +92,6 @@ class StatusPanelConfig:
     dirty: bool = False
     expanded_height: int = 250
     collapsed: bool = False
-
-
-
 
 # ── 固定的序列化鍵值順序 ──────────────────────────────────────────────────────
 # 只保留主程式本身的 Config
@@ -122,7 +114,6 @@ _CONFIG_CLASSES = {
     "status_panel":      StatusPanelConfig,
 }
 
-
 def _from_dict(cls, data: dict):
     """
     將 JSON dict 的欄位安全地填入 Config dataclass，
@@ -139,7 +130,6 @@ def _from_dict(cls, data: dict):
                 pass  # 型別不符時保留預設值
     return instance
 
-
 def _to_dict(config) -> dict:
     """
     將 Config dataclass 序列化為 dict，略過 dirty 欄位。
@@ -150,7 +140,6 @@ def _to_dict(config) -> dict:
             continue
         result[f_name] = getattr(config, f_name)
     return result
-
 
 class SettingsManager:
     """

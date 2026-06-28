@@ -1,7 +1,7 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 from typing import List, Optional
 
-class LoadedCSVData(QObject):
+class CsvData(QObject):
     data_loaded = pyqtSignal()
     data_changed = pyqtSignal()
     filter_changed = pyqtSignal()

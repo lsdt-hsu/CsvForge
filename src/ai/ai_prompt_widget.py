@@ -195,9 +195,6 @@ class AiPromptWidget(QWidget):
         self.cb_target_col.blockSignals(True)
         self.cb_target_col.clear()
         
-        # 預設 Placeholder，其 Data 為 -1
-        self.cb_target_col.addItem("請選擇寫回欄位...", -1)
-        
         if csv_data and limit > 0:
             for i in range(limit):
                 header = csv_data.get_column_header(i)
@@ -265,27 +262,13 @@ class AiPromptWidget(QWidget):
         return self.txt_prompt.toPlainText()
 
     def set_target_col(self, col_idx):
-        if col_idx is None:
-            self.cb_target_col.setCurrentIndex(0)
-            return
-            
         if not isinstance(col_idx, int):
-            # 相容性轉換：試圖將字串轉換為整數 (舊設定或無效字串)
-            try:
-                col_idx = int(col_idx)
-            except (ValueError, TypeError):
-                col_idx = -1
-                
-        if col_idx < 0:
-            self.cb_target_col.setCurrentIndex(0) # 設為 "請選擇寫回欄位..."
-            return
+            col_idx = -1
             
-        # 尋找該 0-based 欄位索引值是否存在於選單中
-        idx = self.cb_target_col.findData(col_idx)
-        if idx != -1:
-            self.cb_target_col.setCurrentIndex(idx)
+        if 0 <= col_idx < self.cb_target_col.count():
+            self.cb_target_col.setCurrentIndex(col_idx)
         else:
-            self.cb_target_col.setCurrentIndex(0)
+            self.cb_target_col.setCurrentIndex(-1)
 
     def set_prompt(self, text: str):
         self.txt_prompt.setPlainText(text)

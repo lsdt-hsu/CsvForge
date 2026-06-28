@@ -13,7 +13,6 @@ from ai.local_ai_widget import LocalAiWidget
 from ai.ai_worker import CSVAIWorker
 from ai.ai_config import AiPanelConfig
 
-
 class AiPanel(BasePanel):
     """
     AiPanel — AI 處理面板。
@@ -34,15 +33,12 @@ class AiPanel(BasePanel):
             self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
 
     def on_csv_data_refreshed(self):
-        if self.context and self.context.csv_data:
-            csv_data = self.context.csv_data
-            if csv_data.all_rows:
-                if not self.controls_container.isVisible():
-                    self.show_controls()
-                self.update_column_dropdowns(csv_data.num_cols)
-            else:
-                self.reset_panel()
-
+        if self.context and self.context.is_data_loaded:
+            if not self.controls_container.isVisible():
+                self.show_controls()
+            self.update_column_dropdowns(self.context.csv_data.num_cols)
+        else:
+            self.reset_panel()
 
     def init_ui(self):
         # 建立 UI 配置
@@ -198,8 +194,10 @@ class AiPanel(BasePanel):
             self.local_widget.restore_from_config(cfg)
             
             # Prompt widget 部分
-            self.prompt_widget.set_target_col(cfg.target_col)
             self.prompt_widget.set_prompt(cfg.prompt_template)
+            
+            num_cols = self.context.csv_data.num_cols if self.context and self.context.csv_data else 0
+            self.update_column_dropdowns(num_cols)
             
             # 觸發顯示/隱藏
             self._on_service_combo_changed(self.cb_service.currentIndex())
@@ -208,17 +206,17 @@ class AiPanel(BasePanel):
             self.prompt_widget.cb_target_col.blockSignals(False)
             self.prompt_widget.txt_prompt.blockSignals(False)
 
-    def show_controls(self):
-        super().show_controls()
-        self.restore_from_config()
-
     def update_column_dropdowns(self, num_cols):
         """
         當 CSV 載入成功時，由 MainWindow 呼叫，用以更新 PromptWidget 的可用欄位與目標寫回選單。
         """
         limit = max(num_cols, self.config.target_col + 1)
-        self.prompt_widget.update_columns(limit, self.context.csv_data)
-        self.prompt_widget.set_target_col(self.config.target_col)
+        self.prompt_widget.cb_target_col.blockSignals(True)
+        try:
+            self.prompt_widget.update_columns(limit, self.context.csv_data if self.context else None)
+            self.prompt_widget.set_target_col(self.config.target_col)
+        finally:
+            self.prompt_widget.cb_target_col.blockSignals(False)
 
     def set_enabled(self, enabled):
         """

@@ -76,9 +76,9 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
         self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
 
-        # 實例化 LoadedCSVData Model (單例，與 MainWindow 共存亡)
-        from common_data.csv_data import LoadedCSVData
-        self.csv_data = LoadedCSVData()
+        # 實例化 CsvData Model (單例，與 MainWindow 共存亡)
+        from common_data.csv_data import CsvData
+        self.csv_data = CsvData()
 
         # 建立 AppContext (必須先建立，因為面板需要使用)
         from common_data.app_context import AppContext

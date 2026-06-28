@@ -3,7 +3,7 @@ import csv
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 from .csv_worker import CSVWorker
-from common_data.csv_data import LoadedCSVData
+from common_data.csv_data import CsvData
 from utils import ThrottledProgress
 
 class CSVEditWorker(CSVWorker):
@@ -63,7 +63,7 @@ class CSVEditWorker(CSVWorker):
 
 class CSVReader(QObject):
     request_start_worker = pyqtSignal(object)
-    load_completed = pyqtSignal(LoadedCSVData)
+    load_completed = pyqtSignal(CsvData)
     load_error = pyqtSignal(str)
     
     started = pyqtSignal()
@@ -116,8 +116,8 @@ class CSVReader(QObject):
             return
         worker = self._current_worker
         
-        # 轉換為共用資料結構 LoadedCSVData
-        data = LoadedCSVData(
+        # 轉換為共用資料結構 CsvData
+        data = CsvData(
             all_rows=worker.loaded_rows,
             delimiter=getattr(worker, "delimiter", ","),
             encoding=getattr(worker, "encoding", "utf-8"),

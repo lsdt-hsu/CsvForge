@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSize, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QIcon
 from base.base_panel import BasePanel
-from common_data.csv_data import LoadedCSVData
+from common_data.csv_data import CsvData
 
 
 PREVIEW_DEFAULT_SECTION_SIZE = 110
@@ -24,7 +24,7 @@ class CsvTableDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 
 class CSVTableModel(QAbstractTableModel):
-    def __init__(self, csv_data: LoadedCSVData, parent=None):
+    def __init__(self, csv_data: CsvData, parent=None):
         super().__init__(parent)
         self.csv_data = csv_data
         
@@ -167,7 +167,7 @@ class DataEditorPanel(BasePanel):
         self.table_view.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
         # 關聯 Model 與 Delegate (使用全域共享的 csv_data)
-        csv_data = self.context.csv_data if self.context else LoadedCSVData()
+        csv_data = self.context.csv_data if self.context else CsvData()
         self.table_model = CSVTableModel(csv_data, self.table_view)
         self.table_view.setModel(self.table_model)
         self.table_view.setItemDelegate(CsvTableDelegate(self.table_view))

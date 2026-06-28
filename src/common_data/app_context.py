@@ -1,5 +1,5 @@
 import os
-from common_data.csv_data import LoadedCSVData
+from common_data.csv_data import CsvData
 from settings_manager import (
     WindowConfig, MainConfig, IoPanelConfig, DataEditorConfig,
     StatusPanelConfig, SidePanelConfig
@@ -51,7 +51,7 @@ class AppContext:
     # ── 執行時動態狀態存取（解耦資料編輯面板，統一由 LoadedCSVData Model 提供）──
 
     @property
-    def csv_data(self) -> "LoadedCSVData":
+    def csv_data(self) -> "CsvData":
         return self._win.csv_data
 
     def set_modified(self, modified: bool) -> None:

@@ -238,12 +238,10 @@ class RuleWidget(QWidget):
         self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
 
         # 回復 cmb_range_start 的舊值，預設為第一欄 (index 0)
-        idx_start = self.cmb_range_start.findData(old_start)
-        self.cmb_range_start.setCurrentIndex(idx_start if idx_start >= 0 else 0)
+        self.cmb_range_start.setCurrentIndex(old_start if isinstance(old_start, int) and 0 <= old_start < self.cmb_range_start.count() else 0)
 
         # 回復 cmb_range_end 的舊值，預設為最後一欄 (index num_cols - 1)
-        idx_end = self.cmb_range_end.findData(old_end)
-        self.cmb_range_end.setCurrentIndex(idx_end if idx_end >= 0 else (num_cols - 1 if num_cols > 0 else 0))
+        self.cmb_range_end.setCurrentIndex(old_end if isinstance(old_end, int) and 0 <= old_end < self.cmb_range_end.count() else (num_cols - 1 if num_cols > 0 else 0))
 
         self.update_target_options(num_cols, active_cols)
 
@@ -458,12 +456,10 @@ class RuleWidget(QWidget):
         self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
 
         # 回復 cmb_range_start 的選擇
-        idx_start = self.cmb_range_start.findData(range_start)
-        self.cmb_range_start.setCurrentIndex(idx_start if idx_start >= 0 else 0)
+        self.cmb_range_start.setCurrentIndex(range_start if 0 <= range_start < self.cmb_range_start.count() else 0)
 
         # 回復 cmb_range_end 的選擇
-        idx_end = self.cmb_range_end.findData(range_end)
-        self.cmb_range_end.setCurrentIndex(idx_end if idx_end >= 0 else 0)
+        self.cmb_range_end.setCurrentIndex(range_end if 0 <= range_end < self.cmb_range_end.count() else 0)
 
         self.update_belong_visibility()
 

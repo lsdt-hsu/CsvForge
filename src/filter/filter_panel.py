@@ -53,14 +53,12 @@ class FilterPanel(BasePanel):
             self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
 
     def on_csv_data_refreshed(self):
-        if self.context and self.context.csv_data:
-            csv_data = self.context.csv_data
-            if csv_data.all_rows:
-                if not self.controls_container.isVisible():
-                    self.show_controls()
-                self.update_column_dropdowns(csv_data.num_cols)
-            else:
-                self.reset_panel()
+        if self.context and self.context.is_data_loaded:
+            if not self.controls_container.isVisible():
+                self.show_controls()
+            self.update_column_dropdowns(self.context.csv_data.num_cols)
+        else:
+            self.reset_panel()
 
     def init_ui(self):
         # 行號範圍輸入
@@ -525,6 +523,4 @@ class FilterPanel(BasePanel):
         }
         self._apply_config_to_ui(config_dict)
 
-    def show_controls(self):
-        super().show_controls()
-        self.restore_from_config()
+
