@@ -99,35 +99,6 @@ class StatusPanelConfig:
     collapsed: bool = False
 
 
-@dataclass
-class TranslatePanelConfig:
-    """
-    翻譯面板組態。
-    寫入擁有者：TranslationPanel。
-    """
-    dirty: bool = False
-    batch_interval: int = 10
-    single_interval: float = 1.0
-    batch_size: int = 18
-    src_lang: str = "ja"
-    tgt_lang: str = "zh-TW"
-    src_col: str = "1"
-    tgt_col: str = "2"
-
-
-@dataclass
-class FilterPanelConfig:
-    """
-    編輯過濾面板組態。
-    寫入擁有者：EditPanel。
-    """
-    dirty: bool = False
-    rules: list = field(default_factory=list)
-    logic_tree: dict = field(default_factory=dict)
-    expr_text: str = "#1"
-    start_row: str = "1"
-    end_row: str = ""
-
 
 
 # ── 固定的序列化鍵值順序 ──────────────────────────────────────────────────────
