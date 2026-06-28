@@ -129,24 +129,6 @@ class FilterPanelConfig:
     end_row: str = ""
 
 
-@dataclass
-class AiPanelConfig:
-    """
-    AI 處理面板組態。
-    寫入擁有者：AiPanel。
-    """
-    dirty: bool = False
-    ai_service: str = "Google AI"
-    google_api_key: str = ""
-    google_model: str = "gemini-1.5-flash"
-    local_backend: str = "Ollama"
-    local_server_url: str = "http://localhost:11434"
-    local_model: str = ""
-    advanced_num_ctx: int = 4096
-    advanced_temperature: float = 0.7
-    target_col: str = ""
-    prompt_template: str = ""
-
 
 # ── 固定的序列化鍵值順序 ──────────────────────────────────────────────────────
 # 只保留主程式本身的 Config

@@ -5,28 +5,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from dataclasses import dataclass
 from base.base_panel import BasePanel
 from base.theme import ThemeStyle
 from ai.ai_prompt_widget import AiPromptWidget
 from ai.google_ai_widget import GoogleAiWidget
 from ai.local_ai_widget import LocalAiWidget
 from ai.ai_worker import CSVAIWorker
-
-
-@dataclass
-class AiPanelConfig:
-    dirty: bool = False
-    ai_service: str = "Google AI"
-    google_api_key: str = ""
-    google_model: str = "gemini-1.5-flash"
-    local_backend: str = "Ollama"
-    local_server_url: str = "http://localhost:11434"
-    local_model: str = ""
-    advanced_num_ctx: int = 4096
-    advanced_temperature: float = 0.7
-    target_col: int = -1
-    prompt_template: str = ""
+from ai.ai_config import AiPanelConfig
 
 
 class AiPanel(BasePanel):
@@ -155,45 +140,10 @@ class AiPanel(BasePanel):
         self.on_start_clicked()
 
     def serialize_config(self) -> dict:
-        cfg = self.config
-        return {
-            "ai_service": cfg.ai_service,
-            "google_api_key": cfg.google_api_key,
-            "google_model": cfg.google_model,
-            "local_backend": cfg.local_backend,
-            "local_server_url": cfg.local_server_url,
-            "local_model": cfg.local_model,
-            "advanced_num_ctx": cfg.advanced_num_ctx,
-            "advanced_temperature": cfg.advanced_temperature,
-            "target_col": cfg.target_col,
-            "prompt_template": cfg.prompt_template,
-        }
+        return self.config.serialize()
 
     def deserialize_config(self, data: dict) -> None:
-        cfg = self.config
-        cfg.ai_service = data.get("ai_service", "Google AI")
-        cfg.google_api_key = data.get("google_api_key", "")
-        cfg.google_model = data.get("google_model", "gemini-1.5-flash")
-        cfg.local_backend = data.get("local_backend", "Ollama")
-        cfg.local_server_url = data.get("local_server_url", "http://localhost:11434")
-        cfg.local_model = data.get("local_model", "")
-        
-        try:
-            cfg.advanced_num_ctx = int(data.get("advanced_num_ctx", 4096))
-        except (ValueError, TypeError):
-            cfg.advanced_num_ctx = 4096
-            
-        try:
-            cfg.advanced_temperature = float(data.get("advanced_temperature", 0.7))
-        except (ValueError, TypeError):
-            cfg.advanced_temperature = 0.7
-            
-        try:
-            cfg.target_col = int(data.get("target_col", -1))
-        except (ValueError, TypeError):
-            cfg.target_col = -1
-            
-        cfg.prompt_template = data.get("prompt_template", "")
+        self.config.deserialize(data)
         self.restore_from_config()
 
     # ── Config 管理 ───────────────────────────────────────────────────────────
