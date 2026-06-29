@@ -119,7 +119,7 @@ class CSVTableModel(QAbstractTableModel):
 
 class DataEditorPanel(BasePanel):
     def __init__(self, parent=None, context=None):
-        super().__init__(parent, require_data_loading=False, context=context)
+        super().__init__(parent, context=context)
         self.setObjectName("rightFrame")
         self.setMinimumHeight(200)
         self._delimiter = ","

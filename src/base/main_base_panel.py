@@ -4,7 +4,7 @@ from common_data.app_context import AppContext
 
 class BasePanel(QFrame):
 
-    def __init__(self, parent=None, title_text="", require_data_loading=True, context: AppContext = None):
+    def __init__(self, parent=None, context: AppContext = None):
         super().__init__(parent)
         self.context = context
         self.setObjectName("grpFrame")

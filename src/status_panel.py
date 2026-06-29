@@ -11,7 +11,7 @@ class StatusPanel(BasePanel):
     toggle_clicked = pyqtSignal(bool)
 
     def __init__(self, parent=None, context=None):
-        super().__init__(parent, title_text="", require_data_loading=False, context=context)
+        super().__init__(parent, context=context)
         self.setObjectName("rightFrame")
         self.init_ui()
 

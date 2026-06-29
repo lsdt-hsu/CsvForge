@@ -17,7 +17,7 @@ class IoPanel(BasePanel):
     source_file_changed = pyqtSignal(str)
 
     def __init__(self, parent=None, context=None):
-        super().__init__(parent, title_text="", require_data_loading=False, context=context)
+        super().__init__(parent, context=context)
         self.setObjectName("rightFrame")
         self._ui_enabled_state = True
 
