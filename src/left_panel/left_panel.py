@@ -21,6 +21,7 @@ from filter import PanelClass as FilterPanel
 
 from .plugin_manager import PluginManager, PluginWarning, PluginError
 from .plugin_ui import create_add_plugin_icon, create_plugin_button
+from plugin_sdk import PluginContext
 
 # 內建面板的 UUID 集合
 BUILTIN_UUIDS = {
@@ -37,7 +38,8 @@ class LeftPanel(QFrame):
         super().__init__(parent)
         self.main_window = parent
         self.context = context
-        self.plugin_manager = PluginManager(context=self.context)
+        self.plugin_context = PluginContext(self.context.csv_data) if self.context else None
+        self.plugin_manager = PluginManager(context=self.plugin_context)
         self._plugin_buttons = {}
         self._loaded_plugins = []  # 儲存 (plugin_key, path) 元組，維護外掛載入順序
         self.setObjectName("leftContainer")
@@ -181,10 +183,10 @@ class LeftPanel(QFrame):
         
         # 註解：過濾面板是第一個功能，不得任意變更。
         # 實例化各個 Package 的 Panel 並註冊 (側面板按鈕對應關係)
-        self.add_panel("filter", FilterPanel(context=self.context))
-        self.add_panel("translate", TranslationPanel(context=self.context))
-        self.add_panel("ai", AiPanel(context=self.context))
-        self.add_panel("edit", EditPanel(context=self.context))
+        self.add_panel("filter", FilterPanel(context=self.plugin_context))
+        self.add_panel("translate", TranslationPanel(context=self.plugin_context))
+        self.add_panel("ai", AiPanel(context=self.plugin_context))
+        self.add_panel("edit", EditPanel(context=self.plugin_context))
 
     def add_panel(self, name: str, panel: QWidget) -> None:
         self._panels[name] = panel

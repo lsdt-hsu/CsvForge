@@ -2,7 +2,7 @@
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
-from common_data.app_context import AppContext
+from plugin_sdk.context import PluginContext
 from plugin_sdk.theme import applyTitleLabel, applyHintLabel
 
 
@@ -15,7 +15,7 @@ class BasePluginPanel(QFrame):
     request_start_worker = pyqtSignal(object)
     request_silent_save = pyqtSignal()  # 統一的靜默存檔請求
 
-    def __init__(self, parent=None, title_text="", require_data_loading=True, context: AppContext = None):
+    def __init__(self, parent=None, title_text="", require_data_loading=True, context: PluginContext = None):
         super().__init__(parent)
         self.context = context
         self.setObjectName("grpFrame")

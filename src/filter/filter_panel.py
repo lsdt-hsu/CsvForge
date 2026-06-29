@@ -290,7 +290,7 @@ class FilterPanel(BasePluginPanel):
         if not self.check_expression_validity():
             return
 
-        rows = self.context.all_rows
+        rows = self.context.csv_data.all_rows
         if not rows:
             QMessageBox.warning(self, "錯誤", "請先載入 CSV 資料。")
             return
