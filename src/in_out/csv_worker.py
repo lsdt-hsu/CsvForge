@@ -1,7 +1,26 @@
 import os
 import csv
 from PyQt6.QtCore import QThread, pyqtSignal
-from utils import detect_encoding, detect_delimiter
+def _detect_encoding(file_path):
+    encodings = ['utf-8-sig', 'utf-8', 'cp950', 'gbk', 'utf-16', 'latin-1']
+    for enc in encodings:
+        try:
+            with open(file_path, 'r', encoding=enc) as f:
+                f.read(4096)
+            return enc
+        except UnicodeDecodeError:
+            continue
+    return 'utf-8'
+
+def _detect_delimiter(file_path, encoding):
+    try:
+        with open(file_path, 'r', encoding=encoding) as f:
+            sample = f.read(2048)
+            dialect = csv.Sniffer().sniff(sample)
+            return dialect.delimiter
+    except Exception:
+        return ','
+
 
 class CSVWorker(QThread):
     progress_updated = pyqtSignal(int, int)      # 已處理列數, 總列數
@@ -34,8 +53,8 @@ class CSVWorker(QThread):
         回傳: (encoding, delimiter)
         """
         self.log_emitted.emit("INFO", "正在檢測檔案編碼與格式...")
-        self.encoding = detect_encoding(self.source_path)
-        self.delimiter = detect_delimiter(self.source_path, self.encoding)
+        self.encoding = _detect_encoding(self.source_path)
+        self.delimiter = _detect_delimiter(self.source_path, self.encoding)
         self.log_emitted.emit("INFO", f"檢測到檔案編碼: {self.encoding}，分隔符: '{self.delimiter}'")
         return self.encoding, self.delimiter
 

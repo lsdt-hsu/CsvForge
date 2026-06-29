@@ -544,7 +544,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         必須呼叫 super().closeEvent(event) 維持 MRO 鏈完整性。
         """
         if getattr(self, "_worker_sleep_prevented", False):
-            from utils import prevent_sleep
-            prevent_sleep(False)
+            self._set_sleep_prevention(False)
         self.save_settings()
         super().closeEvent(event)  # ← MRO 鏈傳遞至 QMainWindow，勿省略

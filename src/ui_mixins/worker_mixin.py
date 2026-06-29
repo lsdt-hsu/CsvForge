@@ -78,8 +78,7 @@ class WorkerMixin:
 
         # 根據 Worker 需求決定是否防止系統休眠
         if getattr(worker_instance, "prevent_sleep", False):
-            from utils import prevent_sleep
-            self._worker_sleep_prevented = prevent_sleep(True)
+            self._worker_sleep_prevented = self._set_sleep_prevention(True)
             if self._worker_sleep_prevented:
                 self.append_log("INFO", "已成功通知系統在任務期間不要進入休眠狀態。")
 
@@ -112,8 +111,7 @@ class WorkerMixin:
 
         # 恢復系統休眠設定
         if getattr(self, "_worker_sleep_prevented", False):
-            from utils import prevent_sleep
-            prevent_sleep(False)
+            self._set_sleep_prevention(False)
             self._worker_sleep_prevented = False
             self.append_log("INFO", "已恢復系統正常休眠設定。")
 
@@ -132,4 +130,27 @@ class WorkerMixin:
             self.task_status_str = "正在中斷工作..."
             self.update_status_summary()
             self.worker.cancel()
+
+    def _set_sleep_prevention(self, prevent: bool = True) -> bool:
+        """
+        Prevent Windows from sleeping when prevent is True, and restore sleep behavior when False.
+        Returns True if the operation succeeded, False otherwise.
+        """
+        import os
+        if os.name == 'nt':
+            try:
+                import ctypes
+                ES_CONTINUOUS = 0x80000000
+                ES_SYSTEM_REQUIRED = 0x00000001
+                if prevent:
+                    # Prevent sleep
+                    ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+                else:
+                    # Restore sleep behavior
+                    ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+                return True
+            except Exception as e:
+                print(f"Failed to set thread execution state: {e}")
+                return False
+        return False
 

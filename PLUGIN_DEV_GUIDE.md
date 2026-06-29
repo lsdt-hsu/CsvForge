@@ -12,8 +12,9 @@
    - 1.2 [基礎類別繼承](#12-基礎類別繼承)
    - 1.3 [Hello World 樣板](#13-hello-world-樣板)
 2. [第二部分：一致性策略](#第二部分一致性策略)
-   - 2.1 [UI 設計規範](#21-ui-設計規範)
-   - 2.2 [流程與資料管理規範](#22-流程與資料管理規範)
+   - 2.1 [資料編輯](#21-資料編輯)
+   - 2.2 [UI 設計規範](#22-ui-設計規範)
+   - 2.3 [流程與資料管理規範](#23-流程與資料管理規範)
 3. [第三部分：API 參考與嚴格規範](#第三部分api-參考與嚴格規範)
    - 3.1 [事件通訊機制（Signal）](#31-事件通訊機制signal)
    - 3.2 [樣式套用函式（theme）](#32-樣式套用函式theme)
@@ -169,14 +170,24 @@ class PanelClass(BasePluginPanel):
 
 ## 第二部分：一致性策略
 
-### 2.1 UI 設計規範
+### 2.1 資料編輯
 
-#### 2.1.1 圖示（Icon）設計
+在處理 CSV 資料的編輯或修改時，**強烈建議只編輯可見列（Visible Rows）**，以避免修改到使用者預期之外的資料（即被使用者過濾、隱藏的資料）。
+
+- **取得可見列索引**：使用 `self.context.csv_data.get_visible_indices()` 或 `self.context.csv_data.visible_indices`。
+- **取得可見列資料**：使用 `self.context.csv_data.get_visible_rows()`。
+- **操作建議**：在走訪資料進行編輯時，僅針對可見的列索引進行操作，避免修改到隱藏的列。
+
+---
+
+### 2.2 UI 設計規範
+
+#### 2.2.1 圖示（Icon）設計
 
 - **外部圖示**（顯示在主程式的頁籤/工具列）：`BasePluginPanel.get_icon()` 已提供**預設實作**，會自動以 `get_package_name()` 的前兩個字母產生**白色文字、透明背景、無邊框**的圖示。想提供獨特的圖示，可以覆寫 **`get_icon()`**。
 - **面板內圖示**：推薦使用相同的極簡風格（白色、透明背景、無邊框）。
 
-#### 2.1.2 樣式套用
+#### 2.2.2 樣式套用
 
 - 主要任務按鈕（如「開始翻譯」）**強烈建議**使用 `applyPrimaryButtonStyle`，並根據執行狀態傳入 `is_running` 參數：
 
@@ -189,13 +200,13 @@ class PanelClass(BasePluginPanel):
 
 - 其餘元件優先使用 `plugin_sdk.theme` 中的標準樣式函式（詳見 [3.2 節](#32-樣式套用函式theme)）。
 
-#### 2.1.3 面板寬度與捲動
+#### 2.2.3 面板寬度與捲動
 
 - 面板最大寬度為 `SIDEBAR_MAX_WIDTH = 341`（px），定義於 `plugin_sdk.theme`。
 - **建議做法**：提供垂直捲動（如使用 `QScrollArea`），並**儘量避免**水平捲動。
 - 使用 `QGridLayout` 或 `QVBoxLayout` 佈局，避免元件超出面板寬度。
 
-#### 2.1.4 資料載入狀態判斷
+#### 2.2.4 資料載入狀態判斷
 
 - 需要判斷 CSV 是否已載入時，**必須**使用 `self.context.is_data_loaded`：
 
@@ -206,7 +217,7 @@ class PanelClass(BasePluginPanel):
 
 - 當 `require_data_loading=True` 時，基底類別已自動訂閱 `data_loaded` 信號，並在資料載入/解除時呼叫 `show_controls()` / `reset_panel()`。**無需在子類別中重複處理此邏輯**，只需複寫 `on_csv_data_refreshed()` 更新 UI 內容即可。
 
-#### 2.1.5 欄位選單的列舉規則
+#### 2.2.5 欄位選單的列舉規則
 
 列舉欄位時，**建議**使用以下公式計算要顯示的欄位總數，**無論資料是否已載入**：
 
@@ -224,7 +235,7 @@ for i in range(limit):
     self.combo_col.addItem(col_name, i)
 ```
 
-#### 2.1.6 含非欄位選項的選單（例如「所有欄位」）
+#### 2.2.6 含非欄位選項的選單（例如「所有欄位」）
 
 若欄位選單中需要包含非欄位選項（例如「所有欄位」），**強烈建議**：
 
@@ -278,14 +289,14 @@ def _stored_to_ui(self, stored: int) -> int:
 
 ---
 
-### 2.2 流程與資料管理規範
+### 2.3 流程與資料管理規範
 
-#### 2.2.1 資料來源與儲存
+#### 2.3.1 資料來源與儲存
 
 - **主程式負責**載入與儲存 CSV 檔案。外掛面板**不需要知道**來源檔案路徑或輸出檔案路徑。
 - `self.context.csv_data`（即 `CsvData` 物件）**必定存在**，不論是否已載入資料。可安全存取 `csv_data.num_cols`、`csv_data.get_column_header()` 等屬性，無需做 None 檢查。
 
-#### 2.2.2 Config 管理原則
+#### 2.3.2 Config 管理原則
 
 外掛面板**建議自行宣告並管理 Config dataclass**，作為可靠的資料來源與實作建議：
 
@@ -293,10 +304,10 @@ def _stored_to_ui(self, stored: int) -> int:
 2. **無實際變更則不設 dirty**：若新值與舊值相同，跳過寫入與設 dirty。
 3. **欄位 index 記錄**：
    - 純欄位選單：Config 記錄 `combo.currentData()`，即 0-based 欄位 index。
-   - 含非欄位選項的選單：Config 記錄 UI 上的 0-based index（含偏移），序列化/反序列化時再做映射（見 [2.1.6 節](#216-含非欄位選項的選單例如所有欄位)）。
+   - 含非欄位選項的選單：Config 記錄 UI 上的 0-based index（含偏移），序列化/反序列化時再做映射（見 [2.2.6 節](#226-含非欄位選項的選單例如所有欄位)）。
 4. **序列化/反序列化**：實作 `serialize_config()` 與 `deserialize_config()`，主程式負責在適當時機呼叫。
 
-#### 2.2.3 Restore Config 的執行時機與 Signal 管理
+#### 2.3.3 Restore Config 的執行時機與 Signal 管理
 
 - Restore Config（`deserialize_config` 被呼叫）**只發生在程式剛啟動時**，不必考慮 Config 在執行期間被 restore 事件覆蓋的情況。
 - Restore Config 時，**強烈建議使用 `blockSignals(True/False)` 暫時切斷所有 UI 元件的信號**，這是避免還原過程觸發 `_on_xxx_changed` 等事件而誤設 dirty flag 的**最佳實踐**：
@@ -315,12 +326,12 @@ def _restore_ui_from_config(self) -> None:
             w.blockSignals(False)
 ```
 
-#### 2.2.4 Config 有效性驗證時機
+#### 2.3.4 Config 有效性驗證時機
 
 - **建議做法**：僅在開始執行任務前（`run_main_action()` / 按鈕 `on_clicked`）驗證 Config 是否有效。
 - **最佳實踐**：平常無須特別根據資料是否已載入、或載入的資料是否符合 Config 內容，動態啟用/禁用元件或彈出警告，以保持 UI 反應的流暢度。
 
-#### 2.2.5 靜默儲存請求
+#### 2.3.5 靜默儲存請求
 
 外掛執行任務並修改資料後，若需觸發主程式自動儲存，發送 `request_silent_save` Signal：
 
@@ -328,7 +339,7 @@ def _restore_ui_from_config(self) -> None:
 self.request_silent_save.emit()
 ```
 
-#### 2.2.6 通知主程式資料已變更
+#### 2.3.6 通知主程式資料已變更
 
 外掛修改 `csv_data.all_rows` 內容後，**務必**通知主程式以同步資料狀態：
 
@@ -471,7 +482,7 @@ self.context.is_first_row_header  # bool，True 表示第一行為標題
 以下工具函式定義於 `utils` 模組，外掛可直接 import 使用。
 
 ```python
-from utils import ThrottledProgress, detect_encoding
+from utils import ThrottledProgress
 ```
 
 #### `ThrottledProgress`
@@ -495,10 +506,6 @@ throttled.emit(total, total, force=True)
 |------|------|
 | `ThrottledProgress(signal, min_interval=0.2)` | 建構，傳入 `pyqtSignal` 物件與最小間隔秒數 |
 | `.emit(*args, force=False) -> bool` | 嘗試發送；回傳 `True` 表示成功發送，`False` 表示被過濾 |
-
-#### `detect_encoding(file_path: str) -> str`
-
-偵測檔案編碼，回傳編碼名稱字串（如 `"utf-8"`、`"cp950"`）。
 
 ---
 
