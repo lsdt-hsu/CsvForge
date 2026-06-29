@@ -1,4 +1,3 @@
-import os
 from common_data.csv_data import CsvData
 from settings_manager import (
     WindowConfig, MainConfig, IoPanelConfig, DataEditorConfig,
@@ -48,31 +47,12 @@ class AppContext:
     def status_panel_config(self) -> StatusPanelConfig:
         return self._win._configs["status_panel"]
 
-    # ── 執行時動態狀態存取（解耦資料編輯面板，統一由 LoadedCSVData Model 提供）──
+    # ── 執行時動態狀態存取 ───────────────────────────────────────────────────
 
     @property
-    def csv_data(self) -> "CsvData":
+    def csv_data(self) -> CsvData:
         return self._win.csv_data
-
-    def set_modified(self, modified: bool) -> None:
-        self.csv_data.set_modified(modified)
-
-    @property
-    def is_first_row_header(self) -> bool:
-        return self.csv_data.is_header
-
-    @property
-    def is_modified(self) -> bool:
-        return self.csv_data.is_modified
-
-    @property
-    def is_ui_locked(self) -> bool:
-        return getattr(self._win, "_ui_locked", False)
 
     @property
     def is_data_loaded(self) -> bool:
         return bool(self.csv_data.all_rows)
-
-    @property
-    def all_rows(self) -> list:
-        return self.csv_data.all_rows

@@ -1,6 +1,6 @@
 # src/base/main_base_panel.py
 from PyQt6.QtWidgets import QFrame, QVBoxLayout
-from common_data.app_context import AppContext
+from base.app_context import AppContext
 
 class BasePanel(QFrame):
 
