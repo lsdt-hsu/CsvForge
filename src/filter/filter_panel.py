@@ -42,6 +42,7 @@ class FilterPanel(BasePluginPanel):
         super().__init__(parent, title_text="過濾", require_data_loading=True, context=context)
         self.config = FilterPanelConfig()
         self.num_cols = 0
+        self.worker = None
 
         self.rules = []
         self.logic_tree = None
@@ -410,23 +411,49 @@ class FilterPanel(BasePluginPanel):
         worker_instance.task_name = "過濾中..."
         worker_instance.initial_progress_total = len(rows)
         
-        self.update_status("過濾中...")
-        self.write_log("INFO", "開始執行 CSV 資料過濾...")
+        self.worker = worker_instance
+        
+        # 連接進度信號（FilterWorker 僅提供此基本信號，未定義 status_updated / log_emitted）
+        worker_instance.progress_updated.connect(self.update_progress)
         
         worker_instance.filter_completed.connect(self.on_filter_completed)
         worker_instance.filter_error.connect(self.on_filter_error)
         
-        self.request_start_worker.emit(worker_instance)
+        worker_instance.start()
+        
+        # 發送任務開始信號
+        self.start_task(
+            task_name="過濾中...",
+            total=len(rows),
+            initial_log="開始執行 CSV 資料過濾...",
+            prevent_sleep=False
+        )
 
     def on_filter_completed(self, matched_indices, elapsed_time: float) -> None:
         self.context.csv_data.set_filtered_indices(matched_indices)
         self.update_status("完成")
         self.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
+        self.finish_task("finished")
+        self.worker = None
 
     def on_filter_error(self, err_msg: str) -> None:
-        self.update_status("錯誤")
-        self.write_log("ERROR", f"過濾錯誤：{err_msg}")
-        QMessageBox.critical(self, "過濾錯誤", err_msg)
+        self.worker = None
+        if "使用者已取消" in err_msg or "取消" in err_msg:
+            self.update_status("已取消")
+            self.write_log("WARNING", "過濾工作已被使用者取消。")
+            self.finish_task("cancelled")
+        else:
+            self.update_status("錯誤")
+            self.write_log("ERROR", f"過濾錯誤：{err_msg}")
+            QMessageBox.critical(self, "過濾錯誤", err_msg)
+            self.finish_task("error")
+
+    def is_task_running(self) -> bool:
+        return self.worker is not None and self.worker.isRunning()
+
+    def cancel_task(self) -> None:
+        if self.worker and self.worker.isRunning():
+            self.worker.cancel()
 
     def set_enabled(self, enabled):
         self.txt_filter_start_row.setEnabled(enabled)

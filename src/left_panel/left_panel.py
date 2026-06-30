@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QFrame, QHBoxLayout, QVBoxLayout, QWidget, QPushButton,
     QStackedWidget, QFileDialog, QMessageBox
 )
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont
 
 from ui_constants import (
@@ -21,7 +21,7 @@ from filter import PanelClass as FilterPanel
 
 from .plugin_manager import PluginManager, PluginWarning, PluginError
 from .plugin_ui import create_add_plugin_icon, create_plugin_button
-from plugin_sdk import PluginContext
+from plugin_sdk import PluginContext, BasePluginPanel
 
 # 內建面板的 UUID 集合
 BUILTIN_UUIDS = {
@@ -33,6 +33,8 @@ BUILTIN_UUIDS = {
 
 
 class LeftPanel(QFrame):
+    plugin_removed = pyqtSignal(str)
+    settings_save_requested = pyqtSignal()
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent)
@@ -191,6 +193,78 @@ class LeftPanel(QFrame):
     def add_panel(self, name: str, panel: QWidget) -> None:
         self._panels[name] = panel
         self.sidebar_stacked.addWidget(panel)
+        self._connect_panel_signals(panel)
+        if isinstance(panel, BasePluginPanel):
+            panel.initialize_panel()
+
+    def _connect_panel_signals(self, panel) -> None:
+        """整批連接面板的私有通訊信號到主程式對應槽函數"""
+        if self.main_window and isinstance(panel, BasePluginPanel):
+            panel._request_lock_ui.connect(self.main_window.lock_ui_from_panel)
+            panel._progress_updated.connect(self.main_window.on_panel_progress)
+            panel._status_updated.connect(self.main_window.on_panel_status)
+            panel._log_emitted.connect(self.main_window.on_panel_log)
+            panel._task_started.connect(self.main_window.on_task_started)
+            panel._task_finished.connect(self.main_window.on_task_finished)
+            panel._request_silent_save.connect(self.main_window.silent_save_edit_data)
+
+    def get_active_plugin(self) -> BasePluginPanel:
+        """
+        公開方法：取得當前活躍的外掛/功能面板。
+        主程式與其他模組僅能透過此方法取得當前 active plugin，嚴禁直接存取 _panels 或 sidebar_stacked。
+        """
+        widget = self.sidebar_stacked.currentWidget()
+        if isinstance(widget, BasePluginPanel):
+            return widget
+        return None
+
+    def get_plugin(self, name: str) -> BasePluginPanel:
+        """
+        公開方法：根據名稱取得對應面板實例。
+        """
+        widget = self._panels.get(name)
+        if isinstance(widget, BasePluginPanel):
+            return widget
+        return None
+
+    def restore_panel_states(self, configs: dict) -> None:
+        """
+        公開方法：還原所有面板的 UI 設定。
+        """
+        for name, panel in self._panels.items():
+            try:
+                uuid_str = panel.get_uuid()
+                if uuid_str in BUILTIN_UUIDS:
+                    pkg_name = panel.get_package_name()
+                else:
+                    pkg_name = f"PLUGIN-{uuid_str}"
+            except Exception:
+                pkg_name = panel.get_package_name()
+
+            if pkg_name in configs:
+                try:
+                    panel.deserialize_config(configs[pkg_name])
+                except Exception:
+                    pass
+
+    def save_panel_states(self, configs: dict) -> None:
+        """
+        公開方法：保存所有面板的最新設定到 configs。
+        """
+        for name, panel in self._panels.items():
+            try:
+                uuid_str = panel.get_uuid()
+                if uuid_str in BUILTIN_UUIDS:
+                    pkg_name = panel.get_package_name()
+                else:
+                    pkg_name = f"PLUGIN-{uuid_str}"
+            except Exception:
+                pkg_name = panel.get_package_name()
+
+            try:
+                configs[pkg_name] = panel.serialize_config()
+            except Exception:
+                pass
 
     def switch_sidebar_tab(self, tab_name: str, force_expand: bool = False) -> None:
         current_panel = self._panels.get(tab_name)
@@ -200,10 +274,10 @@ class LeftPanel(QFrame):
 
         # Check UI lock
         if not force_expand:
-            if getattr(self.main_window, "is_ui_locked", False):
+            if self.main_window and self.main_window.is_ui_locked:
                 return
 
-            is_task_running = getattr(self.main_window, "worker", None) is not None and self.main_window.worker.isRunning()
+            is_task_running = self.main_window and self.main_window.is_any_task_running()
 
             # 任務執行中禁止切換至其他功能面板
             if is_task_running and not is_same_tab:
@@ -290,8 +364,7 @@ class LeftPanel(QFrame):
             for child in btn.findChildren(QPushButton):
                 child.setEnabled(enabled)
         for panel in self._panels.values():
-            if hasattr(panel, "set_enabled"):
-                panel.set_enabled(enabled)
+            panel.set_enabled(enabled)
 
     # ── 外掛相關繪圖與動態載入邏輯 ───────────────────────────────────────────────
 
@@ -340,14 +413,11 @@ class LeftPanel(QFrame):
         else:
             layout.addWidget(btn)
 
-        # 連接標準訊號
-        if self.main_window:
-            panel.request_lock_ui.connect(self.main_window.lock_ui_from_panel)
-            panel.progress_updated.connect(self.main_window.on_panel_progress)
-            panel.status_updated.connect(self.main_window.on_panel_status)
-            panel.log_emitted.connect(self.main_window.on_panel_log)
-            panel.request_start_worker.connect(self.main_window.on_request_start_worker)
-            panel.request_silent_save.connect(self.main_window.silent_save_edit_data)
+        # 整批連接標準私有信號
+        self._connect_panel_signals(panel)
+
+        # 初始資料狀態同步
+        panel.initialize_panel()
 
         self._plugin_buttons[plugin_key] = btn
         self._loaded_plugins.append((plugin_key, path))
@@ -357,14 +427,8 @@ class LeftPanel(QFrame):
             self.context.side_panel_config.plugins = [p for _, p in self._loaded_plugins]
             self.context.side_panel_config.dirty = True
 
-        # 若當前已載入資料，主動通知新載入的外掛面板更新狀態
-        if self.context and self.context.is_data_loaded:
-            if hasattr(panel, "_on_global_data_loaded"):
-                panel._on_global_data_loaded()
-            panel.on_csv_data_refreshed()
-
-        if auto_save and self.main_window and hasattr(self.main_window, "save_settings"):
-            self.main_window.save_settings()
+        if auto_save:
+            self.settings_save_requested.emit()
 
         return True
 
@@ -384,6 +448,19 @@ class LeftPanel(QFrame):
             if self.sidebar_stacked.currentWidget() == panel:
                 self.switch_sidebar_tab("filter", force_expand=True)
             self.sidebar_stacked.removeWidget(panel)
+
+            # 防止信號記憶體洩漏與懸空信號：解除該外掛面板私有信號的所有串接
+            try:
+                panel._request_lock_ui.disconnect()
+                panel._progress_updated.disconnect()
+                panel._status_updated.disconnect()
+                panel._log_emitted.disconnect()
+                panel._task_started.disconnect()
+                panel._task_finished.disconnect()
+                panel._request_silent_save.disconnect()
+            except Exception:
+                pass
+
             panel.deleteLater()
 
         btn = self._plugin_buttons.pop(plugin_key, None)
@@ -399,8 +476,5 @@ class LeftPanel(QFrame):
             self.context.side_panel_config.plugins = [p for _, p in self._loaded_plugins]
             self.context.side_panel_config.dirty = True
 
-        if self.main_window and hasattr(self.main_window, "_configs"):
-            self.main_window._configs.pop(plugin_key, None)
-
-        if self.main_window and hasattr(self.main_window, "save_settings"):
-            self.main_window.save_settings()
+        self.plugin_removed.emit(plugin_key)
+        self.settings_save_requested.emit()

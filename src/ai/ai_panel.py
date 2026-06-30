@@ -321,14 +321,28 @@ class AiPanel(BasePluginPanel):
             headers=headers
         )
 
+        # 連接進度、狀態與日誌信號
+        self.worker.progress_updated.connect(self.update_progress)
+        self.worker.status_updated.connect(self.update_status)
+        self.worker.log_emitted.connect(self.write_log)
+
         # 連接完成與變更信號
         self.worker.finished_successfully.connect(self._on_task_finished)
         self.worker.finished_with_error.connect(self._on_task_error)
         self.worker.data_changed.connect(self._on_data_changed)
 
-        # 請求 MainWindow 啟動 Worker (進行多執行緒控制與鎖定 UI)
-        self.request_start_worker.emit(self.worker)
+        # 啟動 Worker (自主啟動，不經主視窗)
+        self.worker.start()
         self._on_task_started()
+
+    def set_enabled(self, enabled: bool) -> None:
+        super().set_enabled(enabled)
+        self.cb_service.setEnabled(enabled)
+        self.google_widget.setEnabled(enabled)
+        self.local_widget.setEnabled(enabled)
+        self.prompt_widget.setEnabled(enabled)
+        if not self.is_task_running():
+            self.btn_start.setEnabled(enabled)
 
     def cancel_task(self):
         if self.worker and self.worker.isRunning():
@@ -336,11 +350,23 @@ class AiPanel(BasePluginPanel):
             self.btn_start.setText("正在停止...")
             self.btn_start.setEnabled(False)
 
+    def is_task_running(self) -> bool:
+        return self.worker is not None and self.worker.isRunning()
+
     def _on_task_started(self):
         self.btn_start.setText("停止 AI 處理")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=True)
         self.set_enabled(False)
+        
+        # 通知主程式任務開始
+        total = len(self.context.csv_data.get_visible_indices()) if self.context and self.context.csv_data else 0
+        self.start_task(
+            task_name="AI 處理中...",
+            total=total,
+            initial_log="開始執行 CSV AI 處理...",
+            prevent_sleep=True
+        )
 
     def _on_task_finished(self):
         self.btn_start.setText("開始 AI 處理")
@@ -348,8 +374,12 @@ class AiPanel(BasePluginPanel):
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self.set_enabled(True)
         self.worker = None
+        
+        # 通知主程式任務結束
+        self.finish_task("finished")
+        
         # 自動存檔 (跟 translation 面板行為保持一致)
-        self.request_silent_save.emit()
+        self.request_silent_save_action()
 
     def _on_task_error(self, err_msg):
         self.btn_start.setText("開始 AI 處理")
@@ -358,12 +388,19 @@ class AiPanel(BasePluginPanel):
         self.set_enabled(True)
         self.worker = None
 
-        # 彈出錯誤對話框
-        from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.critical(self, "AI 處理中斷", f"AI 處理過程中發生錯誤：\n{err_msg}")
+        # 區分使用者取消與真實錯誤
+        if "使用者已取消" in err_msg or "取消" in err_msg:
+            self.update_status("已取消")
+            self.write_log("WARNING", "AI 處理已被使用者中斷。")
+            self.finish_task("cancelled")
+        else:
+            # 彈出錯誤對話框
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "AI 處理中斷", f"AI 處理過程中發生錯誤：\n{err_msg}")
+            self.finish_task("error")
 
         # 自動存檔
-        self.request_silent_save.emit()
+        self.request_silent_save_action()
 
     def _on_data_changed(self):
         # 標記主資料已修改，觸發介面重繪

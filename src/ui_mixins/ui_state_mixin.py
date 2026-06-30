@@ -42,22 +42,29 @@ class UiStateMixin:
         self.left_panel.switch_sidebar_tab(tab_name, force_expand)
 
     def get_active_panel(self: "MainWindow"):
-        current = self.left_panel.sidebar_stacked.currentWidget()
-        if current == self.edit_panel:
-            return self.edit_panel
-        if hasattr(self, "filter_panel") and current == self.filter_panel:
-            return self.filter_panel
-        return self.translation_panel
+        return self.left_panel.get_active_plugin()
 
     def lock_ui_from_panel(self: "MainWindow", lock: bool) -> None:
         self.set_ui_enabled(not lock)
 
     def on_panel_progress(self: "MainWindow", current: int, total: int) -> None:
+        sender = self.sender()
+        from plugin_sdk import BasePluginPanel
+        if isinstance(sender, BasePluginPanel) and sender != self.left_panel.get_active_plugin():
+            return
         self.on_worker_progress(current, total)
 
     def on_panel_status(self: "MainWindow", status: str) -> None:
+        sender = self.sender()
+        from plugin_sdk import BasePluginPanel
+        if isinstance(sender, BasePluginPanel) and sender != self.left_panel.get_active_plugin():
+            return
         self.task_status_str = status
         self.update_status_summary()
 
     def on_panel_log(self: "MainWindow", level: str, message: str) -> None:
+        sender = self.sender()
+        from plugin_sdk import BasePluginPanel
+        if isinstance(sender, BasePluginPanel) and sender != self.left_panel.get_active_plugin():
+            return
         self.append_log(level, message)

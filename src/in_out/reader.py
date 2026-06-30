@@ -62,7 +62,8 @@ class CSVEditWorker(CSVWorker):
 
 
 class CSVReader(QObject):
-    request_start_worker = pyqtSignal(object)
+    task_started = pyqtSignal(str, int, str, bool)
+    task_finished = pyqtSignal(str)
     load_completed = pyqtSignal(CsvData)
     load_error = pyqtSignal(str)
     
@@ -103,12 +104,21 @@ class CSVReader(QObject):
         )
         self._current_worker = worker_instance
 
-        # 連接完成與錯誤信號，包裝為 LoadedCSVData 後轉發
+        # 連接完成與錯誤信號
         worker_instance.finished_successfully.connect(self._on_worker_success)
         worker_instance.finished_with_error.connect(self._on_worker_error)
 
-        # 請求主視窗啟動 Worker Thread
-        self.request_start_worker.emit(worker_instance)
+        # 連接進度、狀態、日誌信號到主視窗槽函數
+        if self.parent_win:
+            worker_instance.progress_updated.connect(self.parent_win.on_panel_progress)
+            worker_instance.log_emitted.connect(self.parent_win.on_panel_log)
+            worker_instance.status_updated.connect(self.parent_win.on_panel_status)
+
+        # 啟動 Worker
+        worker_instance.start()
+        
+        # 通知主視窗任務開始
+        self.task_started.emit("載入中...", 0, "開始載入 CSV 資料以供編輯...", False)
         self.started.emit()
 
     def _on_worker_success(self, out_path):
@@ -124,16 +134,20 @@ class CSVReader(QObject):
             file_path=worker.source_path,
             num_cols=getattr(worker, "num_cols", 0)
         )
+        # 先行標記背景載入任務結束，解鎖 UI，防止後續在 load_completed 回呼中自動啟動新任務時發生衝突
+        self.task_finished.emit("finished")
         self.load_completed.emit(data)
         self.finished.emit()
         self._current_worker = None
 
     def _on_worker_error(self, err_msg):
-        if "使用者已取消" in err_msg:
+        if "使用者已取消" in err_msg or "取消" in err_msg:
+            self.task_finished.emit("cancelled")
             self.cancelled.emit()
         else:
             self.load_error.emit(err_msg)
             parent_win = self.parent_win.window() if self.parent_win else None
             QMessageBox.critical(parent_win, "載入中斷", f"載入編輯過程發生錯誤：\n{err_msg}")
+            self.task_finished.emit("error")
             self.finished.emit()
         self._current_worker = None

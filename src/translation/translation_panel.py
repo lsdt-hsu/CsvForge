@@ -39,7 +39,6 @@ class TranslationPanel(BasePluginPanel):
         
         from translation.csv_translator import CSVTranslator
         self.translator = CSVTranslator(parent=self, context=context)
-        self.translator.request_start_worker.connect(self.request_start_worker.emit)
         self.translator.started.connect(self.on_translator_started)
         self.translator.finished.connect(self.on_translator_finished)
         self.translator.cancelled.connect(self.on_translator_cancelled)
@@ -85,7 +84,7 @@ class TranslationPanel(BasePluginPanel):
 
 
     def _on_translation_done(self):
-        self.request_silent_save.emit()
+        self.request_silent_save_action()
 
     def _on_data_changed(self):
         if self.context and self.context.csv_data:
@@ -329,6 +328,7 @@ class TranslationPanel(BasePluginPanel):
         return self.txt_tgt_col.currentData() if self.txt_tgt_col.currentData() is not None else 1
 
     def set_enabled(self, enabled):
+        super().set_enabled(enabled)
         self.cb_src_lang.setEnabled(enabled)
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
@@ -358,14 +358,38 @@ class TranslationPanel(BasePluginPanel):
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=True)
         self.set_enabled(False)
+        
+        # 通知主程式任務開始
+        total = len(self.context.csv_data.get_visible_indices()) if self.context and self.context.csv_data else 0
+        self.start_task(
+            task_name="翻譯中...",
+            total=total,
+            initial_log="開始執行 CSV 翻譯...",
+            prevent_sleep=True
+        )
 
     def on_translator_finished(self):
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self.set_enabled(True)
+        
+        # 根據 translator 狀態發送結束信號
+        status = "error" if self.translator._has_error else "finished"
+        self.finish_task(status)
 
     def on_translator_cancelled(self):
-        self.btn_start.setText("正在停止...")
-        self.btn_start.setEnabled(False)
+        self.btn_start.setText("開始翻譯")
+        self.btn_start.setEnabled(True)
+        applyPrimaryButtonStyle(self.btn_start, is_running=False)
+        self.set_enabled(True)
+        
+        self.finish_task("cancelled")
+
+    def is_task_running(self) -> bool:
+        return self.translator.is_running()
+
+    def cancel_task(self) -> None:
+        if self.translator.is_running():
+            self.translator.cancel_task()
 

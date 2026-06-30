@@ -1,9 +1,9 @@
+# src/translation/csv_translator.py
 from PyQt6.QtCore import QObject, pyqtSignal
 from translation.translation_validator import validate_translation_inputs
 from translation.csv_translator_worker import CSVTranslatorWorker
 
 class CSVTranslator(QObject):
-    request_start_worker = pyqtSignal(object)
     started = pyqtSignal()
     finished = pyqtSignal()
     cancelled = pyqtSignal()
@@ -15,6 +15,7 @@ class CSVTranslator(QObject):
         self.parent_win = parent  # TranslationPanel
         self.context = context
         self._current_worker = None
+        self._has_error = False
 
     def is_running(self) -> bool:
         return self._current_worker is not None and self._current_worker.isRunning()
@@ -46,14 +47,20 @@ class CSVTranslator(QObject):
             batch_size=batch_size,
         )
         self._current_worker = worker_instance
+        self._has_error = False
 
         # 連接 Worker 完成與錯誤 Signal
         worker_instance.finished_successfully.connect(self._on_worker_success)
         worker_instance.finished_with_error.connect(self._on_worker_error)
         worker_instance.data_changed.connect(self.data_changed.emit)
 
-        # 請求主視窗啟動 Worker Thread
-        self.request_start_worker.emit(worker_instance)
+        # 串接 Worker 進度、日誌、狀態至 TranslationPanel 基底類別方法
+        worker_instance.progress_updated.connect(self.parent_win.update_progress)
+        worker_instance.log_emitted.connect(self.parent_win.write_log)
+        worker_instance.status_updated.connect(self.parent_win.update_status)
+
+        # 啟動 Worker Thread
+        worker_instance.start()
         self.started.emit()
 
     def cancel_task(self):
@@ -71,6 +78,7 @@ class CSVTranslator(QObject):
     def _on_worker_error(self, err_msg):
         if not self._current_worker:
             return
+        self._has_error = True
         self.finished.emit()
         self.translation_done.emit()
         self._current_worker = None

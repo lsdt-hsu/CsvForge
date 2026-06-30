@@ -69,7 +69,8 @@ class CSVWriteWorker(CSVWorker):
 
 
 class CSVWriter(QObject):
-    request_start_worker = pyqtSignal(object)
+    task_started = pyqtSignal(str, int, str, bool)
+    task_finished = pyqtSignal(str)
     save_completed = pyqtSignal(str)
     save_error = pyqtSignal(str)
     
@@ -102,8 +103,18 @@ class CSVWriter(QObject):
         worker_instance.finished_successfully.connect(self._on_worker_success)
         worker_instance.finished_with_error.connect(self._on_worker_error)
 
-        # 請求主視窗啟動 Worker Thread
-        self.request_start_worker.emit(worker_instance)
+        if not self.is_silent:
+            # 非靜默存檔時，連接進度、狀態與日誌信號到主視窗槽函數
+            if self.parent_win:
+                worker_instance.progress_updated.connect(self.parent_win.on_panel_progress)
+                worker_instance.log_emitted.connect(self.parent_win.on_panel_log)
+                worker_instance.status_updated.connect(self.parent_win.on_panel_status)
+            
+            # 通知主視窗任務開始
+            self.task_started.emit("儲存中...", len(all_rows), "開始儲存 CSV 資料...", False)
+
+        # 啟動 Worker Thread
+        worker_instance.start()
         self.started.emit()
 
     def _on_worker_success(self, out_path):
@@ -113,12 +124,15 @@ class CSVWriter(QObject):
         if not self.is_silent:
             parent_win = self.parent_win.window() if self.parent_win else None
             QMessageBox.information(parent_win, "成功", f"存檔成功！\n檔案已儲存至：\n{out_path}")
+            self.task_finished.emit("finished")
             
         self.finished.emit()
         self._current_worker = None
 
     def _on_worker_error(self, err_msg):
-        if "使用者已取消" in err_msg:
+        if "使用者已取消" in err_msg or "取消" in err_msg:
+            if not self.is_silent:
+                self.task_finished.emit("cancelled")
             self.cancelled.emit()
         else:
             self.save_error.emit(err_msg)
@@ -126,5 +140,6 @@ class CSVWriter(QObject):
             if not self.is_silent:
                 parent_win = self.parent_win.window() if self.parent_win else None
                 QMessageBox.critical(parent_win, "儲存中斷", f"儲存過程發生錯誤：\n{err_msg}")
+                self.task_finished.emit("error")
             self.finished.emit()
         self._current_worker = None

@@ -53,23 +53,8 @@ class SettingsMixin:
             self.status_panel.apply_config(self.context.status_panel_config)
             self.edit_content_panel.restore_from_config()
             
-            # 還原各個功能 Package 的設定
-            from left_panel import BUILTIN_UUIDS
-            for name, panel in self.left_panel._panels.items():
-                try:
-                    uuid_str = panel.get_uuid()
-                    if uuid_str in BUILTIN_UUIDS:
-                        pkg_name = panel.get_package_name()
-                    else:
-                        pkg_name = f"PLUGIN-{uuid_str}"
-                except Exception:
-                    pkg_name = panel.get_package_name()
-
-                if pkg_name in self._configs:
-                    try:
-                        panel.deserialize_config(self._configs[pkg_name])
-                    except Exception:
-                        pass
+            # 委託 LeftPanel 還原所有面板的設定
+            self.left_panel.restore_panel_states(self._configs)
         except Exception:
             pass  # 設定還原失敗時靜默略過，避免影響程式啟動
 
@@ -93,22 +78,8 @@ class SettingsMixin:
         self.io_panel.update_config(self.context.io_panel_config)
         self.status_panel.update_config(self.context.status_panel_config, self.right_splitter.sizes())
         
-        # 收集各個功能 Package 的最新設定
-        from left_panel import BUILTIN_UUIDS
-        for name, panel in self.left_panel._panels.items():
-            try:
-                uuid_str = panel.get_uuid()
-                if uuid_str in BUILTIN_UUIDS:
-                    pkg_name = panel.get_package_name()
-                else:
-                    pkg_name = f"PLUGIN-{uuid_str}"
-            except Exception:
-                pkg_name = panel.get_package_name()
-                
-            try:
-                self._configs[pkg_name] = panel.serialize_config()
-            except Exception:
-                pass
+        # 委託 LeftPanel 收集所有面板的最新設定
+        self.left_panel.save_panel_states(self._configs)
                 
         SettingsManager.save(self._configs, self.settings_path)
 

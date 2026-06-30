@@ -7,13 +7,17 @@ from plugin_sdk.theme import applyTitleLabel, applyHintLabel
 
 
 class BasePluginPanel(QFrame):
-    # ── 統一 Interface 通訊信號 ──
-    request_lock_ui = pyqtSignal(bool)
-    progress_updated = pyqtSignal(int, int)
-    status_updated = pyqtSignal(str)
-    log_emitted = pyqtSignal(str, str)
-    request_start_worker = pyqtSignal(object)
-    request_silent_save = pyqtSignal()  # 統一的靜默存檔請求
+    # ── 統一 Interface 通訊信號 (私有封裝) ──
+    # 【專屬授權規定】：LeftPanel 是全系統唯一被授權存取並串接這些私有信號的代理者。
+    # 主程式的其他模組（例如 MainWindow、UiStateMixin、WorkerMixin）嚴禁直接觸碰這些以單底線開頭的私有信號。
+    # 外掛子類別嚴禁直接呼叫這些私有信號的 emit() 方法，必須統一使用基底類別提供的公開 Wrapper 方法。
+    _request_lock_ui = pyqtSignal(bool)
+    _progress_updated = pyqtSignal(int, int)
+    _status_updated = pyqtSignal(str)
+    _log_emitted = pyqtSignal(str, str)
+    _request_silent_save = pyqtSignal()
+    _task_started = pyqtSignal(str, int, str, bool)
+    _task_finished = pyqtSignal(str)
 
     def __init__(self, parent=None, title_text="", require_data_loading=True, context: PluginContext = None):
         super().__init__(parent)
@@ -64,10 +68,20 @@ class BasePluginPanel(QFrame):
             self.context.csv_data.data_loaded.connect(self.on_csv_data_refreshed)
             self.context.csv_data.header_state_changed.connect(self.on_csv_data_refreshed)
 
+        # 註：初始資料狀態同步改由 LeftPanel 在面板建構完畢後統一呼叫 initialize_panel() 觸發，防止子類別初始化未完成崩潰
+
+    def initialize_panel(self) -> None:
+        """
+        SDK 標準生命週期方法。由 LeftPanel 在面板初始化完畢後呼叫，以進行初始狀態同步。
+        """
+        self._on_global_data_loaded()
+        if self.context and self.context.is_data_loaded:
+            self.on_csv_data_refreshed()
+
     def _on_global_data_loaded(self) -> None:
         """全域資料載入/解除載入信號的自動響應槽函數"""
         if self.require_data_loading:
-            if self.context.is_data_loaded:
+            if self.context and self.context.is_data_loaded:
                 self.show_controls()
             else:
                 self.reset_panel()
@@ -121,7 +135,7 @@ class BasePluginPanel(QFrame):
         """接受設定檔資料 dict，並套用/還原面板設定"""
         raise NotImplementedError("Subclasses must implement deserialize_config")
 
-    # ── 共通輔助方法 ──
+    # ── 共通輔助與生命週期 Wrapper 方法 ──
     def show_controls(self):
         if self.require_data_loading:
             self.lbl_no_data.setVisible(False)
@@ -135,13 +149,62 @@ class BasePluginPanel(QFrame):
             self.empty_spacer.setVisible(True)
 
     def lock_ui(self, lock: bool):
-        self.request_lock_ui.emit(lock)
+        """
+        請求主程式鎖定或解鎖 UI。
+        【重要限制】：此方法僅限於「無背景 Worker，但需要在主線程進行短暫阻塞操作」的輕量任務使用。
+        若已呼叫 start_task()，則嚴禁重複呼叫 lock_ui(True)，因為 start_task 內部已隱含全域 UI 鎖定。
+        """
+        self._request_lock_ui.emit(lock)
 
     def update_progress(self, current: int, total: int):
-        self.progress_updated.emit(current, total)
+        self._progress_updated.emit(current, total)
 
     def update_status(self, status: str):
-        self.status_updated.emit(status)
+        self._status_updated.emit(status)
 
     def write_log(self, level: str, message: str):
-        self.log_emitted.emit(level, message)
+        self._log_emitted.emit(level, message)
+
+    def start_task(self, task_name: str, total: int = 0, initial_log: str = "", prevent_sleep: bool = False):
+        """
+        通知主程式背景任務開始。
+        此公開 Wrapper 會觸發內部的私有信號 _task_started。
+        """
+        self._task_started.emit(task_name, total, initial_log, prevent_sleep)
+
+    def finish_task(self, status: str):
+        """
+        通知主程式背景任務結束。
+        此公開 Wrapper 會觸發內部的私有信號 _task_finished。
+        """
+        self._task_finished.emit(status)
+
+    def request_silent_save_action(self):
+        """
+        向主程式發起靜默存檔請求。
+        此公開 Wrapper 會觸發內部的私有信號 _request_silent_save。
+        """
+        self._request_silent_save.emit()
+
+    def set_enabled(self, enabled: bool) -> None:
+        """
+        標準的 SDK 生命週期方法，用以配合 UI 鎖定/解鎖狀態。
+        子類別可複寫此方法以自訂內部元件的啟用/停用邏輯，但必須調用 super().set_enabled(enabled)。
+        """
+        # 不要停用整個面板本身以避免子控制項（如開始/停止按鈕）被強制停用
+        pass
+
+    def is_task_running(self) -> bool:
+        """
+        外部防呆介面：查詢該面板背景任務是否仍在運行。
+        預設回傳 False。具有背景 Worker 的子類別必須複寫此方法。
+        """
+        return False
+
+    def cancel_task(self) -> None:
+        """
+        外部防呆介面：供主程式在取消背景任務時呼叫。
+        預設實作無行為 (pass)。具有背景 Worker 的子類別必須複寫此方法以呼叫 Worker 進行取消。
+        """
+        pass
+

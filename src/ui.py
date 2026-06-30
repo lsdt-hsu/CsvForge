@@ -100,24 +100,15 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
 
         # 連接 CSVReader 與 CSVWriter 信號 (自 io_panel)
         self.io_panel.loader.load_completed.connect(self.on_csv_load_completed)
-        self.io_panel.loader.request_start_worker.connect(self.on_request_start_worker)
-        self.io_panel.writer.request_start_worker.connect(self.on_request_start_worker)
+        self.io_panel.loader.task_started.connect(self.on_task_started)
+        self.io_panel.loader.task_finished.connect(self.on_task_finished)
+        self.io_panel.writer.task_started.connect(self.on_task_started)
+        self.io_panel.writer.task_finished.connect(self.on_task_finished)
         self.io_panel.writer.save_completed.connect(self.on_csv_save_completed)
 
-        # 為了與主程式其他 Mixin/狀態管理保持相容，綁定屬性引用
-        self.translation_panel = self.left_panel._panels["translate"]
-        self.ai_panel = self.left_panel._panels["ai"]
-        self.edit_panel = self.left_panel._panels["edit"]
-        self.filter_panel = self.left_panel._panels["filter"]
-
-        # 遍歷功能面板，自動連接標準 Interface 信號
-        for name, panel in self.left_panel._panels.items():
-            panel.request_lock_ui.connect(self.lock_ui_from_panel)
-            panel.progress_updated.connect(self.on_panel_progress)
-            panel.status_updated.connect(self.on_panel_status)
-            panel.log_emitted.connect(self.on_panel_log)
-            panel.request_start_worker.connect(self.on_request_start_worker)
-            panel.request_silent_save.connect(self.silent_save_edit_data)
+        # 連接 LeftPanel 管理的信號
+        self.left_panel.plugin_removed.connect(self.on_plugin_removed)
+        self.left_panel.settings_save_requested.connect(self.save_settings)
 
         main_layout.addWidget(self.left_panel)
 
@@ -191,12 +182,15 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         # 2. 自動展開側面板，切換到第一個功能（過濾），並呼叫其主要功能
         if data.all_rows:
             self.left_panel.switch_sidebar_tab("filter", force_expand=True)
-            self.filter_panel.run_main_action()
+            filter_panel = self.left_panel.get_plugin("filter")
+            if filter_panel:
+                filter_panel.run_main_action()
 
     def on_source_file_changed(self, file_path: str) -> None:
         self.csv_data.set_csv_data([], ",", "utf-8", None)
-        if self.worker and hasattr(self.worker, "loaded_rows"):
-            self.worker.loaded_rows = []
+
+    def on_plugin_removed(self, plugin_key: str) -> None:
+        self._configs.pop(plugin_key, None)
 
     def on_csv_save_completed(self, out_path: str) -> None:
         self.csv_data.set_modified(False)
