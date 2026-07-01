@@ -22,6 +22,7 @@ from filter import PanelClass as FilterPanel
 from .plugin_manager import PluginManager, PluginWarning, PluginError
 from .plugin_ui import create_add_plugin_icon, create_plugin_button
 from plugin_sdk import PluginContext, BasePluginPanel
+from plugin_sdk.host_adapter import PluginHostAdapter
 
 # 內建面板的 UUID 集合
 BUILTIN_UUIDS = {
@@ -190,16 +191,19 @@ class LeftPanel(QFrame):
         self.add_panel("ai", AiPanel(context=self.plugin_context))
         self.add_panel("edit", EditPanel(context=self.plugin_context))
 
-    def add_panel(self, name: str, panel: QWidget) -> None:
-        self._panels[name] = panel
-        self.sidebar_stacked.addWidget(panel)
-        self._connect_panel_signals(panel)
-        if isinstance(panel, BasePluginPanel):
-            panel.initialize_panel()
+    def add_panel(self, name: str, panel: BasePluginPanel) -> None:
+        """接受實體 Panel，立刻封裝為 PluginHostAdapter 再存入 _panels。"""
+        adapter = PluginHostAdapter(panel)
+        self._panels[name] = adapter
+        self.sidebar_stacked.addWidget(adapter.get_widget())
+        self._connect_panel_signals(adapter)
+        adapter.initialize()
 
-    def _connect_panel_signals(self, panel) -> None:
-        """整批連接面板的私有通訊信號到主程式對應槽函數"""
-        if self.main_window and isinstance(panel, BasePluginPanel):
+    def _connect_panel_signals(self, adapter: PluginHostAdapter) -> None:
+        """從 Adapter 取得內部實體面板，整批連接私有通訊信號到主程式對應槽函數。
+        此處呼叫 adapter.get_panel() 是系統中唯一合法的使用點。"""
+        if self.main_window:
+            panel = adapter.get_panel()
             panel._request_lock_ui.connect(self.main_window.lock_ui_from_panel)
             panel._progress_updated.connect(self.main_window.on_panel_progress)
             panel._status_updated.connect(self.main_window.on_panel_status)
@@ -208,42 +212,41 @@ class LeftPanel(QFrame):
             panel._task_finished.connect(self.main_window.on_task_finished)
             panel._request_silent_save.connect(self.main_window.silent_save_edit_data)
 
-    def get_active_plugin(self) -> BasePluginPanel:
+    def get_active_plugin(self) -> PluginHostAdapter:
         """
-        公開方法：取得當前活躍的外掛/功能面板。
+        公開方法：取得當前活躍的外掛/功能面板的 PluginHostAdapter。
         主程式與其他模組僅能透過此方法取得當前 active plugin，嚴禁直接存取 _panels 或 sidebar_stacked。
+        回傳值為 PluginHostAdapter，徹底阻斷主程式直接存取實體 Panel 的可能。
         """
         widget = self.sidebar_stacked.currentWidget()
-        if isinstance(widget, BasePluginPanel):
-            return widget
+        for adapter in self._panels.values():
+            if adapter.get_widget() is widget:
+                return adapter
         return None
 
-    def get_plugin(self, name: str) -> BasePluginPanel:
+    def get_plugin(self, name: str) -> PluginHostAdapter:
         """
-        公開方法：根據名稱取得對應面板實例。
+        公開方法：根據名稱取得對應面板的 PluginHostAdapter。
         """
-        widget = self._panels.get(name)
-        if isinstance(widget, BasePluginPanel):
-            return widget
-        return None
+        return self._panels.get(name)
 
     def restore_panel_states(self, configs: dict) -> None:
         """
         公開方法：還原所有面板的 UI 設定。
         """
-        for name, panel in self._panels.items():
+        for name, adapter in self._panels.items():
             try:
-                uuid_str = panel.get_uuid()
+                uuid_str = adapter.get_uuid()
                 if uuid_str in BUILTIN_UUIDS:
-                    pkg_name = panel.get_package_name()
+                    pkg_name = adapter.get_package_name()
                 else:
                     pkg_name = f"PLUGIN-{uuid_str}"
             except Exception:
-                pkg_name = panel.get_package_name()
+                pkg_name = adapter.get_package_name()
 
             if pkg_name in configs:
                 try:
-                    panel.deserialize_config(configs[pkg_name])
+                    adapter.deserialize_config(configs[pkg_name])
                 except Exception:
                     pass
 
@@ -251,25 +254,25 @@ class LeftPanel(QFrame):
         """
         公開方法：保存所有面板的最新設定到 configs。
         """
-        for name, panel in self._panels.items():
+        for name, adapter in self._panels.items():
             try:
-                uuid_str = panel.get_uuid()
+                uuid_str = adapter.get_uuid()
                 if uuid_str in BUILTIN_UUIDS:
-                    pkg_name = panel.get_package_name()
+                    pkg_name = adapter.get_package_name()
                 else:
                     pkg_name = f"PLUGIN-{uuid_str}"
             except Exception:
-                pkg_name = panel.get_package_name()
+                pkg_name = adapter.get_package_name()
 
             try:
-                configs[pkg_name] = panel.serialize_config()
+                configs[pkg_name] = adapter.serialize_config()
             except Exception:
                 pass
 
     def switch_sidebar_tab(self, tab_name: str, force_expand: bool = False) -> None:
         current_panel = self._panels.get(tab_name)
         is_same_tab = False
-        if current_panel and self.sidebar_stacked.currentWidget() == current_panel:
+        if current_panel and self.sidebar_stacked.currentWidget() == current_panel.get_widget():
             is_same_tab = True
 
         # Check UI lock
@@ -301,7 +304,7 @@ class LeftPanel(QFrame):
             self.setFixedWidth(SIDEBAR_FULL_WIDTH)
 
             if current_panel:
-                self.sidebar_stacked.setCurrentWidget(current_panel)
+                self.sidebar_stacked.setCurrentWidget(current_panel.get_widget())
             
             # 設定按鈕 active 狀態
             self.btn_filter.setProperty("active", tab_name == "filter")
@@ -345,8 +348,8 @@ class LeftPanel(QFrame):
 
         current_widget = self.sidebar_stacked.currentWidget()
         active_tab = "filter"
-        for name, panel in self._panels.items():
-            if current_widget == panel:
+        for name, adapter in self._panels.items():
+            if current_widget == adapter.get_widget():
                 active_tab = name
                 break
         main_cfg.active_tab = active_tab
@@ -363,8 +366,8 @@ class LeftPanel(QFrame):
             # 同步設定圓圈減按鈕的狀態
             for child in btn.findChildren(QPushButton):
                 child.setEnabled(enabled)
-        for panel in self._panels.values():
-            panel.set_enabled(enabled)
+        for adapter in self._panels.values():
+            adapter.set_enabled(enabled)
 
     # ── 外掛相關繪圖與動態載入邏輯 ───────────────────────────────────────────────
 
@@ -377,8 +380,8 @@ class LeftPanel(QFrame):
     def load_plugin_by_path(self, path: str, auto_save: bool = True) -> bool:
         path = os.path.normpath(path)
         
-        # 1. 取得現有面板 UUID 集合
-        existing_uuids = {p.get_uuid() for p in self._panels.values()}
+        # 取得現有面板 UUID 集合
+        existing_uuids = {a.get_uuid() for a in self._panels.values()}
 
         try:
             plugin_key, panel = self.plugin_manager.load_plugin(path, existing_uuids)
@@ -391,16 +394,17 @@ class LeftPanel(QFrame):
                 QMessageBox.critical(self, "錯誤", str(e))
             return False
 
-        # 註冊外掛面板
-        uuid_str = panel.get_uuid()
-        self._panels[plugin_key] = panel
-        self.sidebar_stacked.addWidget(panel)
+        # 封裝為 PluginHostAdapter 並註冊
+        adapter = PluginHostAdapter(panel)
+        uuid_str = adapter.get_uuid()
+        self._panels[plugin_key] = adapter
+        self.sidebar_stacked.addWidget(adapter.get_widget())
 
         # 建立活動列按鈕與圓圈減移除按鈕
         btn = create_plugin_button(
             parent_widget=self,
             uuid_str=uuid_str,
-            icon=panel.get_icon(),
+            icon=adapter.get_icon(),
             on_click=lambda: self.switch_sidebar_tab(plugin_key),
             on_remove_click=lambda: self.remove_plugin(plugin_key)
         )
@@ -414,10 +418,10 @@ class LeftPanel(QFrame):
             layout.addWidget(btn)
 
         # 整批連接標準私有信號
-        self._connect_panel_signals(panel)
+        self._connect_panel_signals(adapter)
 
         # 初始資料狀態同步
-        panel.initialize_panel()
+        adapter.initialize()
 
         self._plugin_buttons[plugin_key] = btn
         self._loaded_plugins.append((plugin_key, path))
@@ -442,10 +446,12 @@ class LeftPanel(QFrame):
             return
 
         path, panel = self.plugin_manager.remove_plugin(plugin_key)
-        
-        self._panels.pop(plugin_key, None)
-        if panel:
-            if self.sidebar_stacked.currentWidget() == panel:
+
+        # 從 _panels 移除 Adapter（實體 panel 從 Adapter 取得）
+        adapter = self._panels.pop(plugin_key, None)
+        if adapter:
+            panel = adapter.get_panel()
+            if self.sidebar_stacked.currentWidget() is panel:
                 self.switch_sidebar_tab("filter", force_expand=True)
             self.sidebar_stacked.removeWidget(panel)
 

@@ -47,24 +47,37 @@ class UiStateMixin:
     def lock_ui_from_panel(self: "MainWindow", lock: bool) -> None:
         self.set_ui_enabled(not lock)
 
+    def _get_active_panel_instance(self: "MainWindow"):
+        """
+        取得當前 active PluginHostAdapter 內部的實體面板實例。
+        僅供 on_panel_progress / on_panel_status / on_panel_log 中的 sender() 身份比對使用。
+        """
+        from plugin_sdk.host_adapter import PluginHostAdapter
+        adapter = self.left_panel.get_active_plugin()
+        if adapter is None:
+            return None
+        if isinstance(adapter, PluginHostAdapter):
+            return adapter.get_panel()
+        return None
+
     def on_panel_progress(self: "MainWindow", current: int, total: int) -> None:
         sender = self.sender()
-        from plugin_sdk import BasePluginPanel
-        if isinstance(sender, BasePluginPanel) and sender != self.left_panel.get_active_plugin():
+        active_panel = self._get_active_panel_instance()
+        if sender is not active_panel:
             return
         self.on_worker_progress(current, total)
 
     def on_panel_status(self: "MainWindow", status: str) -> None:
         sender = self.sender()
-        from plugin_sdk import BasePluginPanel
-        if isinstance(sender, BasePluginPanel) and sender != self.left_panel.get_active_plugin():
+        active_panel = self._get_active_panel_instance()
+        if sender is not active_panel:
             return
         self.task_status_str = status
         self.update_status_summary()
 
     def on_panel_log(self: "MainWindow", level: str, message: str) -> None:
         sender = self.sender()
-        from plugin_sdk import BasePluginPanel
-        if isinstance(sender, BasePluginPanel) and sender != self.left_panel.get_active_plugin():
+        active_panel = self._get_active_panel_instance()
+        if sender is not active_panel:
             return
         self.append_log(level, message)

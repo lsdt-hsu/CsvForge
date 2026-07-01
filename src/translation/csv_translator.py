@@ -55,9 +55,9 @@ class CSVTranslator(QObject):
         worker_instance.data_changed.connect(self.data_changed.emit)
 
         # 串接 Worker 進度、日誌、狀態至 TranslationPanel 基底類別方法
-        worker_instance.progress_updated.connect(self.parent_win.update_progress)
-        worker_instance.log_emitted.connect(self.parent_win.write_log)
-        worker_instance.status_updated.connect(self.parent_win.update_status)
+        worker_instance.progress_updated.connect(self.parent_win.api.update_progress)
+        worker_instance.log_emitted.connect(self.parent_win.api.write_log)
+        worker_instance.status_updated.connect(self.parent_win.api.update_status)
 
         # 啟動 Worker Thread
         worker_instance.start()

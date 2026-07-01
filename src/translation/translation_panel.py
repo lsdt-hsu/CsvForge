@@ -84,7 +84,7 @@ class TranslationPanel(BasePluginPanel):
 
 
     def _on_translation_done(self):
-        self.request_silent_save_action()
+        self.api.request_silent_save()
 
     def _on_data_changed(self):
         if self.context and self.context.csv_data:
@@ -225,16 +225,13 @@ class TranslationPanel(BasePluginPanel):
             self.config.dirty = True
 
     # ── Interface 實作 ────────────────────────────────────────────────────────
-    def get_package_name(self) -> str:
+    def _internal_get_package_name(self) -> str:
         return "translate_panel"
 
-    def get_uuid(self) -> str:
+    def _internal_get_uuid(self) -> str:
         return "c7a10787-8df1-4340-974a-4e6f47721867"
 
-    def run_main_action(self) -> None:
-        self.on_start_clicked()
-
-    def serialize_config(self) -> dict:
+    def _internal_serialize_config(self) -> dict:
         cfg = self.config
         return {
             "batch_interval": cfg.batch_interval,
@@ -246,7 +243,7 @@ class TranslationPanel(BasePluginPanel):
             "tgt_col": cfg.tgt_col,
         }
 
-    def deserialize_config(self, data: dict) -> None:
+    def _internal_deserialize_config(self, data: dict) -> None:
         cfg = self.config
         cfg.batch_interval = data.get("batch_interval", 10)
         cfg.single_interval = data.get("single_interval", 1.0)
@@ -327,8 +324,8 @@ class TranslationPanel(BasePluginPanel):
     def get_tgt_col(self) -> int:
         return self.txt_tgt_col.currentData() if self.txt_tgt_col.currentData() is not None else 1
 
-    def set_enabled(self, enabled):
-        super().set_enabled(enabled)
+    def _internal_set_enabled(self, enabled: bool) -> None:
+        super()._internal_set_enabled(enabled)
         self.cb_src_lang.setEnabled(enabled)
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
@@ -357,11 +354,11 @@ class TranslationPanel(BasePluginPanel):
         self.btn_start.setText("停止翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=True)
-        self.set_enabled(False)
+        self._internal_set_enabled(False)
         
         # 通知主程式任務開始
         total = len(self.context.csv_data.get_visible_indices()) if self.context and self.context.csv_data else 0
-        self.start_task(
+        self.api.start_task(
             task_name="翻譯中...",
             total=total,
             initial_log="開始執行 CSV 翻譯...",
@@ -372,24 +369,24 @@ class TranslationPanel(BasePluginPanel):
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
-        self.set_enabled(True)
+        self._internal_set_enabled(True)
         
         # 根據 translator 狀態發送結束信號
         status = "error" if self.translator._has_error else "finished"
-        self.finish_task(status)
+        self.api.finish_task(status)
 
     def on_translator_cancelled(self):
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
-        self.set_enabled(True)
+        self._internal_set_enabled(True)
         
-        self.finish_task("cancelled")
+        self.api.finish_task("cancelled")
 
-    def is_task_running(self) -> bool:
+    def _internal_is_task_running(self) -> bool:
         return self.translator.is_running()
 
-    def cancel_task(self) -> None:
+    def _internal_cancel_task(self) -> None:
         if self.translator.is_running():
             self.translator.cancel_task()
 

@@ -55,6 +55,7 @@ class FilterPanel(BasePluginPanel):
             if not self.controls_container.isVisible():
                 self.show_controls()
             self.update_column_dropdowns(self.context.csv_data.num_cols)
+            self.on_filter_clicked()
         else:
             self.reset_panel()
 
@@ -414,7 +415,7 @@ class FilterPanel(BasePluginPanel):
         self.worker = worker_instance
         
         # 連接進度信號（FilterWorker 僅提供此基本信號，未定義 status_updated / log_emitted）
-        worker_instance.progress_updated.connect(self.update_progress)
+        worker_instance.progress_updated.connect(self.api.update_progress)
         
         worker_instance.filter_completed.connect(self.on_filter_completed)
         worker_instance.filter_error.connect(self.on_filter_error)
@@ -422,7 +423,7 @@ class FilterPanel(BasePluginPanel):
         worker_instance.start()
         
         # 發送任務開始信號
-        self.start_task(
+        self.api.start_task(
             task_name="過濾中...",
             total=len(rows),
             initial_log="開始執行 CSV 資料過濾...",
@@ -431,31 +432,31 @@ class FilterPanel(BasePluginPanel):
 
     def on_filter_completed(self, matched_indices, elapsed_time: float) -> None:
         self.context.csv_data.set_filtered_indices(matched_indices)
-        self.update_status("完成")
-        self.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
-        self.finish_task("finished")
+        self.api.update_status("完成")
+        self.api.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
+        self.api.finish_task("finished")
         self.worker = None
 
     def on_filter_error(self, err_msg: str) -> None:
         self.worker = None
         if "使用者已取消" in err_msg or "取消" in err_msg:
-            self.update_status("已取消")
-            self.write_log("WARNING", "過濾工作已被使用者取消。")
-            self.finish_task("cancelled")
+            self.api.update_status("已取消")
+            self.api.write_log("WARNING", "過濾工作已被使用者取消。")
+            self.api.finish_task("cancelled")
         else:
-            self.update_status("錯誤")
-            self.write_log("ERROR", f"過濾錯誤：{err_msg}")
+            self.api.update_status("錯誤")
+            self.api.write_log("ERROR", f"過濾錯誤：{err_msg}")
             QMessageBox.critical(self, "過濾錯誤", err_msg)
-            self.finish_task("error")
+            self.api.finish_task("error")
 
-    def is_task_running(self) -> bool:
+    def _internal_is_task_running(self) -> bool:
         return self.worker is not None and self.worker.isRunning()
 
-    def cancel_task(self) -> None:
+    def _internal_cancel_task(self) -> None:
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
 
-    def set_enabled(self, enabled):
+    def _internal_set_enabled(self, enabled: bool) -> None:
         self.txt_filter_start_row.setEnabled(enabled)
         self.txt_filter_end_row.setEnabled(enabled)
         self.btn_add_rule.setEnabled(enabled)
@@ -465,16 +466,13 @@ class FilterPanel(BasePluginPanel):
             r.setEnabled(enabled)
 
     # ── Interface 實作 ────────────────────────────────────────────────────────
-    def get_package_name(self) -> str:
+    def _internal_get_package_name(self) -> str:
         return "filter_panel"
 
-    def get_uuid(self) -> str:
+    def _internal_get_uuid(self) -> str:
         return "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
 
-    def run_main_action(self) -> None:
-        self.on_filter_clicked()
-
-    def serialize_config(self) -> dict:
+    def _internal_serialize_config(self) -> dict:
         cfg = self.config
         return {
             "rules": cfg.rules,
@@ -484,7 +482,7 @@ class FilterPanel(BasePluginPanel):
             "end_row": cfg.end_row,
         }
 
-    def deserialize_config(self, data: dict) -> None:
+    def _internal_deserialize_config(self, data: dict) -> None:
         cfg = self.config
         cfg.rules = data.get("rules", [])
         cfg.logic_tree = data.get("logic_tree", {})

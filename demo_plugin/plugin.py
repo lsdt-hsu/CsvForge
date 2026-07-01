@@ -43,7 +43,6 @@ class PanelClass(BasePluginPanel):
         
         from csv_translator import CSVTranslator
         self.translator = CSVTranslator(parent=self, context=context)
-        self.translator.request_start_worker.connect(self.request_start_worker.emit)
         self.translator.started.connect(self.on_translator_started)
         self.translator.finished.connect(self.on_translator_finished)
         self.translator.cancelled.connect(self.on_translator_cancelled)
@@ -89,7 +88,7 @@ class PanelClass(BasePluginPanel):
 
 
     def _on_translation_done(self):
-        self.request_silent_save.emit()
+        self.api.request_silent_save()
 
     def _on_data_changed(self):
         if self.context and self.context.csv_data:
@@ -230,16 +229,13 @@ class PanelClass(BasePluginPanel):
             self.config.dirty = True
 
     # ── Interface 實作 ────────────────────────────────────────────────────────
-    def get_package_name(self) -> str:
+    def _internal_get_package_name(self) -> str:
         return "translation2"
 
-    def get_uuid(self) -> str:
+    def _internal_get_uuid(self) -> str:
         return "a9b8c7d6-e5f4-3210-fedc-ba9876543210"
 
-    def run_main_action(self) -> None:
-        self.on_start_clicked()
-
-    def serialize_config(self) -> dict:
+    def _internal_serialize_config(self) -> dict:
         cfg = self.config
         return {
             "batch_interval": cfg.batch_interval,
@@ -251,7 +247,7 @@ class PanelClass(BasePluginPanel):
             "tgt_col": cfg.tgt_col,
         }
 
-    def deserialize_config(self, data: dict) -> None:
+    def _internal_deserialize_config(self, data: dict) -> None:
         cfg = self.config
         cfg.batch_interval = data.get("batch_interval", 10)
         cfg.single_interval = data.get("single_interval", 1.0)
@@ -332,7 +328,7 @@ class PanelClass(BasePluginPanel):
     def get_tgt_col(self) -> int:
         return self.txt_tgt_col.currentData() if self.txt_tgt_col.currentData() is not None else 1
 
-    def set_enabled(self, enabled):
+    def _internal_set_enabled(self, enabled: bool) -> None:
         self.cb_src_lang.setEnabled(enabled)
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
@@ -361,15 +357,19 @@ class PanelClass(BasePluginPanel):
         self.btn_start.setText("停止翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=True)
-        self.set_enabled(False)
+        self._internal_set_enabled(False)
+        total = len(self.context.csv_data.get_visible_indices()) if self.context and self.context.csv_data else 0
+        self.api.start_task(task_name="翻譯中...", total=total, initial_log="開始執行 CSV 翻譯...", prevent_sleep=True)
 
     def on_translator_finished(self):
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
-        self.set_enabled(True)
+        self._internal_set_enabled(True)
+        self.api.finish_task("finished")
 
     def on_translator_cancelled(self):
         self.btn_start.setText("正在停止...")
-        self.btn_start.setEnabled(False)
+        self._internal_set_enabled(True)
+        self.api.finish_task("cancelled")
 

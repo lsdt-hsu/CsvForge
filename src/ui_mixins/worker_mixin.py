@@ -65,9 +65,7 @@ class WorkerMixin:
                 self.append_log("INFO", "已成功通知系統在任務期間不要進入休眠狀態。")
 
         # 鎖定當前活動面板 UI
-        active_panel = self.get_active_panel()
-        if active_panel:
-            active_panel.lock_ui(True)
+        self.lock_ui_from_panel(True)
 
     def update_status_summary(self: "MainWindow") -> None:
         self.status_panel.update_status(self.elapsed_time_str, self.task_status_str)
@@ -88,9 +86,7 @@ class WorkerMixin:
         self.timer.stop()
         
         # 解鎖 UI
-        active_panel = self.get_active_panel()
-        if active_panel:
-            active_panel.lock_ui(False)
+        self.lock_ui_from_panel(False)
 
         # 恢復系統休眠設定
         if getattr(self, "_worker_sleep_prevented", False):
