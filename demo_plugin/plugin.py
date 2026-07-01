@@ -1,5 +1,5 @@
 """
-translation_panel.py — 翻譯面板
+translation_panel.py — 翻譯面板 (外掛版本)
 
 設計決策（Config 存取方式）：
   本面板採用「直接操作 Config 物件」的方式（資料相依性），
@@ -33,12 +33,10 @@ class TranslatePanelConfig:
     src_col: int = 0
     tgt_col: int = 1
 
-
 class PanelClass(BasePluginPanel):
 
-
     def __init__(self, parent=None, context=None):
-        super().__init__(parent, title_text="翻譯外掛 2", require_data_loading=True, context=context)
+        super().__init__(parent, title_text="翻譯外掛", require_data_loading=True, context=context)
         self.config = TranslatePanelConfig()
         
         from csv_translator import CSVTranslator
@@ -86,7 +84,6 @@ class PanelClass(BasePluginPanel):
         self.txt_src_col.setCurrentIndex(cfg.src_col)
         self.txt_tgt_col.setCurrentIndex(cfg.tgt_col)
 
-
     def _on_translation_done(self):
         self.api.request_silent_save()
 
@@ -94,7 +91,6 @@ class PanelClass(BasePluginPanel):
         if self.context and self.context.csv_data:
             self.context.csv_data.set_modified(True)
             self.context.csv_data.data_changed.emit()
-
 
     def init_ui(self):
         grid = QGridLayout()
@@ -108,7 +104,7 @@ class PanelClass(BasePluginPanel):
             ("ko", "ko (韓文)"),
         ]
 
-        lbl_src_lang = QLabel("來源語言？")
+        lbl_src_lang = QLabel("來源語言：")
         applyStandardLabelStyle(lbl_src_lang)
         self.cb_src_lang = QComboBox()
         applyStandardComboBoxStyle(self.cb_src_lang)
@@ -189,9 +185,6 @@ class PanelClass(BasePluginPanel):
         self.txt_tgt_col.currentIndexChanged.connect(self._on_tgt_col_changed)
 
     # ── Config 變動事件 Handler ───────────────────────────────────────────────
-    # 各控件變動時直接寫入 TranslatePanelConfig，設定 dirty flag。
-    # 見模組頂部說明：此為「資料相依性」設計，取代 get_config/set_config 橋接。
-
     def _on_batch_interval_changed(self, val: int) -> None:
         self.lbl_batch_title.setText(f"批次間隔：{val} 秒")
         self.config.batch_interval = val
@@ -259,15 +252,9 @@ class PanelClass(BasePluginPanel):
         self.restore_from_config()
 
     # ── Config 還原 ───────────────────────────────────────────────────────────
-
     def restore_from_config(self) -> None:
-        """
-        從自帶的 TranslatePanelConfig 還原面板設定。
-        在 show_controls() 首次被呼叫後執行（即首次載入 CSV 後），確保只還原一次。
-        """
         cfg = self.config
 
-        # blockSignals 避免還原過程觸發 _on_xxx_changed 誤設 dirty flag
         self.slider_batch_interval.blockSignals(True)
         self.slider_single_interval.blockSignals(True)
         self.slider_batch_size.blockSignals(True)
@@ -305,8 +292,7 @@ class PanelClass(BasePluginPanel):
             self.txt_src_col.blockSignals(False)
             self.txt_tgt_col.blockSignals(False)
 
-    # ── 便捷讀取方法（供 start_translation_task 使用）────────────────────────
-
+    # ── 便捷讀取方法 ─────────────────────────────────────────────────────────
     def get_src_lang(self):
         return self.cb_src_lang.currentData()
 
@@ -329,6 +315,7 @@ class PanelClass(BasePluginPanel):
         return self.txt_tgt_col.currentData() if self.txt_tgt_col.currentData() is not None else 1
 
     def _internal_set_enabled(self, enabled: bool) -> None:
+        super()._internal_set_enabled(enabled)
         self.cb_src_lang.setEnabled(enabled)
         self.cb_tgt_lang.setEnabled(enabled)
         self.slider_batch_interval.setEnabled(enabled)
@@ -358,18 +345,35 @@ class PanelClass(BasePluginPanel):
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=True)
         self._internal_set_enabled(False)
+        
         total = len(self.context.csv_data.get_visible_indices()) if self.context and self.context.csv_data else 0
-        self.api.start_task(task_name="翻譯中...", total=total, initial_log="開始執行 CSV 翻譯...", prevent_sleep=True)
+        self.api.start_task(
+            task_name="翻譯中...",
+            total=total,
+            initial_log="開始執行 CSV 翻譯...",
+            prevent_sleep=True
+        )
 
     def on_translator_finished(self):
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self._internal_set_enabled(True)
-        self.api.finish_task("finished")
+        
+        status = "error" if self.translator._has_error else "finished"
+        self.api.finish_task(status)
 
     def on_translator_cancelled(self):
-        self.btn_start.setText("正在停止...")
+        self.btn_start.setText("開始翻譯")
+        self.btn_start.setEnabled(True)
+        applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self._internal_set_enabled(True)
+        
         self.api.finish_task("cancelled")
 
+    def _internal_is_task_running(self) -> bool:
+        return self.translator.is_running()
+
+    def _internal_cancel_task(self) -> None:
+        if self.translator.is_running():
+            self.translator.cancel_task()

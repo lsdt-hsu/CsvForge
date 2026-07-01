@@ -53,7 +53,9 @@ class PluginManager:
         except Exception as e:
             raise PluginError(f"載入外掛時發生錯誤：\n{str(e)}")
 
-        uuid_str = panel.get_uuid()
+        from plugin_sdk.host_adapter import PluginHostAdapter
+        adapter = PluginHostAdapter(panel)
+        uuid_str = adapter.get_uuid()
         if uuid_str in existing_uuids:
             panel.deleteLater()
             raise PluginError(f"外掛 UUID 重複，拒絕載入。\n重複的 UUID: {uuid_str}")
