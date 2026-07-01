@@ -18,3 +18,20 @@
 
 ## 3. Override Rule
 - Execute `git commit`, `git push`, or Git workflows ONLY when explicitly commanded by the developer. Manual user commands override all restrictions above.
+
+## 4. SDK Architecture & Boundary Rules
+- **Dual Facade Isolation**: The system strictly enforces the Interface Segregation Principle (ISP) between the Host (Main Program) and Plugins.
+  - **Host View**: The Host (e.g., `LeftPanel`, `MainWindow`, Mixins) MUST ONLY interact with plugins via `PluginHostAdapter`. The Host is strictly forbidden from accessing `BasePluginPanel` instances directly (except during initial setup in `LeftPanel`).
+  - **Plugin View**: Plugin developers MUST ONLY interact with the Host via `self.api` (an instance of `PluginAPI`). Plugins are strictly forbidden from calling Host lifecycle methods directly.
+
+- **Host Constraints**:
+  - When passing a plugin to a PyQt UI component (e.g., `QStackedWidget`), you MUST use `adapter.get_widget()`. Do NOT pass the `PluginHostAdapter` object directly to UI methods.
+  - The Host MUST NOT manually trigger specific plugin internal logic (e.g., do not call `run_main_action()`). Plugins must auto-trigger via their own lifecycle hooks (e.g., `on_csv_data_refreshed`).
+
+- **Plugin Constraints**:
+  - All Host-bound requests (e.g., `start_task`, `finish_task`, `update_progress`, `write_log`, `lock_ui`) MUST be routed through `self.api.xxx()`. Do NOT call `self.update_progress()` directly on the panel.
+  - Plugins MUST NOT directly emit `_` prefixed private signals defined in `BasePluginPanel` (e.g., `_task_started`).
+
+- **Strict Anti-Patterns**:
+  - DO NOT use `hasattr()` or `getattr()` to guess properties, state, or methods across the Host-Plugin boundary.
+  - DO NOT export `PluginHostAdapter` in `plugin_sdk/__init__.py`. It must remain hidden from plugin developers.
