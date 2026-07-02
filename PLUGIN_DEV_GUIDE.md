@@ -1156,6 +1156,8 @@ def on_csv_data_refreshed(self) -> None:
 **正確觀念說明**：
 基底類別會自動處理 UI 的隱藏與顯示。外掛只需在 `on_csv_data_refreshed` 中，根據「現存的 Config」重新填充並還原 UI 即可，絕對不要主動去 reset 任何狀態。
 
+**生命週期鐵律**：主程式【只會在啟動時】透過 `_internal_deserialize_config` 讀取並還原一次設定。當後續發生載入或重載 CSV 資料（觸發 `on_csv_data_refreshed`）時，外掛的 UI 元件實體與內部 Config 變數皆完好存在。因此，在資料刷新時，【絕對禁止】呼叫完整的 Config 還原方法（如 `deserialize` 或自定義的 `restore_from_config`）來進行 UI 的銷毀與全盤重建。你只需要針對依賴資料的元件（例如：更新下拉選單的欄位名稱），並利用現存的 Config 變數將選取狀態套用回去（如 `setCurrentIndex`）即可。
+
 ---
 
 ## 附錄：_internal_ 方法快速參考
