@@ -35,7 +35,7 @@ class AiPanel(BasePluginPanel):
                 self.show_controls()
             self.update_column_dropdowns(self.context.csv_data.num_cols)
         else:
-            self.reset_panel()
+            self.hide_controls()
 
     def init_ui(self):
         # 建立 UI 配置

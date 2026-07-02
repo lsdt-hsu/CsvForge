@@ -57,7 +57,7 @@ class FilterPanel(BasePluginPanel):
             self.update_column_dropdowns(self.context.csv_data.num_cols)
             self.on_filter_clicked()
         else:
-            self.reset_panel()
+            self.hide_controls()
 
     def init_ui(self):
         # 行號範圍輸入
@@ -155,7 +155,7 @@ class FilterPanel(BasePluginPanel):
         self.txt_expression.focus_out_signal.connect(self.on_expression_focus_out)
         self.controls_layout.addWidget(self.txt_expression)
 
-        self.reset_panel()
+        self.hide_controls()
 
     def _on_row_range_changed(self):
         cfg = self.config
@@ -169,8 +169,8 @@ class FilterPanel(BasePluginPanel):
             if child.widget():
                 child.widget().deleteLater()
 
-    def reset_panel(self):
-        super().reset_panel()
+    def hide_controls(self):
+        super().hide_controls()
         self.num_cols = 0
 
         self.clear_layout(self.rule_list_layout)

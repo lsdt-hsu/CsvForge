@@ -55,7 +55,7 @@ class PanelClass(BasePluginPanel):
                 self.show_controls()
             self.update_column_dropdowns()
         else:
-            self.reset_panel()
+            self.hide_controls()
 
     def update_column_dropdowns(self):
         if not self.context or not self.context.csv_data:

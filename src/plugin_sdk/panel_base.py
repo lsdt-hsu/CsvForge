@@ -111,7 +111,7 @@ class BasePluginPanel(QFrame):
             self.controls_container.setVisible(True)
             self.empty_spacer.setVisible(False)
 
-    def reset_panel(self):
+    def hide_controls(self):
         if self.require_data_loading:
             self.lbl_no_data.setVisible(True)
             self.controls_container.setVisible(False)
@@ -125,7 +125,7 @@ class BasePluginPanel(QFrame):
             if self.context and self.context.is_data_loaded:
                 self.show_controls()
             else:
-                self.reset_panel()
+                self.hide_controls()
 
     # ── _internal_ 生命週期方法（僅供 PluginHostAdapter 轉發呼叫）─────────
     # 【存取禁令】：下列方法不得由主程式的任何模組直接呼叫，

@@ -30,6 +30,7 @@
   - [反模式 4：直接呼叫主程式生命週期方法](#-反模式-4直接呼叫主程式生命週期方法)
   - [反模式 5：Hardcode QSS 樣式](#-反模式-5hardcode-qss-樣式)
   - [反模式 6：在 Config 操作中省略 blockSignals](#-反模式-6在-config-操作中省略-blocksignals)
+  - [反模式 7：在資料解除載入或重載時清除 Config 狀態](#-反模式-7在資料解除載入或重載時清除-config-狀態)
 - [附錄：_internal_ 方法快速參考](#附錄internal_-方法快速參考)
 
 ---
@@ -504,7 +505,7 @@ def _internal_set_enabled(self, enabled: bool) -> None:
 | 方法 | 說明 |
 |------|------|
 | `self.show_controls()` | 隱藏「尚未載入資料」提示，顯示 `controls_container` |
-| `self.reset_panel()` | 顯示「尚未載入資料」提示，隱藏 `controls_container` |
+| `self.hide_controls()` | 顯示「尚未載入資料」提示，隱藏 `controls_container` |
 
 > 注意：只有 `require_data_loading=True` 時這兩個方法才有效。
 
@@ -1138,6 +1139,22 @@ def _internal_deserialize_config(self, data: dict) -> None:
     finally:
         self.combo_col.blockSignals(False)
 ```
+
+---
+
+### ❌ 反模式 7：在資料解除載入或重載時清除 Config 狀態
+
+外掛的 Config 狀態在整個生命週期中應保持永續（Persistent）。當使用者關閉 CSV 檔案（觸發 `hide_controls`）或載入新檔案（觸發 `on_csv_data_refreshed`）時，**絕對禁止**將 Config 變數歸零或洗掉 UI 的選擇狀態。
+
+```python
+# ❌ 絕對禁止：在資料刷新時重置 Config
+def on_csv_data_refreshed(self) -> None:
+    self._config_selected_col = 0  # 錯誤！這會抹除使用者的設定
+    self.combo_col.clear()         # 若沒有 restore，等於洗掉設定
+```
+
+**正確觀念說明**：
+基底類別會自動處理 UI 的隱藏與顯示。外掛只需在 `on_csv_data_refreshed` 中，根據「現存的 Config」重新填充並還原 UI 即可，絕對不要主動去 reset 任何狀態。
 
 ---
 
