@@ -173,28 +173,6 @@ class FilterPanel(BasePluginPanel):
         super().hide_controls()
         self.num_cols = 0
 
-        self.clear_layout(self.rule_list_layout)
-        self.rules.clear()
-
-        self.logic_tree = logic_tree.LogicNode("LEAF", leaf_idx=1)
-        self.expression_is_valid = True
-        self.txt_expression.setStyleSheet("")
-
-        w = RuleWidget(1, self)
-        self.rules.append(w)
-        self.rule_list_layout.addWidget(w)
-
-        self.btn_add_rule.setVisible(True)
-        self.txt_expression.setPlainText("#1")
-
-        if hasattr(self, "txt_filter_start_row") and hasattr(self, "txt_filter_end_row"):
-            self.txt_filter_start_row.blockSignals(True)
-            self.txt_filter_end_row.blockSignals(True)
-            self.txt_filter_start_row.setText("1")
-            self.txt_filter_end_row.clear()
-            self.txt_filter_start_row.blockSignals(False)
-            self.txt_filter_end_row.blockSignals(False)
-
     def check_expression_validity(self):
         if not self.expression_is_valid:
             QMessageBox.warning(self, "錯誤", "當前規則邏輯表達式不合法，請先修正紅框內的表達式。")
