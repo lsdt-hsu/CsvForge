@@ -72,7 +72,7 @@ your_plugin_folder/
 └── plugin.py          ← 唯一入口，必須定義繼承 BasePluginPanel 的類別
 ```
 
-主程式透過路徑動態載入 `plugin.py`，其中的 Panel 類別名稱**沒有強制規定**，但建議命名為描述性的 `XXXPanel`。
+主程式透過路徑動態載入 `plugin.py`，外掛的主類別名稱【必須嚴格命名為 `PanelClass`】，主程式會以此名稱進行動態載入。絕對不可使用其他名稱。
 
 ---
 
@@ -139,7 +139,7 @@ class _MyWorker(QObject):
 
 # ── 外掛主類別 ─────────────────────────────────────────────────────────────
 
-class MyPluginPanel(BasePluginPanel):
+class PanelClass(BasePluginPanel):
     """
     外掛面板主類別。
     繼承 BasePluginPanel，透過 self.api 與主程式溝通。
@@ -148,8 +148,8 @@ class MyPluginPanel(BasePluginPanel):
     # 【必要】：定義此外掛的固定 UUID（每個外掛獨立產生，勿重複）
     _UUID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # 請替換為 str(uuid.uuid4())
 
-    # 非欄位選項的 UI 索引偏移量（UI index 0 保留給「所有欄位」等特殊項）
-    _N_NON_COL_OPTIONS = 1
+    # 非欄位選項的 UI 索引偏移量（無特殊非欄位選項時設為 0）
+    _N_NON_COL_OPTIONS = 0
 
     def __init__(self, context: PluginContext, parent=None):
         super().__init__(
@@ -161,6 +161,7 @@ class MyPluginPanel(BasePluginPanel):
         self._thread = None
         self._worker = None
         self._throttled_progress = None  # 於任務啟動時初始化
+        self._config_selected_col = 0   # 儲存還原的欄位設定值（預設選擇第 1 欄）
         self._setup_ui()
 
     # ── UI 初始化 ──────────────────────────────────────────────────────────
@@ -172,16 +173,14 @@ class MyPluginPanel(BasePluginPanel):
         theme.applyStandardLabelStyle(self.lbl_desc)
         self.controls_layout.addWidget(self.lbl_desc)
 
-        # 含「所有欄位」非欄位選項的下拉選單
-        # UI index 0 → 「所有欄位」（stored value = -1）
-        # UI index 1 → 實際欄位 0（stored value = 0）
-        # UI index N → 實際欄位 N-1（stored value = N-1）
+        # 下拉選單（僅包含實際欄位項目）
+        # UI index k → 實際欄位 k（stored value = k）
         self.combo_col = QComboBox()
         theme.applyStandardComboBoxStyle(self.combo_col)
         self.controls_layout.addWidget(self.combo_col)
 
         # 主要動作按鈕
-        self.btn_start = QPushButton("開始執行")
+        self.btn_start = QPushButton("開始處理")
         theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self.btn_start.clicked.connect(self._on_btn_clicked)
         self.controls_layout.addWidget(self.btn_start)
@@ -189,24 +188,20 @@ class MyPluginPanel(BasePluginPanel):
         # 彈性填充（讓元件靠上排列）
         self.controls_layout.addStretch()
 
-    # ── 非欄位選項 Index 映射 ────────────────────────────────────────────────
+    # ── 欄位選項 Index 映射 ──────────────────────────────────────────────────
     # 映射規則：
-    #   UI index 0            → stored value -1（「所有欄位」）
-    #   UI index k (k >= 1)   → stored value k - _N_NON_COL_OPTIONS（實際欄位索引）
-    #   stored value -1       → UI index 0
-    #   stored value col_idx  → UI index col_idx + _N_NON_COL_OPTIONS
+    #   UI index k            → stored value k（實際欄位索引）
+    #   stored value col_idx  → UI index col_idx
 
     def _ui_to_stored(self, ui_index: int) -> int:
         """將 UI combo index 轉換為要儲存在 config 的整數值。
-        ui_index = 0           → -1（「所有欄位」）
-        ui_index = k (k >= 1)  → k - _N_NON_COL_OPTIONS（實際欄位索引）
+        當 _N_NON_COL_OPTIONS = 0 時，直接回傳傳入的 index。
         """
         return ui_index - self._N_NON_COL_OPTIONS
 
     def _stored_to_ui(self, stored: int) -> int:
         """將 config 中的整數值轉換回 UI combo index。
-        stored = -1        → 0（「所有欄位」）
-        stored = col_idx   → col_idx + _N_NON_COL_OPTIONS
+        當 _N_NON_COL_OPTIONS = 0 時，直接回傳傳入的 stored 值。
         """
         return stored + self._N_NON_COL_OPTIONS
 
@@ -217,21 +212,39 @@ class MyPluginPanel(BasePluginPanel):
         if not self.context or not self.context.is_data_loaded:
             return
 
+        # 計算安全上限，確保能容納 Config 中已儲存的欄位索引
+        limit = max(
+            self.context.csv_data.num_cols,
+            self._config_selected_col + 1
+        )
+
         # 切斷信號，防止填充選單時觸發 currentIndexChanged 導致 dirty 標記
         self.combo_col.blockSignals(True)
         try:
             self.combo_col.clear()
-            self.combo_col.addItem("所有欄位")  # UI index 0 → stored -1
-            for col in range(self.context.csv_data.num_cols):
+            for col in range(limit):
                 header = self.context.csv_data.get_column_header(col)
-                self.combo_col.addItem(header)  # UI index col+1 → stored col
+                self.combo_col.addItem(header)
+
+            # 重新選取原本設定的值 (因 limit 公式已履約保證，此處直接 set 即可)
+            ui_index = self._stored_to_ui(self._config_selected_col)
+            self.combo_col.setCurrentIndex(ui_index)
         finally:
             self.combo_col.blockSignals(False)
 
     # ── 按鈕點擊邏輯 ───────────────────────────────────────────────────────
 
     def _on_btn_clicked(self):
-        """點擊「開始執行」的槽函數。"""
+        """點擊「開始處理」的槽函數。"""
+        # 如果任務正在執行，則進行取消
+        if self._worker:
+            self._worker.cancel()
+            return
+
+        # 將按鈕轉為紅色停止狀態，並更改文字為「停止處理」
+        theme.applyPrimaryButtonStyle(self.btn_start, is_running=True)
+        self.btn_start.setText("停止處理")
+
         # 1. 通知主程式任務開始（內部已隱含 UI 鎖定，禁止再呼叫 lock_ui(True)）
         self.api.start_task(
             task_name="我的外掛任務",
@@ -271,6 +284,10 @@ class MyPluginPanel(BasePluginPanel):
         self._cleanup_thread()
 
     def _cleanup_thread(self):
+        # 恢復藍色狀態，並更改文字回「開始處理」
+        theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
+        self.btn_start.setText("開始處理")
+
         if self._thread:
             self._thread.quit()
             self._thread.wait()
@@ -305,8 +322,8 @@ class MyPluginPanel(BasePluginPanel):
         防止還原設定時觸發元件的 currentIndexChanged 等信號，
         進而錯誤地將文件標記為已修改（dirty）。
         """
-        stored_col = data.get("selected_col", -1)  # 預設 -1 = 所有欄位
-        ui_index = self._stored_to_ui(stored_col)
+        self._config_selected_col = data.get("selected_col", 0)  # 預設選擇第 1 欄
+        ui_index = self._stored_to_ui(self._config_selected_col)
 
         # 切斷信號，確保還原設定不觸發任何副作用
         self.combo_col.blockSignals(True)
@@ -332,7 +349,7 @@ class MyPluginPanel(BasePluginPanel):
     def _internal_set_enabled(self, enabled: bool) -> None:
         """UI 鎖定/解鎖時同步更新內部元件狀態。"""
         super()._internal_set_enabled(enabled)
-        self.btn_start.setEnabled(enabled)
+        # 注意：負責取消任務的主按鈕（如 btn_start）不應被停用，否則使用者無法點擊取消
         self.combo_col.setEnabled(enabled)
 ```
 
@@ -469,7 +486,7 @@ def on_csv_data_refreshed(self) -> None:
 ```python
 def _internal_set_enabled(self, enabled: bool) -> None:
     super()._internal_set_enabled(enabled)
-    self.btn_start.setEnabled(enabled)
+    # 注意：負責取消任務的主按鈕（如 btn_start）不應被停用，否則使用者無法點擊取消
     self.combo_options.setEnabled(enabled)
 ```
 
@@ -567,18 +584,21 @@ self.context.csv_data.data_changed.emit()
 
 ---
 
-#### 策略 3：非欄位選項的 Index 映射規則
+#### 策略 3：進階選單映射 (非欄位選項處理)
+
+> **警語**：**一般情況下**，若選單僅包含實際欄位，`_N_NON_COL_OPTIONS` 應設為 `0`，UI index 即等於實際欄位 index。**僅當**選單需要包含『所有欄位』等特殊選項時，才需要參考以下映射規則。
 
 當 ComboBox 包含「所有欄位」等非實際欄位的選項時，UI index 與設定檔儲存值之間存在偏移量，**必須**使用映射方法進行轉換，不得在程式碼中硬編碼偏移數字。
 
-**標準映射表**（假設有 1 個非欄位選項「所有欄位」）：
+**標準映射表**（假設有 2 個非欄位選項「所有欄位」、「手動輸入」）：
 
 | UI index | stored value（config 儲存值） | 語意 |
 |----------|------------------------------|------|
-| `0` | `-1` | 「所有欄位」（非欄位特殊項） |
-| `1` | `0` | 實際欄位 0（第 1 欄） |
-| `2` | `1` | 實際欄位 1（第 2 欄） |
-| `N` | `N - _N_NON_COL_OPTIONS` | 實際欄位 N-1 |
+| `0` | `-1` | 「所有欄位」（非欄位特殊項，第一個選項） |
+| `1` | `-2` | 「手動輸入」（非欄位特殊項，第二個選項） |
+| `2` | `0` | 實際欄位 0（第 1 欄） |
+| `3` | `1` | 實際欄位 1（第 2 欄） |
+| `N` | `N - _N_NON_COL_OPTIONS` | 實際欄位 N-2 |
 
 **實作規範**：在外掛類別內定義 `_N_NON_COL_OPTIONS`（非欄位選項數量），並透過 `_ui_to_stored` / `_stored_to_ui` 方法轉換，**不得**在 `_internal_serialize_config` 或 `_internal_deserialize_config` 中直接加減數字偏移量。
 
@@ -758,11 +778,20 @@ def on_csv_data_refreshed(self) -> None:
             header = csv_data.get_column_header(i)
             self.combo_col_a.addItem(header)
             self.combo_col_b.addItem(header)
+
+        # 重新選取原本設定的值 (因 limit 公式已履約保證，此處直接 set 即可)
+        ui_index_a = self._stored_to_ui(self._config_col_a)
+        self.combo_col_a.setCurrentIndex(ui_index_a)
+
+        ui_index_b = self._stored_to_ui(self._config_col_b)
+        self.combo_col_b.setCurrentIndex(ui_index_b)
     finally:
         self.combo_col_a.blockSignals(False)
         self.combo_col_b.blockSignals(False)
 ```
 
+> **極度重要**：在 `clear()` 並重新 `addItem` 後，選單的 index 會被重置。必須在解除 `blockSignals` 前，將 Config 中紀錄的值手動 restore 回 `setCurrentIndex`，否則切換資料時使用者的設定會遺失。
+>
 > **注意**：即使索引 `i` 超出資料實際欄位數，`get_column_header(i)` 仍會回傳合理的佔位標題（如 `欄位 6`），不會引發例外。**嚴禁**自行拼接格式字串替代此方法。
 
 ---
