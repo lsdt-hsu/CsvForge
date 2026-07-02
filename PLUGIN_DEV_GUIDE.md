@@ -1,560 +1,1101 @@
-# 外掛實作指南 (PLUGIN_DEV_GUIDE.md)
+# CsvTranslator 外掛開發指南 (PLUGIN_DEV_GUIDE.md)
 
-> **適用對象**：任何開發者（含 AI Agent）在建立新的 CsvTranslator 外掛面板時，**以本文件為唯一參考**。  
-> **核心承諾**：嚴格遵照本文件，即可在不需要人類介入除錯的情況下，產出 100% 符合規範的外掛面板。
+> **版本基準**：本指南依照 `src/plugin_sdk/panel_base.py`、`src/plugin_sdk/plugin_api.py`、`src/plugin_sdk/theme.py`、`src/utils/throttler.py`、`src/common_data/csv_data.py` 最新原始碼撰寫。
+> **AI Agent 使用說明**：閱讀本文件後，你應能在不詢問人類的前提下，100% 正確產出合規的外掛面板。
 
 ---
 
 ## 目錄
 
-1. [第一部分：快速起步](#第一部分快速起步-quick-start--boilerplate)
-   - 1.1 [檔案結構規範](#11-檔案結構規範)
-   - 1.2 [基礎類別繼承](#12-基礎類別繼承)
-   - 1.3 [Hello World 樣板](#13-hello-world-樣板)
-2. [第二部分：一致性策略](#第二部分一致性策略)
-   - 2.1 [資料編輯](#21-資料編輯)
-   - 2.2 [UI 設計規範](#22-ui-設計規範)
-   - 2.3 [流程與資料管理規範](#23-流程與資料管理規範)
-3. [第三部分：API 參考與嚴格規範](#第三部分api-參考與嚴格規範)
-   - 3.1 [事件通訊機制（Signal）](#31-事件通訊機制signal)
-   - 3.2 [樣式套用函式（theme）](#32-樣式套用函式theme)
-   - 3.3 [共用資料（common_data）](#33-共用資料common_data)
-   - 3.4 [工具函式（utils）](#34-工具函式utils)
-   - 3.5 [隔離限制與開發建議（Anti-patterns & Best Practices）](#35-隔離限制與開發建議anti-patterns--best-practices)
+- [第一部分：核心觀念與快速起步](#第一部分核心觀念與快速起步-core-concepts--boilerplate)
+  - [1.1 雙門面隔離](#11-雙門面隔離-dual-facade-isolation)
+  - [1.2 檔案結構規範](#12-檔案結構規範)
+  - [1.3 Import 方式](#13-import-方式重要)
+  - [1.4 終極樣板程式碼](#14-終極樣板程式碼-boilerplate)
+- [第二部分：API 參考與生命週期](#第二部分api-參考與生命週期-api-reference--lifecycle)
+  - [2.1 PluginAPI 對講機完整參考手冊](#21-pluginapi-對講機完整參考手冊)
+  - [2.2 事件鉤子](#22-事件鉤子-lifecycle-hooks)
+  - [2.3 UI 輔助方法](#23-ui-輔助方法)
+  - [2.4 CsvData 資料介面參考](#24-csvdata-資料介面參考)
+  - [2.5 核心一致性策略](#25-核心一致性策略-core-consistency-rules)
+  - [2.6 樣式套用規範](#26-樣式套用規範-theme)
+  - [2.7 UI 與 Config 最佳實踐](#27-ui-與-config-最佳實踐-ux-best-practices)
+  - [2.8 UI 佈局與圖示設計規範](#28-ui-佈局與圖示設計規範-layout--icon-design)
+- [第三部分：進階工具與效能優化](#第三部分進階工具與效能優化)
+  - [3.1 ThrottledProgress — 進度更新限流器](#31-throttledprogress--進度更新限流器)
+- [第四部分：絕對禁止的反模式](#第四部分絕對禁止的反模式-strict-anti-patterns)
+  - [反模式 1：直接 emit 私有信號](#-反模式-1直接-emit-私有信號)
+  - [反模式 2：使用 hasattr / getattr 跨界猜測主程式狀態](#-反模式-2使用-hasattr--getattr-跨界猜測主程式狀態)
+  - [反模式 3：匯入或使用 PluginHostAdapter](#-反模式-3匯入或使用-pluginhostadapter)
+  - [反模式 4：直接呼叫主程式生命週期方法](#-反模式-4直接呼叫主程式生命週期方法)
+  - [反模式 5：Hardcode QSS 樣式](#-反模式-5hardcode-qss-樣式)
+  - [反模式 6：在 Config 操作中省略 blockSignals](#-反模式-6在-config-操作中省略-blocksignals)
+- [附錄：_internal_ 方法快速參考](#附錄internal_-方法快速參考)
 
 ---
 
-## 第一部分：快速起步 (Quick Start & Boilerplate)
+## 第一部分：核心觀念與快速起步 (Core Concepts & Boilerplate)
 
-### 1.1 檔案結構規範
+### 1.1 雙門面隔離 (Dual Facade Isolation)
 
-每個外掛必須是一個**獨立資料夾**，放置於專案根目錄下。  
-資料夾內**必須**包含 `plugin.py` 作為唯一入口點，主程式會動態載入此檔案。
+外掛是一個繼承自 `BasePluginPanel` 的 **PyQt UI 實體**，它與主程式之間存在一道嚴格的邊界。
 
 ```
-my_plugin/               <- 外掛資料夾（名稱自訂）
-└── plugin.py            <- 必要入口，外掛類別名稱必須為 PanelClass
+┌──────────────────────────────────────────────────────────────┐
+│  主程式 (Host)                                                │
+│  LeftPanel ──→ PluginHostAdapter ──→ BasePluginPanel (你的外掛) │
+│                                              │                │
+│                                         self.api             │
+│                                        (PluginAPI)           │
+│                                              │                │
+│                                    ←── 唯一對外通道 ──→      │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-> **規定**：外掛類別名稱**必須**為 `PanelClass`，主程式以此名稱進行動態載入。
+**黃金守則**：
+
+| 角色 | 可存取的物件 | 禁止存取的物件 |
+|------|------------|--------------|
+| 外掛（你） | `self.api`、`self.context` | 主程式任何模組、`PluginHostAdapter`、`BasePluginPanel` 的私有信號 |
+| 主程式 | `PluginHostAdapter` | 外掛內部邏輯、`PluginAPI` |
+
+開發者不需要、也不應該知道主程式的實作細節。所有對外通訊皆透過 `self.api`。
 
 ---
 
-### 1.2 基礎類別繼承
+### 1.2 檔案結構規範
 
-外掛面板**必須**繼承 `plugin_sdk.panel_base.BasePluginPanel`。
+外掛存放在任意路徑下，**必須**包含 `plugin.py` 作為唯一入口：
+
+```
+your_plugin_folder/
+└── plugin.py          ← 唯一入口，必須定義繼承 BasePluginPanel 的類別
+```
+
+主程式透過路徑動態載入 `plugin.py`，其中的 Panel 類別名稱**沒有強制規定**，但建議命名為描述性的 `XXXPanel`。
+
+---
+
+### 1.3 Import 方式（重要）
+
+由於外掛可能存放在電腦上的任意路徑，**無法**使用相對 import 或假設 `plugin_sdk` 在 Python Path 中。主程式在載入外掛前，會確保 `src/` 目錄已加入 `sys.path`，因此外掛應使用以下方式匯入 SDK：
 
 ```python
-from plugin_sdk.panel_base import BasePluginPanel
+# ✅ 正確：使用頂層套件名稱（主程式已處理 sys.path）
+from plugin_sdk import BasePluginPanel, PluginContext
+from plugin_sdk import theme
 
-class PanelClass(BasePluginPanel):
+# ✅ 選用：若使用 ThrottledProgress 限流工具
+from utils import ThrottledProgress
+```
+
+> **注意**：`PluginHostAdapter` 刻意未在 `plugin_sdk/__init__.py` 中 export，外掛開發者**無法**且**不應**匯入它。
+
+---
+
+### 1.4 終極樣板程式碼 (Boilerplate)
+
+以下是一個完整、最小可執行的 `plugin.py` 範本，涵蓋所有必須實作的生命週期方法、`blockSignals` 防呆、非欄位選項映射，以及透過 `self.api` 啟動任務的標準流程。**直接複製後修改業務邏輯即可。**
+
+```python
+# plugin.py — 外掛面板入口 (完整 Boilerplate)
+# 主程式在載入本檔案前，已確保 src/ 目錄在 sys.path 中，
+# 因此直接以頂層套件名稱匯入即可。
+import uuid
+
+from PyQt6.QtWidgets import QPushButton, QLabel, QComboBox
+from PyQt6.QtCore import QThread, pyqtSignal, QObject
+
+from plugin_sdk import BasePluginPanel, PluginContext
+from plugin_sdk import theme
+from utils import ThrottledProgress
+
+
+# ── (選用) 若有耗時背景任務，建議使用 Worker + QThread 模式 ──────────────
+
+class _MyWorker(QObject):
+    """背景 Worker：不阻塞主線程。"""
+    progress = pyqtSignal(int, int)   # current, total
+    finished = pyqtSignal(str)        # "finished" | "error" | "cancelled"
+
+    def __init__(self):
+        super().__init__()
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        """模擬耗時任務（請替換為實際業務邏輯）。"""
+        total = 100
+        for i in range(total):
+            if self._cancelled:
+                self.finished.emit("cancelled")
+                return
+            # --- 實際業務邏輯放這裡 ---
+            self.progress.emit(i + 1, total)
+        self.finished.emit("finished")
+
+
+# ── 外掛主類別 ─────────────────────────────────────────────────────────────
+
+class MyPluginPanel(BasePluginPanel):
+    """
+    外掛面板主類別。
+    繼承 BasePluginPanel，透過 self.api 與主程式溝通。
+    """
+
+    # 【必要】：定義此外掛的固定 UUID（每個外掛獨立產生，勿重複）
+    _UUID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # 請替換為 str(uuid.uuid4())
+
+    # 非欄位選項的 UI 索引偏移量（UI index 0 保留給「所有欄位」等特殊項）
+    _N_NON_COL_OPTIONS = 1
+
+    def __init__(self, context: PluginContext, parent=None):
+        super().__init__(
+            parent=parent,
+            title_text="我的外掛",       # 顯示在面板頂端的標題
+            require_data_loading=True,   # True = 需等待 CSV 載入後才顯示操作 UI
+            context=context,
+        )
+        self._thread = None
+        self._worker = None
+        self._throttled_progress = None  # 於任務啟動時初始化
+        self._setup_ui()
+
+    # ── UI 初始化 ──────────────────────────────────────────────────────────
+
+    def _setup_ui(self):
+        """建立面板 UI，所有 Widget 加入 self.controls_layout。"""
+        # 說明文字
+        self.lbl_desc = QLabel("選擇欄位後點擊按鈕執行任務")
+        theme.applyStandardLabelStyle(self.lbl_desc)
+        self.controls_layout.addWidget(self.lbl_desc)
+
+        # 含「所有欄位」非欄位選項的下拉選單
+        # UI index 0 → 「所有欄位」（stored value = -1）
+        # UI index 1 → 實際欄位 0（stored value = 0）
+        # UI index N → 實際欄位 N-1（stored value = N-1）
+        self.combo_col = QComboBox()
+        theme.applyStandardComboBoxStyle(self.combo_col)
+        self.controls_layout.addWidget(self.combo_col)
+
+        # 主要動作按鈕
+        self.btn_start = QPushButton("開始執行")
+        theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
+        self.btn_start.clicked.connect(self._on_btn_clicked)
+        self.controls_layout.addWidget(self.btn_start)
+
+        # 彈性填充（讓元件靠上排列）
+        self.controls_layout.addStretch()
+
+    # ── 非欄位選項 Index 映射 ────────────────────────────────────────────────
+    # 映射規則：
+    #   UI index 0            → stored value -1（「所有欄位」）
+    #   UI index k (k >= 1)   → stored value k - _N_NON_COL_OPTIONS（實際欄位索引）
+    #   stored value -1       → UI index 0
+    #   stored value col_idx  → UI index col_idx + _N_NON_COL_OPTIONS
+
+    def _ui_to_stored(self, ui_index: int) -> int:
+        """將 UI combo index 轉換為要儲存在 config 的整數值。
+        ui_index = 0           → -1（「所有欄位」）
+        ui_index = k (k >= 1)  → k - _N_NON_COL_OPTIONS（實際欄位索引）
+        """
+        return ui_index - self._N_NON_COL_OPTIONS
+
+    def _stored_to_ui(self, stored: int) -> int:
+        """將 config 中的整數值轉換回 UI combo index。
+        stored = -1        → 0（「所有欄位」）
+        stored = col_idx   → col_idx + _N_NON_COL_OPTIONS
+        """
+        return stored + self._N_NON_COL_OPTIONS
+
+    # ── 資料刷新 ──────────────────────────────────────────────────────────
+
+    def on_csv_data_refreshed(self) -> None:
+        """CSV 資料載入或標頭狀態變更時自動觸發。"""
+        if not self.context or not self.context.is_data_loaded:
+            return
+
+        # 切斷信號，防止填充選單時觸發 currentIndexChanged 導致 dirty 標記
+        self.combo_col.blockSignals(True)
+        try:
+            self.combo_col.clear()
+            self.combo_col.addItem("所有欄位")  # UI index 0 → stored -1
+            for col in range(self.context.csv_data.num_cols):
+                header = self.context.csv_data.get_column_header(col)
+                self.combo_col.addItem(header)  # UI index col+1 → stored col
+        finally:
+            self.combo_col.blockSignals(False)
+
+    # ── 按鈕點擊邏輯 ───────────────────────────────────────────────────────
+
+    def _on_btn_clicked(self):
+        """點擊「開始執行」的槽函數。"""
+        # 1. 通知主程式任務開始（內部已隱含 UI 鎖定，禁止再呼叫 lock_ui(True)）
+        self.api.start_task(
+            task_name="我的外掛任務",
+            total=100,
+            initial_log="任務開始……",
+            prevent_sleep=False,
+        )
+        self.api.write_log("INFO", "Worker 啟動中…")
+
+        # 2. 建立限流器（防止進度信號過密卡死 UI）
+        self._worker = _MyWorker()
+        self._thread = QThread()
+        self._worker.moveToThread(self._thread)
+
+        # ThrottledProgress 包裝 worker.progress 信號，預設每 0.2 秒最多發一次
+        self._throttled_progress = ThrottledProgress(
+            self._worker.progress, min_interval=0.2
+        )
+
+        self._worker.progress.connect(self._on_progress)
+        self._worker.finished.connect(self._on_worker_finished)
+        self._thread.started.connect(self._worker.run)
+
+        self._thread.start()
+
+    def _on_progress(self, current: int, total: int):
+        """接收 Worker 進度更新（已由 ThrottledProgress 在 Worker 端節流）。"""
+        self.api.update_progress(current, total)
+        self.api.update_status(f"進度：{current}/{total}")
+
+    def _on_worker_finished(self, status: str):
+        """Worker 結束時的清理動作。"""
+        self.api.write_log("SUCCESS" if status == "finished" else "WARNING",
+                           f"任務結束，狀態：{status}")
+        # 3. 通知主程式任務結束（主程式將解鎖 UI）
+        self.api.finish_task(status)
+        self._cleanup_thread()
+
+    def _cleanup_thread(self):
+        if self._thread:
+            self._thread.quit()
+            self._thread.wait()
+            self._thread = None
+            self._worker = None
+            self._throttled_progress = None
+
+    # ── _internal_ 生命週期方法（必須全部覆寫）────────────────────────────
+
+    def _internal_get_uuid(self) -> str:
+        """回傳此外掛的唯一 UUID 字串。"""
+        return self._UUID
+
+    def _internal_get_package_name(self) -> str:
+        """回傳此外掛在設定檔中對應的識別名稱（英文小寫，無空格）。"""
+        return "my_plugin"
+
+    def _internal_serialize_config(self) -> dict:
+        """
+        將面板當前設定序列化為 dict，供主程式存入設定檔。
+        注意：儲存的是 _ui_to_stored() 轉換後的值，而非直接存 UI index。
+        """
+        return {
+            "selected_col": self._ui_to_stored(self.combo_col.currentIndex()),
+        }
+
+    def _internal_deserialize_config(self, data: dict) -> None:
+        """
+        從設定檔 dict 還原面板設定。
+
+        【防呆關鍵】：必須在操作 UI 元件前後呼叫 blockSignals(True/False)，
+        防止還原設定時觸發元件的 currentIndexChanged 等信號，
+        進而錯誤地將文件標記為已修改（dirty）。
+        """
+        stored_col = data.get("selected_col", -1)  # 預設 -1 = 所有欄位
+        ui_index = self._stored_to_ui(stored_col)
+
+        # 切斷信號，確保還原設定不觸發任何副作用
+        self.combo_col.blockSignals(True)
+        try:
+            # 邊界防呆：確保 ui_index 在合法範圍內
+            max_index = self.combo_col.count() - 1
+            safe_index = max(0, min(ui_index, max_index)) if max_index >= 0 else 0
+            self.combo_col.setCurrentIndex(safe_index)
+        finally:
+            # 使用 finally 確保即使發生例外，信號也必然被恢復
+            self.combo_col.blockSignals(False)
+
+    def _internal_is_task_running(self) -> bool:
+        """主程式防呆查詢：任務是否仍在執行中？"""
+        return self._thread is not None and self._thread.isRunning()
+
+    def _internal_cancel_task(self) -> None:
+        """主程式要求取消任務時呼叫。"""
+        if self._worker:
+            self._worker.cancel()
+            self.api.write_log("WARNING", "使用者已要求取消任務。")
+
+    def _internal_set_enabled(self, enabled: bool) -> None:
+        """UI 鎖定/解鎖時同步更新內部元件狀態。"""
+        super()._internal_set_enabled(enabled)
+        self.btn_start.setEnabled(enabled)
+        self.combo_col.setEnabled(enabled)
+```
+
+---
+
+## 第二部分：API 參考與生命週期 (API Reference & Lifecycle)
+
+### 2.1 PluginAPI 對講機完整參考手冊
+
+`self.api` 是 `PluginAPI` 的實例，由 `BasePluginPanel.__init__` 自動建立，外掛透過它進行**所有**對外通訊。
+
+---
+
+#### `self.api.start_task(task_name, total, initial_log, prevent_sleep)`
+
+通知主程式背景任務已啟動。
+
+| 參數 | 型別 | 必填 | 說明 |
+|------|------|------|------|
+| `task_name` | `str` | ✅ | 任務顯示名稱，出現在狀態列 |
+| `total` | `int` | ❌（預設 `0`） | 初始總進度量，`0` 表示不定量 |
+| `initial_log` | `str` | ❌（預設 `""`） | 任務開始時寫入日誌的初始訊息 |
+| `prevent_sleep` | `bool` | ❌（預設 `False`） | 任務期間是否阻止系統休眠 |
+
+> **⚠️ 架構限制（極重要）**：呼叫 `start_task()` 後，**嚴禁**再呼叫 `self.api.lock_ui(True)`。
+> `start_task` 內部已隱含全域 UI 鎖定語意，重複呼叫將導致狀態不一致。
+
+---
+
+#### `self.api.finish_task(status)`
+
+通知主程式背景任務已結束，主程式將自動解鎖 UI 並停止計時器。
+
+| 參數 | 型別 | 合法值 |
+|------|------|--------|
+| `status` | `str` | `"finished"` \| `"error"` \| `"cancelled"` |
+
+---
+
+#### `self.api.update_progress(current, total)`
+
+更新主視窗進度條。
+
+| 參數 | 型別 | 說明 |
+|------|------|------|
+| `current` | `int` | 目前完成數量 |
+| `total` | `int` | 總數量 |
+
+---
+
+#### `self.api.update_status(status)`
+
+更新主視窗狀態列文字。
+
+| 參數 | 型別 | 說明 |
+|------|------|------|
+| `status` | `str` | 任意狀態文字字串 |
+
+---
+
+#### `self.api.write_log(level, message)`
+
+寫入一筆日誌到主視窗日誌面板。
+
+| 參數 | 型別 | 合法值 |
+|------|------|--------|
+| `level` | `str` | `"INFO"` \| `"WARNING"` \| `"ERROR"` \| `"SUCCESS"` |
+| `message` | `str` | 日誌內容文字 |
+
+---
+
+#### `self.api.lock_ui(lock)`
+
+請求主程式鎖定或解鎖 UI。
+
+| 參數 | 型別 | 說明 |
+|------|------|------|
+| `lock` | `bool` | `True` 鎖定 / `False` 解鎖 |
+
+> **⚠️ 使用限制**：此方法**僅限**「無背景 Worker，但需在主線程進行短暫阻塞操作」的輕量任務使用。
+> **若已呼叫 `start_task()`，嚴禁重複呼叫 `lock_ui(True)`。**
+
+---
+
+#### `self.api.request_silent_save()`
+
+向主程式發起靜默存檔請求（後台存檔，不彈出對話框）。
+
+無參數。
+
+---
+
+### 2.2 事件鉤子 (Lifecycle Hooks)
+
+#### `on_csv_data_refreshed(self) -> None`
+
+覆寫此方法以實現「資料載入時的外掛自動觸發」機制。
+
+觸發時機：
+- CSV 資料成功載入後（`data_loaded` 信號）
+- CSV 資料的標頭狀態（`is_header`）變更後（`header_state_changed` 信號）
+
+```python
+def on_csv_data_refreshed(self) -> None:
+    """CSV 資料就緒時自動呼叫，可在此讀取 context 並更新 UI。"""
+    if not self.context or not self.context.is_data_loaded:
+        return
+
+    # 【防呆】操作 UI 元件前後必須切斷信號
+    self.combo_col.blockSignals(True)
+    try:
+        self.combo_col.clear()
+        for col in range(self.context.csv_data.num_cols):
+            # 使用 get_column_header 取得標準化的欄位標題
+            self.combo_col.addItem(self.context.csv_data.get_column_header(col))
+    finally:
+        self.combo_col.blockSignals(False)
+```
+
+**PluginContext 可用屬性**：
+
+| 屬性 | 型別 | 說明 |
+|------|------|------|
+| `context.csv_data` | `CsvData` | CSV 資料物件（詳見 2.4 節） |
+| `context.is_data_loaded` | `bool` | 是否已載入資料 |
+| `context.is_first_row_header` | `bool` | 首行是否為 Header |
+
+---
+
+#### `_internal_set_enabled(self, enabled: bool) -> None`（選用覆寫）
+
+主程式 UI 鎖定/解鎖時觸發，可自訂內部元件的啟用/停用邏輯。**若覆寫，必須呼叫 `super()`**：
+
+```python
+def _internal_set_enabled(self, enabled: bool) -> None:
+    super()._internal_set_enabled(enabled)
+    self.btn_start.setEnabled(enabled)
+    self.combo_options.setEnabled(enabled)
+```
+
+---
+
+### 2.3 UI 輔助方法
+
+`BasePluginPanel` 提供兩個 protected 的 UI 輔助方法，可在子類別中呼叫：
+
+| 方法 | 說明 |
+|------|------|
+| `self.show_controls()` | 隱藏「尚未載入資料」提示，顯示 `controls_container` |
+| `self.reset_panel()` | 顯示「尚未載入資料」提示，隱藏 `controls_container` |
+
+> 注意：只有 `require_data_loading=True` 時這兩個方法才有效。
+
+---
+
+### 2.4 CsvData 資料介面參考
+
+透過 `self.context.csv_data` 存取以下方法與屬性：
+
+#### 可用屬性
+
+| 屬性 | 型別 | 說明 |
+|------|------|------|
+| `all_rows` | `List[List[str]]` | 全部列資料（含 Header 行） |
+| `num_cols` | `int` | 最大欄位數 |
+| `is_header` | `bool` | 首行是否為 Header |
+| `is_modified` | `bool` | 資料是否已被修改（未存檔） |
+| `file_path` | `str \| None` | 目前開啟的 CSV 檔案路徑 |
+| `delimiter` | `str` | 分隔符（如 `","` 或 `"\t"`） |
+| `encoding` | `str` | 檔案編碼（如 `"utf-8"`） |
+
+#### 可用方法
+
+| 方法 | 回傳型別 | 說明 |
+|------|---------|------|
+| `get_visible_indices()` | `List[int]` | 取得當前可見列的 `all_rows` 索引清單 |
+| `get_visible_rows()` | `List[List[str]]` | 取得當前可見的列資料 |
+| `get_column_header(col: int)` | `str` | 取得標準化欄位標題字串（**必須**使用此方法，禁止自行拼接格式） |
+| `update_cell(row, col, value)` | `None` | 更新單一儲存格並自動發射 `data_changed` 信號 |
+| `set_modified(modified: bool)` | `None` | 手動設定修改狀態 |
+
+#### 可用信號（唯讀，僅供 `connect` 訂閱）
+
+| 信號 | 觸發時機 |
+|------|---------|
+| `data_loaded` | CSV 檔案重新載入完成 |
+| `data_changed` | 任意儲存格資料變更 |
+| `filter_changed` | 篩選條件變更（影響可見列） |
+| `header_state_changed(bool)` | 首行 Header 狀態切換 |
+| `modified_changed(bool)` | 修改狀態（is_modified）變更 |
+
+---
+
+### 2.5 核心一致性策略 (Core Consistency Rules)
+
+本節為外掛開發的**強制規範**，確保所有外掛對 CSV 資料的存取與修改行為一致，不破壞主程式的狀態管理。
+
+---
+
+#### 策略 1：資料走訪安全（優先使用可見列）
+
+外掛在走訪 CSV 資料時，**強烈建議**使用 `get_visible_indices()` 取得可見列索引，而非直接遍歷 `all_rows`。這確保外掛不會意外修改被篩選條件隱藏的列。
+
+```python
+# ✅ 正確：只操作可見列，不動到隱藏資料
+visible_indices = self.context.csv_data.get_visible_indices()
+for row_idx in visible_indices:
+    row = self.context.csv_data.all_rows[row_idx]
+    # --- 對 row 進行讀取或處理 ---
+
+# ❌ 危險：直接遍歷 all_rows 會動到被篩選隱藏的列
+for row in self.context.csv_data.all_rows:
     ...
 ```
 
-`BasePluginPanel` 的建構子簽名如下：
-
-```python
-def __init__(self, parent=None, title_text="", require_data_loading=True, context: PluginContext = None)
-```
-
-| 參數 | 說明 |
-|------|------|
-| `title_text` | 顯示在面板頂端的標題文字；傳空字串則不顯示標題 |
-| `require_data_loading` | `True`（預設）代表需要 CSV 資料才能操作，基底類別會自動顯示「尚未載入資料」並管理 `controls_container` 的可見性；`False` 代表面板不依賴資料，所有 widget 直接加入 `controls_layout` |
-| `context` | 由主程式注入的 `PluginContext`，必須透過此物件存取 CSV 資料與狀態 |
+> **注意**：`get_visible_indices()` 已自動排除 Header 行（當 `is_header=True` 時），無需手動判斷。
 
 ---
 
-### 1.3 Hello World 樣板
+#### 策略 2：資料修改後的標準同步流程
 
-以下是可直接複製執行的**最極簡**完整 `plugin.py`。  
-它實作了所有 `NotImplementedError` 介面，並示範正確的 `__init__` 呼叫與 Config 架構。
-
-```python
-# my_plugin/plugin.py
-from dataclasses import dataclass
-
-from PyQt6.QtWidgets import QPushButton
-from PyQt6.QtCore import Qt
-
-# pyrefly: ignore [missing-import]
-from plugin_sdk.panel_base import BasePluginPanel
-# pyrefly: ignore [missing-import]
-from plugin_sdk.theme import applyPrimaryButtonStyle
-
-
-# ── 1. 定義 Config dataclass ──────────────────────────────────────────────────
-@dataclass
-class MyPluginConfig:
-    dirty: bool = False
-    # 在此加入面板所需的設定欄位
-
-
-# ── 2. 定義面板類別（固定名稱 PanelClass）────────────────────────────────────
-class PanelClass(BasePluginPanel):
-
-    def __init__(self, parent=None, context=None):
-        super().__init__(
-            parent,
-            title_text="我的外掛",      # 顯示在面板頂端的標題
-            require_data_loading=True,  # 設為 False 可讓面板在無資料時也能操作
-            context=context,
-        )
-        self.config = MyPluginConfig()
-        self._init_ui()
-
-    # ── 3. 建立 UI（加入 controls_layout）────────────────────────────────────
-    def _init_ui(self):
-        self.btn_run = QPushButton("執行")
-        applyPrimaryButtonStyle(self.btn_run, is_running=False)
-        self.btn_run.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_run.clicked.connect(self.run_main_action)
-        self.controls_layout.addWidget(self.btn_run)
-
-    # ── 4. 必須實作的 Interface 方法 ──────────────────────────────────────────
-
-    def get_uuid(self) -> str:
-        """回傳此面板的唯一 UUID（請自行產生，不得與其他外掛重複）"""
-        return "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # 替換為真實 UUID
-
-    def get_package_name(self) -> str:
-        """回傳設定檔中對應的識別名稱（英數字，不得與其他外掛重複）"""
-        return "my_plugin"
-
-    def serialize_config(self) -> dict:
-        """將 Config 序列化為可供主程式儲存的 dict"""
-        cfg = self.config
-        return {
-            # "key": cfg.field,
-        }
-
-    def deserialize_config(self, data: dict) -> None:
-        """從主程式 restore 的 dict 還原 Config，並更新 UI"""
-        cfg = self.config
-        # cfg.field = data.get("key", default_value)
-        self._restore_ui_from_config()
-
-    # ── 5. 選擇性複寫的 Interface 方法 ───────────────────────────────────────
-
-    def run_main_action(self) -> None:
-        """主要功能按鈕的進入點。執行前先驗證 Config 是否有效。"""
-        if not self.context or not self.context.is_data_loaded:
-            self.update_status("尚未載入資料")
-            return
-        # 執行任務...
-        self.update_status("執行完畢")
-
-    def on_csv_data_refreshed(self) -> None:
-        """
-        資料載入或標頭狀態變更時由基底類別自動觸發。
-        複寫此方法以更新欄位下拉選單等依賴資料的 UI 元件。
-        """
-        pass
-
-    # ── 6. 內部輔助方法 ───────────────────────────────────────────────────────
-
-    def _restore_ui_from_config(self) -> None:
-        """
-        從 Config 還原 UI 元件狀態。
-        必須用 blockSignals(True/False) 包圍，避免誤觸 dirty flag。
-        """
-        # self.some_widget.blockSignals(True)
-        # try:
-        #     self.some_widget.setValue(self.config.some_field)
-        # finally:
-        #     self.some_widget.blockSignals(False)
-        pass
-```
-
----
-
-## 第二部分：一致性策略
-
-### 2.1 資料編輯
-
-在處理 CSV 資料的編輯或修改時，**強烈建議只編輯可見列（Visible Rows）**，以避免修改到使用者預期之外的資料（即被使用者過濾、隱藏的資料）。
-
-- **取得可見列索引**：使用 `self.context.csv_data.get_visible_indices()` 或 `self.context.csv_data.visible_indices`。
-- **取得可見列資料**：使用 `self.context.csv_data.get_visible_rows()`。
-- **操作建議**：在走訪資料進行編輯時，僅針對可見的列索引進行操作，避免修改到隱藏的列。
-
----
-
-### 2.2 UI 設計規範
-
-#### 2.2.1 圖示（Icon）設計
-
-- **外部圖示**（顯示在主程式的頁籤/工具列）：`BasePluginPanel.get_icon()` 已提供**預設實作**，會自動以 `get_package_name()` 的前兩個字母產生**白色文字、透明背景、無邊框**的圖示。想提供獨特的圖示，可以覆寫 **`get_icon()`**。
-- **面板內圖示**：推薦使用相同的極簡風格（白色、透明背景、無邊框）。
-
-#### 2.2.2 樣式套用
-
-- 主要任務按鈕（如「開始翻譯」）**強烈建議**使用 `applyPrimaryButtonStyle`，並根據執行狀態傳入 `is_running` 參數：
-
-  ```python
-  from plugin_sdk.theme import applyPrimaryButtonStyle
-
-  applyPrimaryButtonStyle(self.btn_run, is_running=False)  # 就緒狀態：藍色
-  applyPrimaryButtonStyle(self.btn_run, is_running=True)   # 執行中：紅色（作為「停止」按鈕）
-  ```
-
-- 其餘元件優先使用 `plugin_sdk.theme` 中的標準樣式函式（詳見 [3.2 節](#32-樣式套用函式theme)）。
-
-#### 2.2.3 面板寬度與捲動
-
-- 面板最大寬度為 `SIDEBAR_MAX_WIDTH = 341`（px），定義於 `plugin_sdk.theme`。
-- **建議做法**：提供垂直捲動（如使用 `QScrollArea`），並**儘量避免**水平捲動。
-- 使用 `QGridLayout` 或 `QVBoxLayout` 佈局，避免元件超出面板寬度。
-
-#### 2.2.4 資料載入狀態判斷
-
-- 需要判斷 CSV 是否已載入時，**必須**使用 `self.context.is_data_loaded`：
-
-  ```python
-  if self.context and self.context.is_data_loaded:
-      # 資料已載入
-  ```
-
-- 當 `require_data_loading=True` 時，基底類別已自動訂閱 `data_loaded` 信號，並在資料載入/解除時呼叫 `show_controls()` / `reset_panel()`。**無需在子類別中重複處理此邏輯**，只需複寫 `on_csv_data_refreshed()` 更新 UI 內容即可。
-
-#### 2.2.5 欄位選單的列舉規則
-
-列舉欄位時，**建議**使用以下公式計算要顯示的欄位總數，**無論資料是否已載入**：
+外掛在批次修改 `all_rows` 後（例如不使用 `update_cell` 的情況），**必須**手動執行以下兩行代碼通知主程式：
 
 ```python
-csv_data = self.context.csv_data
-limit = max(csv_data.num_cols, self.config.col_a + 1, self.config.col_b + 1)
-```
-
-- 欄位名稱**建議**使用 `csv_data.get_column_header(i)` 取得，**無論資料是否已載入**。
-- **最佳實踐**：建議避免在 `get_column_header` 的回傳值上自行加入前綴或後綴，以維持 UI 顯示的簡潔與一致。
-
-```python
-for i in range(limit):
-    col_name = csv_data.get_column_header(i)  # 直接使用，不加前後綴
-    self.combo_col.addItem(col_name, i)
-```
-
-#### 2.2.6 含非欄位選項的選單（例如「所有欄位」）
-
-若欄位選單中需要包含非欄位選項（例如「所有欄位」），**強烈建議**：
-
-- **非欄位選項排在欄位選項之前**（UI index 0 起始）。
-
-**Config 的 index 記錄與序列化映射規則**：
-
-| UI index | 序列化儲存值 | 說明 |
-|----------|------------|------|
-| 0 | −1 | 第一個非欄位選項（如「所有欄位」） |
-| 1 | −2 | 第二個非欄位選項 |
-| … | … | 依此類推 |
-| N_NON_COL | 0 | 第一個欄位選項（0-based 欄位 index = 0） |
-| N_NON_COL + k | k | 第 k+1 個欄位（0-based 欄位 index = k） |
-
-其中 `N_NON_COL` 為非欄位選項的總數。
-
-**範例（N_NON_COL = 1，只有「所有欄位」一項）**：
-
-```python
-N_NON_COL = 1  # 非欄位選項數量
-
-# --- 建立選單 ---
-self.combo_col.addItem("所有欄位")          # UI index = 0
-for i in range(limit):
-    col_name = csv_data.get_column_header(i)
-    self.combo_col.addItem(col_name)         # UI index = i + N_NON_COL
-
-# --- Config 記錄 UI index ---
-# _on_combo_changed 中：
-def _on_col_changed(self, ui_index: int) -> None:
-    if self.config.col != ui_index:
-        self.config.col = ui_index
-        self.config.dirty = True
-
-# --- 序列化：UI index → 儲存值 ---
-def _ui_to_stored(self, ui_index: int) -> int:
-    if ui_index < N_NON_COL:
-        return -(ui_index + 1)       # 0 -> -1, 1 -> -2, ...
-    return ui_index - N_NON_COL     # N_NON_COL -> 0, N_NON_COL+1 -> 1, ...
-
-# --- 反序列化：儲存值 → UI index ---
-def _stored_to_ui(self, stored: int) -> int:
-    if stored < 0:
-        ui_index = -(stored + 1)     # -1 -> 0, -2 -> 1, ...
-        if ui_index >= N_NON_COL:
-            ui_index = 0             # 超出當前映射範圍，退回第一個非欄位選項
-        return ui_index
-    return stored + N_NON_COL       # 0 -> N_NON_COL, 1 -> N_NON_COL+1, ...
-```
-
----
-
-### 2.3 流程與資料管理規範
-
-#### 2.3.1 資料來源與儲存
-
-- **主程式負責**載入與儲存 CSV 檔案。外掛面板**不需要知道**來源檔案路徑或輸出檔案路徑。
-- `self.context.csv_data`（即 `CsvData` 物件）**必定存在**，不論是否已載入資料。可安全存取 `csv_data.num_cols`、`csv_data.get_column_header()` 等屬性，無需做 None 檢查。
-
-#### 2.3.2 Config 管理原則
-
-外掛面板**建議自行宣告並管理 Config dataclass**，作為可靠的資料來源與實作建議：
-
-1. **即時同步**：使用者每次變更 UI 元件時，立即寫入 Config，並設定 `config.dirty = True`。
-2. **無實際變更則不設 dirty**：若新值與舊值相同，跳過寫入與設 dirty。
-3. **欄位 index 記錄**：
-   - 純欄位選單：Config 記錄 `combo.currentData()`，即 0-based 欄位 index。
-   - 含非欄位選項的選單：Config 記錄 UI 上的 0-based index（含偏移），序列化/反序列化時再做映射（見 [2.2.6 節](#226-含非欄位選項的選單例如所有欄位)）。
-4. **序列化/反序列化**：實作 `serialize_config()` 與 `deserialize_config()`，主程式負責在適當時機呼叫。
-
-#### 2.3.3 Restore Config 的執行時機與 Signal 管理
-
-- Restore Config（`deserialize_config` 被呼叫）**只發生在程式剛啟動時**，不必考慮 Config 在執行期間被 restore 事件覆蓋的情況。
-- Restore Config 時，**強烈建議使用 `blockSignals(True/False)` 暫時切斷所有 UI 元件的信號**，這是避免還原過程觸發 `_on_xxx_changed` 等事件而誤設 dirty flag 的**最佳實踐**：
-
-```python
-def _restore_ui_from_config(self) -> None:
-    widgets = [self.combo_a, self.combo_b, self.slider_c]
-    for w in widgets:
-        w.blockSignals(True)
-    try:
-        self.combo_a.setCurrentIndex(self.config.col_a)
-        self.combo_b.setCurrentIndex(self.config.col_b)
-        self.slider_c.setValue(self.config.val_c)
-    finally:
-        for w in widgets:
-            w.blockSignals(False)
-```
-
-#### 2.3.4 Config 有效性驗證時機
-
-- **建議做法**：僅在開始執行任務前（`run_main_action()` / 按鈕 `on_clicked`）驗證 Config 是否有效。
-- **最佳實踐**：平常無須特別根據資料是否已載入、或載入的資料是否符合 Config 內容，動態啟用/禁用元件或彈出警告，以保持 UI 反應的流暢度。
-
-#### 2.3.5 靜默儲存請求
-
-外掛執行任務並修改資料後，若需觸發主程式自動儲存，發送 `request_silent_save` Signal：
-
-```python
-self.request_silent_save.emit()
-```
-
-#### 2.3.6 通知主程式資料已變更
-
-外掛修改 `csv_data.all_rows` 內容後，**務必**通知主程式以同步資料狀態：
-
-```python
+# 【必須執行的兩行】：修改資料後的標準通知流程
 self.context.csv_data.set_modified(True)
 self.context.csv_data.data_changed.emit()
 ```
 
----
-
-## 第三部分：API 參考與嚴格規範
-
-### 3.1 事件通訊機制（Signal）
-
-以下 Signal 均定義於 `BasePluginPanel`，直接在 `self` 上 emit 即可。
-
-| Signal | 簽名 | 觸發時機 |
-|--------|------|---------|
-| `request_lock_ui` | `pyqtSignal(bool)` | 任務開始時 emit `True` 鎖定全域 UI；結束時 emit `False` 解鎖 |
-| `progress_updated` | `pyqtSignal(int, int)` | 更新進度條，參數為 `(current, total)` |
-| `status_updated` | `pyqtSignal(str)` | 更新狀態列文字 |
-| `log_emitted` | `pyqtSignal(str, str)` | 輸出 Log 訊息，參數為 `(level, message)`，`level` 建議使用 `"INFO"`、`"WARNING"`、`"ERROR"` |
-| `request_start_worker` | `pyqtSignal(object)` | 請求主程式在 Worker Thread 中執行傳入的可呼叫物件（適用於需要背景執行的任務） |
-| `request_silent_save` | `pyqtSignal()` | 任務完成後，請求主程式靜默（不彈對話框）儲存當前 CSV 資料 |
-
-**便捷方法一覽**（等同直接 emit 對應 Signal）：
-
-```python
-self.lock_ui(True)                       # 等同 self.request_lock_ui.emit(True)
-self.update_progress(50, 100)            # 等同 self.progress_updated.emit(50, 100)
-self.update_status("處理中...")          # 等同 self.status_updated.emit("處理中...")
-self.write_log("INFO", "開始執行任務")   # 等同 self.log_emitted.emit("INFO", "開始執行任務")
-```
-
-**基底類別自動訂閱的 CsvData Signal**：
-
-| CsvData Signal | 觸發時機 | 基底類別行為 |
-|---------------|---------|-------------|
-| `data_loaded` | CSV 載入或解除載入 | 自動呼叫 `show_controls()` 或 `reset_panel()`，並呼叫 `on_csv_data_refreshed()` |
-| `header_state_changed` | 「第一行為標題」狀態切換 | 自動呼叫 `on_csv_data_refreshed()` |
-
-子類別只需複寫 `on_csv_data_refreshed()` 即可響應以上兩個事件。
+> **說明**：若使用 `CsvData.update_cell(row, col, value)` 進行單格修改，這兩行已內建，不需重複呼叫。
+> 只有在手動直接修改 `all_rows` 後才需要手動呼叫。
 
 ---
 
-### 3.2 樣式套用函式（theme）
+#### 策略 3：非欄位選項的 Index 映射規則
 
-以下函式全部定義於 `plugin_sdk.theme`，**直接傳入 Widget 物件**即可套用樣式。
+當 ComboBox 包含「所有欄位」等非實際欄位的選項時，UI index 與設定檔儲存值之間存在偏移量，**必須**使用映射方法進行轉換，不得在程式碼中硬編碼偏移數字。
+
+**標準映射表**（假設有 1 個非欄位選項「所有欄位」）：
+
+| UI index | stored value（config 儲存值） | 語意 |
+|----------|------------------------------|------|
+| `0` | `-1` | 「所有欄位」（非欄位特殊項） |
+| `1` | `0` | 實際欄位 0（第 1 欄） |
+| `2` | `1` | 實際欄位 1（第 2 欄） |
+| `N` | `N - _N_NON_COL_OPTIONS` | 實際欄位 N-1 |
+
+**實作規範**：在外掛類別內定義 `_N_NON_COL_OPTIONS`（非欄位選項數量），並透過 `_ui_to_stored` / `_stored_to_ui` 方法轉換，**不得**在 `_internal_serialize_config` 或 `_internal_deserialize_config` 中直接加減數字偏移量。
+
+---
+
+#### 策略 4：`blockSignals` 防呆（Config 還原與 UI 填充）
+
+在以下兩種情況下，**必須**使用 `blockSignals(True/False)` 包圍操作：
+
+1. `_internal_deserialize_config` 中還原 UI 元件狀態時
+2. `on_csv_data_refreshed` 中重新填充選單/欄位時
 
 ```python
-from plugin_sdk.theme import (
-    applyStandardLabelStyle,
-    applyStandardButtonStyle,
-    applyStandardLineEditStyle,
-    applyStandardComboBoxStyle,
-    applyStandardCheckBoxStyle,
-    applyStandardSliderStyle,
-    applyTitleLabel,
-    applyHintLabel,
-    applyPrimaryButtonStyle,
-    SIDEBAR_MAX_WIDTH,
-    WidgetType,
-    getStandardFontSize,
-    getStandardTextColor,
-    getStandardBgColor,
-    getStandardBorder,
-    getStandardBorderRadius,
-)
+# ✅ 正確：使用 try/finally 確保信號必然恢復
+widget.blockSignals(True)
+try:
+    widget.setCurrentIndex(some_index)
+    # 或 widget.clear() + widget.addItem(...)
+finally:
+    widget.blockSignals(False)
+
+# ❌ 危險：若中間發生例外，信號將永遠被切斷
+widget.blockSignals(True)
+widget.setCurrentIndex(some_index)  # 若此處 crash，下行永遠不會執行
+widget.blockSignals(False)
 ```
+
+---
+
+### 2.6 樣式套用規範 (Theme)
+
+**嚴格規則**：開發外掛 UI 時，**必須優先呼叫 `plugin_sdk.theme` 提供的 `applyXXXStyle` 函式**，**嚴禁手動 hardcode QSS 樣式或顏色值**。
+
+匯入方式：
+```python
+from plugin_sdk import theme
+```
+
+#### 高階樣式函式（優先使用）
 
 | 函式 | 適用元件 | 說明 |
 |------|---------|------|
-| `applyStandardLabelStyle(widget)` | `QLabel` | 標準說明文字樣式 |
-| `applyStandardButtonStyle(widget)` | `QPushButton` | 標準次要按鈕樣式（非主要任務按鈕） |
-| `applyStandardLineEditStyle(widget)` | `QLineEdit` | 標準文字輸入框樣式 |
-| `applyStandardComboBoxStyle(widget)` | `QComboBox` | 標準下拉選單樣式 |
-| `applyStandardCheckBoxStyle(widget)` | `QCheckBox` | 標準核取方塊樣式 |
-| `applyStandardSliderStyle(widget)` | `QSlider` | 標準滑桿樣式 |
-| `applyTitleLabel(widget)` | `QLabel` | 面板章節標題樣式（藍色粗體） |
-| `applyHintLabel(widget)` | `QLabel` | 提示文字樣式（灰色斜體，如「尚未載入資料」） |
-| `applyPrimaryButtonStyle(button, is_running=False)` | `QPushButton` | **主要任務按鈕**專用。`is_running=False` 為就緒（藍色），`is_running=True` 為停止（紅色） |
-| `SIDEBAR_MAX_WIDTH` | 常數 | 面板最大寬度，值為 `341`（px） |
+| `theme.applyStandardLabelStyle(widget)` | `QLabel` | 標準說明文字樣式 |
+| `theme.applyStandardButtonStyle(widget)` | `QPushButton` | 標準次要按鈕樣式 |
+| `theme.applyStandardLineEditStyle(widget)` | `QLineEdit` | 標準單行文字輸入框樣式 |
+| `theme.applyStandardComboBoxStyle(widget)` | `QComboBox` | 標準下拉選單樣式 |
+| `theme.applyStandardCheckBoxStyle(widget)` | `QCheckBox` | 標準核取方塊樣式 |
+| `theme.applyStandardSliderStyle(widget)` | `QSlider` | 標準滑桿樣式 |
+| `theme.applyTitleLabel(widget)` | `QLabel` | 面板標題樣式（藍色粗體） |
+| `theme.applyHintLabel(widget)` | `QLabel` | 提示文字樣式（灰色斜體） |
+| `theme.applyPrimaryButtonStyle(widget, is_running=False)` | `QPushButton` | 主要動作按鈕（`is_running=False` 藍色，`is_running=True` 紅色停止） |
 
-**低階色彩/樣式查詢函式**（進階用途，一般開發直接使用上列高階函式即可）：
+#### 低階色彩/樣式查詢函式（進階使用）
 
-| 函式 | 說明 |
-|------|------|
-| `getStandardFontSize(widget_type: WidgetType) -> int` | 回傳指定元件類型的標準字型大小 |
-| `getStandardTextColor(widget_type: WidgetType, state: str = "normal") -> str` | 回傳指定元件在指定狀態下的文字色彩（十六進位字串） |
-| `getStandardBgColor(widget_type: WidgetType, state: str = "normal") -> str` | 回傳指定元件在指定狀態下的背景色彩（十六進位字串） |
-| `getStandardBorder(widget_type: WidgetType, state: str = "normal") -> str` | 回傳指定元件在指定狀態下的邊框樣式字串 |
-| `getStandardBorderRadius(widget_type: WidgetType) -> str` | 回傳指定元件的圓角半徑字串 |
+僅在需要**自訂元件且無法直接套用高階函式**時，才使用以下低階查詢 API。
 
-`WidgetType` 列舉值：`STD_LABEL`、`STD_BUTTON`、`STD_LINE_EDIT`、`STD_COMBO_BOX`、`STD_CHECK_BOX`、`STD_SLIDER`
-
----
-
-### 3.3 共用資料（common_data）
-
-外掛透過 `self.context`（`PluginContext` 物件）存取 CSV 資料，**不得**直接 import `common_data` 模組。
-
-#### PluginContext
+首先匯入 `WidgetType` 枚舉：
 
 ```python
-# 存取方式（在 BasePluginPanel 子類別中）
-self.context.csv_data             # CsvData 物件，必定不為 None
-self.context.is_data_loaded       # bool，True 表示資料已載入（all_rows 非空）
-self.context.is_first_row_header  # bool，True 表示第一行為標題
+from plugin_sdk.theme import WidgetType
 ```
 
-#### CsvData 屬性與方法
+**`WidgetType` 枚舉值**：
 
-| 屬性 / 方法 | 型別 | 說明 |
-|------------|------|------|
-| `csv_data.all_rows` | `List[List[str]]` | 所有列的原始資料（含標題行） |
-| `csv_data.num_cols` | `int` | 最大欄位數 |
-| `csv_data.is_header` | `bool` | 是否以第一行為標題 |
-| `csv_data.is_modified` | `bool` | 資料是否已修改 |
-| `csv_data.visible_indices` | `List[int]` | 目前可見（未被過濾）的列索引 |
-| `csv_data.get_column_header(col: int) -> str` | `str` | 取得第 `col` 欄（0-based）的標頭文字 |
-| `csv_data.get_visible_indices() -> List[int]` | `List[int]` | 同 `visible_indices` |
-| `csv_data.get_visible_rows() -> List[List[str]]` | `List[List[str]]` | 取得所有可見列的資料 |
-| `csv_data.update_cell(row, col, value)` | `None` | 更新指定儲存格的值，**自動**設 `is_modified=True` 並 emit `data_changed` |
-| `csv_data.set_modified(modified: bool)` | `None` | 手動設定修改狀態 |
+| 枚舉值 | 對應元件 |
+|--------|---------|
+| `WidgetType.STD_LABEL` | `QLabel` |
+| `WidgetType.STD_BUTTON` | `QPushButton` |
+| `WidgetType.STD_LINE_EDIT` | `QLineEdit` |
+| `WidgetType.STD_COMBO_BOX` | `QComboBox` |
+| `WidgetType.STD_CHECK_BOX` | `QCheckBox` |
+| `WidgetType.STD_SLIDER` | `QSlider` |
 
-**CsvData Signals**（外掛可連接，但通常透過基底類別自動處理）：
+**低階查詢函式**：
 
-| Signal | 簽名 | 說明 |
-|--------|------|------|
-| `data_loaded` | `pyqtSignal()` | 資料載入或解除載入後發出 |
-| `data_changed` | `pyqtSignal()` | 儲存格內容變更後發出 |
-| `filter_changed` | `pyqtSignal()` | 過濾條件變更後發出 |
-| `header_state_changed` | `pyqtSignal(bool)` | 「第一行為標題」狀態切換後發出 |
-| `modified_changed` | `pyqtSignal(bool)` | `is_modified` 狀態切換後發出 |
+| 函式 | 回傳型別 | 說明 |
+|------|---------|------|
+| `theme.getStandardFontSize(widget_type)` | `int` | 取得標準字型大小（目前恆為 `13`） |
+| `theme.getStandardTextColor(widget_type, state="normal")` | `str` | 取得文字顏色 HEX 值 |
+| `theme.getStandardBgColor(widget_type, state="normal")` | `str` | 取得背景顏色 HEX 值 |
+| `theme.getStandardBorder(widget_type, state="normal")` | `str` | 取得邊框樣式字串 |
+| `theme.getStandardBorderRadius(widget_type)` | `str` | 取得圓角半徑字串（目前恆為 `"6px"`） |
+
+**`state` 合法值**：
+
+| state 值 | 說明 |
+|---------|------|
+| `"normal"` | 一般狀態（預設） |
+| `"hover"` | 滑鼠懸停（僅 `STD_BUTTON` 有效） |
+| `"pressed"` | 按下（僅 `STD_BUTTON` 有效） |
+| `"disabled"` | 停用（僅 `STD_BUTTON` 有效） |
+| `"focus"` | 鍵盤焦點（僅 `STD_LINE_EDIT`、`STD_COMBO_BOX` 有效） |
+
+**低階函式使用範例**：
+
+```python
+from plugin_sdk import theme
+from plugin_sdk.theme import WidgetType
+
+# 自訂複合元件需要手動拼接 QSS 時
+font_size = theme.getStandardFontSize(WidgetType.STD_LABEL)
+text_color = theme.getStandardTextColor(WidgetType.STD_LABEL)
+
+my_custom_widget.setStyleSheet(f"""
+    QLabel {{
+        color: {text_color};
+        font-size: {font_size}px;
+    }}
+""")
+```
+
+#### 常數
+
+| 常數 | 值 | 說明 |
+|------|-----|------|
+| `theme.SIDEBAR_MAX_WIDTH` | `341` | 側面板最大寬度（px） |
 
 ---
 
-### 3.4 工具函式（utils）
+## 2.7 UI 與 Config 最佳實踐 (UX Best Practices)
 
-以下工具函式定義於 `utils` 模組，外掛可直接 import 使用。
+本節描述兩項外掛開發中最容易踩坑的實戰場景，並給出強制性的最佳實踐規範。
+
+---
+
+### 規範 1：欄位選單的列舉防呆公式
+
+#### 問題背景
+
+外掛從設定檔還原了上一次的欄位選擇（例如使用者上次選擇了第 6 欄，`stored_col = 5`），但本次載入的 CSV 只有 3 欄。若 `on_csv_data_refreshed` 中直接以 `csv_data.num_cols` 為上限建立選單，選單只會有 3 個項目，導致還原後的 index 5 超出範圍，程式將靜默回退到 index 0，使用者設定遺失，且不會有任何錯誤提示。
+
+#### 解決方案：安全上限計算公式
+
+填充欄位選單前，**必須**使用以下公式計算選單的安全上限，確保選單至少能容納 Config 中所有已儲存的欄位索引：
+
+```python
+# 安全上限公式（假設外掛使用兩個欄位選擇器 col_a 與 col_b）
+# self.config 在此泛指已從設定檔讀取的欄位索引值（stored value，非 UI index）
+limit = max(
+    csv_data.num_cols,
+    self.config_col_a + 1,   # stored value + 1 = 至少需要的欄位數
+    self.config_col_b + 1,
+)
+```
+
+> **公式說明**：
+> - `csv_data.num_cols`：資料實際具備的欄位數，作為基準下限。
+> - `stored_col_X + 1`：Config 中已儲存的索引所需的最少欄位數。加 1 是因為索引從 0 起算（索引 5 代表至少需要 6 欄）。
+> - `max(...)` 確保選單長度取三者最大值，使 Config 的還原在任何情況下都不會 out-of-range。
+
+#### 完整實作範例
+
+```python
+def on_csv_data_refreshed(self) -> None:
+    """CSV 資料載入或標頭變更時，安全填充欄位選單。"""
+    if not self.context or not self.context.is_data_loaded:
+        return
+
+    csv_data = self.context.csv_data
+
+    # 【防呆公式】計算選單安全上限
+    # _config_col_a / _config_col_b 為從 _internal_deserialize_config 讀入的 stored value
+    limit = max(
+        csv_data.num_cols,
+        self._config_col_a + 1,
+        self._config_col_b + 1,
+    )
+
+    self.combo_col_a.blockSignals(True)
+    self.combo_col_b.blockSignals(True)
+    try:
+        self.combo_col_a.clear()
+        self.combo_col_b.clear()
+        for i in range(limit):
+            # 即使 i >= csv_data.num_cols（超出實際欄位範圍），
+            # get_column_header 仍會回傳合理的佔位標題，不會拋出例外
+            header = csv_data.get_column_header(i)
+            self.combo_col_a.addItem(header)
+            self.combo_col_b.addItem(header)
+    finally:
+        self.combo_col_a.blockSignals(False)
+        self.combo_col_b.blockSignals(False)
+```
+
+> **注意**：即使索引 `i` 超出資料實際欄位數，`get_column_header(i)` 仍會回傳合理的佔位標題（如 `欄位 6`），不會引發例外。**嚴禁**自行拼接格式字串替代此方法。
+
+---
+
+### 規範 2：Config 有效性驗證時機
+
+#### 最佳實踐：平常不做動態啟停
+
+開發者常犯的錯誤是在 `on_csv_data_refreshed` 或每次 UI 元件狀態改變時，就去檢查目前的 Config 值是否合理（例如「兩個欄位不能相同」），並動態啟用或禁用按鈕。
+
+**這種做法應避免**，原因如下：
+
+| 問題 | 說明 |
+|------|------|
+| 操作流暢度下降 | 使用者在填寫參數的過程中，按鈕可能頻繁閃爍啟停，體驗差 |
+| 信號串接複雜 | 需要為每個 UI 元件連接驗證槽函數，維護成本高，且 blockSignals 防呆更加困難 |
+| 驗證結果難以呈現 | 僅靠按鈕啟停，使用者無法得知失敗原因 |
+
+#### 嚴格規範：驗證僅在「開始執行前」進行
+
+**唯一合法的驗證時機**是使用者點擊「開始執行」按鈕的槽函數最開頭。若驗證失敗，透過 `self.api.write_log` 或 `self.api.update_status` 提示原因後直接 `return`，**不呼叫 `start_task()`**。
+
+```python
+def _on_btn_clicked(self):
+    """點擊「開始執行」的槽函數——唯一合法的 Config 驗證位置。"""
+
+    # ── 1. 執行前驗證（在 start_task 之前，失敗即 return）────────────────
+    col_a = self._ui_to_stored(self.combo_col_a.currentIndex())
+    col_b = self._ui_to_stored(self.combo_col_b.currentIndex())
+
+    if col_a == col_b:
+        self.api.write_log("WARNING", "來源欄位與目標欄位不可相同，請重新選擇。")
+        self.api.update_status("❌ 參數錯誤：欄位不可相同")
+        return  # 驗證失敗，不啟動任務
+
+    if col_a < 0 or col_a >= self.context.csv_data.num_cols:
+        self.api.write_log("WARNING", f"來源欄位索引 {col_a} 超出資料範圍（共 {self.context.csv_data.num_cols} 欄）。")
+        self.api.update_status("❌ 參數錯誤：欄位索引超出範圍")
+        return
+
+    # ── 2. 驗證通過，正式啟動任務 ──────────────────────────────────────────
+    self.api.start_task(
+        task_name="我的外掛任務",
+        total=self.context.csv_data.num_cols,
+        initial_log=f"任務開始：來源欄 {col_a}，目標欄 {col_b}",
+    )
+    # ... 啟動 Worker ...
+```
+
+> **⚠️ 關鍵規則**：`start_task()` 之前的驗證失敗 `return` **不需要**呼叫 `finish_task()`，
+> 因為任務根本尚未啟動，主程式的任務狀態未被改變。
+
+---
+
+## 2.8 UI 佈局與圖示設計規範 (Layout & Icon Design)
+
+---
+
+### 規範 1：面板寬度與捲動限制
+
+#### 寬度上限
+
+側邊面板的最大寬度受限於常數 `theme.SIDEBAR_MAX_WIDTH = 341`（px）。所有外掛 UI 元件的總水平寬度**不得超過此值**，否則將被主程式框架截斷，或在不同系統字型下發生溢出。
+
+#### 佈局最佳實踐
+
+| 建議 | 說明 |
+|------|------|
+| **優先 `QVBoxLayout`** | 垂直堆疊元件，天然收束為固定寬度，是外掛面板最適合的主佈局 |
+| **多欄考慮 `QGridLayout`** | 若需要兩欄對齊（如 Label + Input），改用 `QGridLayout` 以精確控制欄寬比例 |
+| **預留垂直捲動空間** | 元件較多時，建議將 `controls_layout` 內的內容包裹在 `QScrollArea` 中，確保在小解析度螢幕上不截斷元件 |
+| **極力避免水平捲動** | 水平捲動在側邊面板中使用體驗極差，任何情況下皆不應發生 |
+
+#### `QScrollArea` 包裹範例
+
+```python
+from PyQt6.QtWidgets import QScrollArea, QWidget, QVBoxLayout
+
+def _setup_ui(self):
+    # 建立可捲動容器
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # 關閉水平捲動
+
+    inner = QWidget()
+    inner_layout = QVBoxLayout(inner)
+    inner_layout.setContentsMargins(0, 0, 0, 0)
+
+    # 將所有 UI 元件加入 inner_layout
+    self.lbl_desc = QLabel("說明文字")
+    theme.applyStandardLabelStyle(self.lbl_desc)
+    inner_layout.addWidget(self.lbl_desc)
+    # ... 其他元件 ...
+    inner_layout.addStretch()
+
+    scroll.setWidget(inner)
+
+    # 最後將 scroll 加入面板的 controls_layout
+    self.controls_layout.addWidget(scroll)
+```
+
+> **注意**：`ScrollBarAlwaysOff` 僅關閉水平捲軸顯示，不影響垂直捲動的正常使用。
+
+---
+
+### 規範 2：外掛圖示 (Icon) 的自動生成機制
+
+#### 預設行為
+
+若開發者**不覆寫** `_internal_get_icon()` 方法，基底類別 `BasePluginPanel` 會自動執行以下邏輯：
+
+1. 呼叫 `_internal_get_package_name()` 取得外掛識別名稱（如 `"my_plugin"`）
+2. 擷取前兩個字元（如 `"my"`）
+3. 動態繪製成一個**白色文字、透明背景、無邊框**的極簡圖示，顯示於主程式活動列（Activity Bar）
+
+```
+_internal_get_package_name() → "my_plugin"
+                                    ↓
+              擷取前兩字元 → "my"
+                                    ↓
+         自動繪製極簡圖示 → [my]  （白字，透明底）
+```
+
+> **實作說明**：此為全自動機制，不需要在外掛目錄中放置任何圖片檔案，無需額外設定。
+
+#### 視覺一致性建議
+
+為維持主程式活動列的極簡視覺風格，若外掛有自訂圖示的需求，在設計時應遵循以下原則：
+
+| 設計要素 | 要求 |
+|----------|------|
+| **圖案顏色** | 白色（`#FFFFFF`）或接近白色的高亮色 |
+| **背景** | 完全透明 |
+| **邊框** | 無邊框 |
+| **尺寸** | 建議正方形，主程式會自動縮放至適合大小 |
+
+> **建議**：若沒有品牌識別需求，**直接沿用預設實作即可**，無需覆寫 `_internal_get_icon()`。
+
+---
+
+## 第三部分：進階工具與效能優化
+
+### 3.1 ThrottledProgress — 進度更新限流器
+
+#### 問題背景
+
+背景 Worker 在高頻率迴圈中（例如處理數萬筆資料），若每次迴圈都直接呼叫 `self.api.update_progress()`，將以每秒數千次的頻率觸發 Qt 信號。Qt 主線程會因此被信號處理淹沒，導致 UI 完全凍結、無法響應使用者操作。
+
+#### 解決方案
+
+使用 `utils.ThrottledProgress` 對進度信號進行節流，預設**每 0.2 秒最多發送一次**（即每秒最多 5 次），大幅降低主線程負擔。
+
+#### Import
 
 ```python
 from utils import ThrottledProgress
 ```
 
-#### `ThrottledProgress`
-
-限制 Signal 發送頻率的 Helper，適合在任務迴圈中使用，避免過於頻繁地更新進度條而影響效能。
+#### 建構函式
 
 ```python
-from utils import ThrottledProgress
-
-# 建立：傳入目標 Signal，預設每秒最多 5 次（間隔 0.2 秒）
-throttled = ThrottledProgress(self.progress_updated, min_interval=0.2)
-
-# 使用：在迴圈中呼叫 emit，會自動過濾過於頻繁的呼叫
-throttled.emit(current, total)
-
-# 強制發送（不受頻率限制，適合最後一筆）
-throttled.emit(total, total, force=True)
+ThrottledProgress(signal, min_interval: float = 0.2)
 ```
 
-| 方法 | 說明 |
-|------|------|
-| `ThrottledProgress(signal, min_interval=0.2)` | 建構，傳入 `pyqtSignal` 物件與最小間隔秒數 |
-| `.emit(*args, force=False) -> bool` | 嘗試發送；回傳 `True` 表示成功發送，`False` 表示被過濾 |
+| 參數 | 型別 | 說明 |
+|------|------|------|
+| `signal` | PyQt Signal | 要被節流的 PyQt 信號物件 |
+| `min_interval` | `float` | 兩次發送之間的最小時間間隔（秒），預設 `0.2` |
+
+#### `emit(*args, force=False) -> bool`
+
+嘗試發送信號。
+
+| 參數 | 型別 | 說明 |
+|------|------|------|
+| `*args` | any | 傳遞給底層信號的參數 |
+| `force` | `bool` | 若 `True`，忽略時間限制強制發送 |
+
+回傳 `True` 表示本次信號已發送；回傳 `False` 表示被節流過濾。
+
+#### 在 Worker 中的標準用法
+
+```python
+class _MyWorker(QObject):
+    progress = pyqtSignal(int, int)
+    finished = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        self._cancelled = False
+        # 建立限流器（包裝 self.progress 信號，每 0.2 秒最多發一次）
+        self._throttled = ThrottledProgress(self.progress, min_interval=0.2)
+
+    def run(self):
+        total = 50000
+        for i in range(total):
+            if self._cancelled:
+                self.finished.emit("cancelled")
+                return
+
+            # --- 實際業務邏輯 ---
+
+            # 節流發送進度（高頻迴圈中安全呼叫）
+            self._throttled.emit(i + 1, total)
+
+        # 最後一筆強制發送，確保進度條到達 100%
+        self._throttled.emit(total, total, force=True)
+        self.finished.emit("finished")
+```
+
+> **注意**：`ThrottledProgress` 是純 Python 工具類別，在 Worker 線程內使用完全安全，無需跨線程同步。
 
 ---
 
-### 3.5 隔離限制與開發建議（Anti-patterns & Best Practices）
+## 第四部分：絕對禁止的反模式 (Strict Anti-Patterns)
 
-以下包含**嚴格禁止**的行為（違反將導致面板無法正常載入、系統崩潰或與主程式衝突），以及開發時的**最佳實踐**。
-
-#### 禁止直接存取主程式模組
-
-外掛**只允許** import 以下模組，不得引用任何其他主程式內部模組：
-
-```
-✅ 允許：plugin_sdk
-✅ 允許：utils
-✅ 允許：PyQt6（標準框架）
-✅ 允許：Python 標準函式庫（os、sys、dataclasses 等）
-✅ 允許：外掛自身資料夾內的子模組
-
-❌ 禁止：from src.ui import ...
-❌ 禁止：from src.base import ...
-❌ 禁止：直接 from common_data.csv_data import CsvData（應透過 self.context.csv_data 存取）
-❌ 禁止：存取主程式的任何 AppContext、MainWindow 或其他內部類別
-```
-
-#### 禁止發明不存在的 API
-
-- **禁止**呼叫任何本文件未列出的 `plugin_sdk`、`common_data`、`utils` 介面。
-- **禁止**假設 `BasePluginPanel` 有除本文件所列以外的 Signal 或方法。
-
-#### 建議避免在 Restore Config 期間觸發 dirty flag
-
-Restore Config（`deserialize_config` / `_restore_ui_from_config`）期間，**建議使用** `blockSignals` 保護所有 UI 元件，避免還原操作錯誤設置 `config.dirty = True`。
-
-#### 禁止外掛自行讀寫 CSV 檔案
-
-外掛**不得**直接讀取或寫入 CSV 檔案。所有資料變更必須透過 `csv_data.update_cell()` 或 `csv_data.set_modified()` 操作，並在需要時 emit `request_silent_save` 通知主程式儲存。
-
-#### 建議避免自行修改 get_column_header 的回傳格式
-
-`csv_data.get_column_header(i)` 的回傳格式由主程式統一管理。**最佳實踐**是外掛避免在回傳值上自行加入任何前綴或後綴。
-
-#### 建議避免在 controls_layout 以外的位置直接加入 Widget
-
-當 `require_data_loading=True` 時，`self.controls_layout` 是主要建議加入 Widget 的佈局。若直接操作 `self.main_layout`，可能會影響基底類別管理的「尚未載入資料」提示可見性邏輯。
-
-#### 禁止在 `__init__` 中呼叫 `show_controls()` 或 `reset_panel()`
-
-這兩個方法由基底類別根據 `data_loaded` Signal 自動呼叫，**禁止**在 `__init__` 或其他非響應事件的地方手動呼叫，以免造成初始顯示狀態錯誤。
+下列行為在任何情況下都**絕對禁止**。違反這些規則將導致架構邊界被破壞、程式行為不可預期。
 
 ---
 
-*文件版本：對應 plugin_sdk 版本截至 2026-06-29。*
+### ❌ 反模式 1：直接 emit 私有信號
+
+`BasePluginPanel` 上宣告的以 `_` 開頭的信號（如 `_task_started`、`_task_finished`、`_log_emitted` 等）是內部通訊管道，**只有 `PluginAPI` 有授權呼叫**。
+
+```python
+# ❌ 絕對禁止
+self._task_started.emit("任務名稱", 100, "開始", False)
+self._log_emitted.emit("INFO", "訊息")
+self._request_lock_ui.emit(True)
+
+# ✅ 正確做法：透過 self.api
+self.api.start_task("任務名稱", total=100, initial_log="開始")
+self.api.write_log("INFO", "訊息")
+```
+
+---
+
+### ❌ 反模式 2：使用 `hasattr` / `getattr` 跨界猜測主程式狀態
+
+不得使用反射機制探測或存取主程式的任何屬性、狀態或方法。外掛應假設主程式的實作對自己完全不透明。
+
+```python
+# ❌ 絕對禁止
+if hasattr(self.parent(), "is_running"):
+    ...
+getattr(self.context, "some_host_method")()
+
+# ✅ 正確做法：只透過 self.api 和 self.context 的公開介面互動
+```
+
+---
+
+### ❌ 反模式 3：匯入或使用 `PluginHostAdapter`
+
+`PluginHostAdapter` 是主程式專用的橋接器，刻意未在 `plugin_sdk/__init__.py` 中 export。外掛開發者**無法**且**不應**嘗試匯入它。
+
+```python
+# ❌ 絕對禁止
+from plugin_sdk.host_adapter import PluginHostAdapter
+
+# ✅ 外掛只需要 BasePluginPanel 與 PluginContext
+from plugin_sdk import BasePluginPanel, PluginContext
+```
+
+---
+
+### ❌ 反模式 4：直接呼叫主程式生命週期方法
+
+外掛不應直接呼叫主程式的任何生命週期方法（例如假設父元件有 `run_main_action()` 或類似方法）。外掛必須透過自己的生命週期鉤子（如 `on_csv_data_refreshed`）自動觸發。
+
+```python
+# ❌ 絕對禁止
+self.parent().run_main_action()
+
+# ✅ 正確做法：在 on_csv_data_refreshed 中自動回應資料事件
+def on_csv_data_refreshed(self) -> None:
+    self._refresh_column_list()
+```
+
+---
+
+### ❌ 反模式 5：Hardcode QSS 樣式
+
+外掛 UI 的所有樣式必須透過 `plugin_sdk.theme` 提供的函式套用，不得自行 hardcode 任何 QSS 字串或顏色值。
+
+```python
+# ❌ 絕對禁止
+widget.setStyleSheet("color: #a9b1d6; font-size: 13px;")
+
+# ✅ 正確做法
+theme.applyStandardLabelStyle(widget)
+```
+
+---
+
+### ❌ 反模式 6：在 Config 操作中省略 `blockSignals`
+
+在 `_internal_deserialize_config` 或 `on_csv_data_refreshed` 中操作 UI 元件（如 `QComboBox.setCurrentIndex`、`QComboBox.clear` 等），若未切斷信號，可能觸發 `currentIndexChanged` 導致主程式將文件錯誤標記為已修改（dirty），或觸發其他副作用。
+
+```python
+# ❌ 危險：還原 config 時觸發 dirty 標記
+def _internal_deserialize_config(self, data: dict) -> None:
+    self.combo_col.setCurrentIndex(data.get("col", 0))  # 會觸發 currentIndexChanged！
+
+# ✅ 正確：使用 try/finally 切斷信號
+def _internal_deserialize_config(self, data: dict) -> None:
+    self.combo_col.blockSignals(True)
+    try:
+        self.combo_col.setCurrentIndex(data.get("col", 0))
+    finally:
+        self.combo_col.blockSignals(False)
+```
+
+---
+
+## 附錄：_internal_ 方法快速參考
+
+下列為子類別**必須覆寫**（raise `NotImplementedError`）的方法：
+
+| 方法簽名 | 回傳型別 | 說明 |
+|---------|---------|------|
+| `_internal_get_uuid(self)` | `str` | 回傳此外掛的唯一 UUID |
+| `_internal_get_package_name(self)` | `str` | 回傳設定檔識別名稱 |
+| `_internal_serialize_config(self)` | `dict` | 序列化面板設定 |
+| `_internal_deserialize_config(self, data: dict)` | `None` | 還原面板設定 |
+
+下列為子類別**應依需求覆寫**的方法（有預設實作）：
+
+| 方法簽名 | 預設行為 | 說明 |
+|---------|---------|------|
+| `_internal_is_task_running(self)` | 回傳 `False` | 有 Worker 時必須覆寫 |
+| `_internal_cancel_task(self)` | 寫入 WARNING 日誌 | 有 Worker 時必須覆寫 |
+| `_internal_set_enabled(self, enabled)` | 無操作 | 需自訂鎖定行為時覆寫 |
+| `on_csv_data_refreshed(self)` | 無操作 | 需回應資料事件時覆寫 |
+
+> **提醒**：`_internal_get_icon()` 有預設實作（自動依 `_internal_get_package_name()` 產生縮寫圖示），外掛通常**不需要**覆寫此方法。
