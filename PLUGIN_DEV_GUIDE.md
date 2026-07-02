@@ -177,6 +177,7 @@ class PanelClass(BasePluginPanel):
         # UI index k → 實際欄位 k（stored value = k）
         self.combo_col = QComboBox()
         theme.applyStandardComboBoxStyle(self.combo_col)
+        self.combo_col.currentIndexChanged.connect(self._on_combo_changed)
         self.controls_layout.addWidget(self.combo_col)
 
         # 主要動作按鈕
@@ -204,6 +205,10 @@ class PanelClass(BasePluginPanel):
         當 _N_NON_COL_OPTIONS = 0 時，直接回傳傳入的 stored 值。
         """
         return stored + self._N_NON_COL_OPTIONS
+
+    def _on_combo_changed(self, ui_index: int) -> None:
+        """下拉選單異動時，即時同步更新內部 Config 變數。"""
+        self._config_selected_col = self._ui_to_stored(ui_index)
 
     # ── 資料刷新 ──────────────────────────────────────────────────────────
 
@@ -308,10 +313,10 @@ class PanelClass(BasePluginPanel):
     def _internal_serialize_config(self) -> dict:
         """
         將面板當前設定序列化為 dict，供主程式存入設定檔。
-        注意：儲存的是 _ui_to_stored() 轉換後的值，而非直接存 UI index。
+        由於有即時同步機制，此處直接回傳已同步的內部 Config 變數。
         """
         return {
-            "selected_col": self._ui_to_stored(self.combo_col.currentIndex()),
+            "selected_col": self._config_selected_col,
         }
 
     def _internal_deserialize_config(self, data: dict) -> None:
@@ -819,8 +824,9 @@ def _on_btn_clicked(self):
     """點擊「開始執行」的槽函數——唯一合法的 Config 驗證位置。"""
 
     # ── 1. 執行前驗證（在 start_task 之前，失敗即 return）────────────────
-    col_a = self._ui_to_stored(self.combo_col_a.currentIndex())
-    col_b = self._ui_to_stored(self.combo_col_b.currentIndex())
+    # 由於有即時同步機制，此處直接讀取內部已同步的 Config 變數
+    col_a = self._config_col_a
+    col_b = self._config_col_b
 
     if col_a == col_b:
         self.api.write_log("WARNING", "來源欄位與目標欄位不可相同，請重新選擇。")
@@ -843,6 +849,34 @@ def _on_btn_clicked(self):
 
 > **⚠️ 關鍵規則**：`start_task()` 之前的驗證失敗 `return` **不需要**呼叫 `finish_task()`，
 > 因為任務根本尚未啟動，主程式的任務狀態未被改變。
+
+---
+
+### 規範 3：Config 的即時同步鐵律
+
+#### 核心精神
+
+Config（不論是內部變數或獨立類別）是外掛狀態的「唯一真理（Single Source of Truth）」。UI 只是視圖。
+
+#### 實作規定
+
+任何 UI 元件的異動（如 `currentIndexChanged`、`textChanged`、`valueChanged`），都**必須**綁定槽函數，即時將值寫入 Config 中。
+
+#### 程式碼範例
+
+```python
+# 1. 綁定信號
+self.combo_col.currentIndexChanged.connect(self._on_combo_changed)
+
+# 2. 即時同步槽函數
+def _on_combo_changed(self, ui_index: int) -> None:
+    # 轉換為 stored value 並即時更新 internal config
+    self._config_selected_col = self._ui_to_stored(ui_index)
+```
+
+#### 強調說明
+
+因為有了即時同步，`on_csv_data_refreshed` 就可以絕對信任並直接讀取 Config 變數來計算 `limit`，而不需要去反查 UI 當下的狀態。
 
 ---
 
