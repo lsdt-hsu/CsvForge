@@ -168,6 +168,8 @@ class DataEditorPanel(BasePanel):
         # 訂閱資料載入信號以自動調整欄寬與更新狀態文字
         if self.context and self.context.csv_data:
             self.context.csv_data.data_loaded.connect(self.on_model_loaded)
+            self.context.csv_data.filter_changed.connect(self.on_status_updated)
+            self.context.csv_data.header_state_changed.connect(self.on_status_updated)
 
     def init_ui(self):
         layout = self.controls_layout
@@ -241,15 +243,24 @@ class DataEditorPanel(BasePanel):
             self.context.data_editor_config.first_row_header = is_checked
             self.context.data_editor_config.dirty = True
 
-    def on_model_loaded(self):
-        csv_data = self.context.csv_data
-        prefix = ""
-        if csv_data.file_path:
-            base_name = os.path.basename(csv_data.file_path)
-            main_name, _ = os.path.splitext(base_name)
-            prefix = f"{main_name}: "
+    def on_status_updated(self):
+        if not self.context or not self.context.csv_data:
+            self.lbl_status.setText("尚未載入資料")
+            return
             
-        self.lbl_status.setText(f"{prefix}共 {len(csv_data.all_rows)} 行")
+        csv_data = self.context.csv_data
+        if not csv_data.file_path:
+            filename = "未命名"
+        else:
+            filename = os.path.basename(csv_data.file_path)
+            
+        n = len(csv_data.get_visible_indices())
+        m = len(csv_data.all_rows)
+        
+        self.lbl_status.setText(f"<{filename}> 共 {n} / {m} 行")
+
+    def on_model_loaded(self):
+        self.on_status_updated()
         self.resize_columns_fast()
 
     def resize_columns_fast(self):
