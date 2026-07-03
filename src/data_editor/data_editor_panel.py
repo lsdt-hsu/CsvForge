@@ -2,7 +2,7 @@ import os
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QLabel, QCheckBox, QTableView,
     QStyledItemDelegate, QStyle, QStyleOptionViewItem, QPushButton,
-    QAbstractItemView
+    QAbstractItemView, QMessageBox
 )
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex, QSize, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QIcon
@@ -22,6 +22,46 @@ class CsvTableDelegate(QStyledItemDelegate):
 
     def updateEditorGeometry(self, editor, option, index):
         editor.setGeometry(option.rect)
+
+class CsvTableView(QTableView):
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            selected = self.selectionModel().selectedIndexes()
+            if not selected:
+                super().keyPressEvent(event)
+                return
+
+            m = len(set(idx.row() for idx in selected))
+            n = len(set(idx.column() for idx in selected))
+
+            if len(selected) == 1:
+                reply = QMessageBox.question(
+                    self,
+                    "確認刪除",
+                    "確定要清除選取資料嗎？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.No:
+                    return
+            elif len(selected) > 1:
+                reply = QMessageBox.question(
+                    self,
+                    "確認刪除",
+                    f"確定要清除選取的 {m}  × {n} = {len(selected)} 格資料嗎？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.No:
+                    return
+
+            model = self.model()
+            if model:
+                for index in selected:
+                    model.setData(index, "", Qt.ItemDataRole.EditRole)
+        else:
+            super().keyPressEvent(event)
+
 
 class CSVTableModel(QAbstractTableModel):
     def __init__(self, csv_data: CsvData, parent=None):
@@ -160,8 +200,8 @@ class DataEditorPanel(BasePanel):
 
         layout.addWidget(header_widget)
 
-        # 使用 QTableView 支援大數據虛擬滾動
-        self.table_view = QTableView()
+        # 使用 CsvTableView 支援大數據虛擬滾動
+        self.table_view = CsvTableView()
         self.table_view.horizontalHeader().setDefaultSectionSize(PREVIEW_DEFAULT_SECTION_SIZE)
         self.table_view.verticalHeader().setDefaultSectionSize(PREVIEW_VERTICAL_SECTION_SIZE)
         self.table_view.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
