@@ -211,6 +211,9 @@ class LeftPanel(QFrame):
             panel._task_started.connect(self.main_window.on_task_started)
             panel._task_finished.connect(self.main_window.on_task_finished)
             panel._request_silent_save.connect(self.main_window.silent_save_edit_data)
+            # Worker 生命週期委託：面板的 api.run_worker() 呼叫將觸發此信號，
+            # 由 Adapter 統一建立 QThread 並管理 Worker GC
+            panel._request_run_worker.connect(adapter._on_run_worker_requested)
 
     def get_active_plugin(self) -> PluginHostAdapter:
         """
@@ -464,6 +467,7 @@ class LeftPanel(QFrame):
                 panel._task_started.disconnect()
                 panel._task_finished.disconnect()
                 panel._request_silent_save.disconnect()
+                panel._request_run_worker.disconnect()
             except Exception:
                 pass
 

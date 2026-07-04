@@ -1,7 +1,7 @@
 import re
 import time
 import unicodedata
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 
 # 全角數字/符號轉換表
 FULL_TO_HALF_MAP = {
@@ -21,10 +21,29 @@ JAPANESE_KANJI_WORDS = {
     "貼付", "挿入", "追加", "作成", "開発", "設計", "計画", "実行", "停止"
 }
 
-class FilterWorker(QThread):
-    progress_updated = pyqtSignal(int, int)
-    filter_completed = pyqtSignal(object, float)  # 傳回: 匹配的索引列表, 執行時間(秒)
-    filter_error = pyqtSignal(str)
+class FilterWorker(QObject):
+    """
+    FilterWorker — 在背景執行緒中執行 CSV 列過濾運算。
+
+    【架構規範】：此 Worker 繼承自 QObject（非 QThread），由主程式的
+    PluginHostAdapter 統一建立 QThread 並管理生命週期。
+
+    標準接口信號（run_worker 架構必要）：
+      progress(current, total): 進度更新，主程式自動套 ThrottledProgress 節流。
+      finished(status): 任務結束， "finished" | "error" | "cancelled"。
+
+    業務信號（外掛面板可自行連接）：
+      filter_completed(matched_indices, elapsed_time): 過濾完成，帶回結果與耗時。
+      log_emitted(level, msg): 發送日誌訊息到日誌面板。
+    """
+
+    # ── 標準接口信號（run_worker 架構必要）────────────────────────────────────────────
+    progress = pyqtSignal(int, int)          # current, total
+    finished = pyqtSignal(str)               # "finished" | "error" | "cancelled"
+
+    # ── 業務信號（外掛面板可連接）───────────────────────────────────────────────────
+    filter_completed = pyqtSignal(object, float)  # matched_indices, elapsed_time
+    log_emitted = pyqtSignal(str, str)            # level, message
 
     def __init__(self, all_rows, start_row, end_row, is_header, 
                  filter_config, parent=None):
@@ -37,6 +56,8 @@ class FilterWorker(QThread):
         self.filter_config = filter_config
         
         self._is_cancelled = False
+        # 供面板在 finished("error") 時讀取錯誤詳情
+        self._last_error: str = ""
 
         # 初始化 OpenCC 轉換器 (離線字典載入)
         try:
@@ -47,7 +68,8 @@ class FilterWorker(QThread):
             self.cc_t2s = None
             self.cc_s2t = None
 
-    def cancel(self):
+    def cancel(self) -> None:
+        """供主程式呼叫，用以要求終止過濾迴圈。"""
         self._is_cancelled = True
 
     def check_row_match(self, row, compare_col, compare_method, compare_target, compare_value, regex_pattern, range_start=None, range_end=None):
@@ -386,6 +408,7 @@ class FilterWorker(QThread):
             
             if not has_row_limit and is_no_rules_filter:
                 self.filter_completed.emit(None, time.time() - start_time)
+                self.finished.emit("finished")
                 return
 
             # 正規表達式預先編譯
@@ -401,17 +424,20 @@ class FilterWorker(QThread):
                     try:
                         pat = re.compile(val)
                     except re.error as e:
-                        self.filter_error.emit(f"規則 #{j+1} 正規表達式語法錯誤: {e}")
+                        self._last_error = f"規則 #{j+1} 正規表達式語法錯誤: {e}"
+                        self.log_emitted.emit("ERROR", self._last_error)
+                        self.finished.emit("error")
                         return
                 regex_patterns.append(pat)
 
             for i, row in enumerate(self.all_rows):
                 if self._is_cancelled:
+                    self.finished.emit("cancelled")
                     return
                 
                 # 報告進度
                 if i % 10000 == 0:
-                    self.progress_updated.emit(i, total_rows)
+                    self.progress.emit(i, total_rows)
                 
                 # 排除標題行
                 r_num = i + 1
@@ -426,8 +452,11 @@ class FilterWorker(QThread):
                 if in_start_limit and in_end_limit and rules_match:
                     matched_indices.append(i)
 
-            self.progress_updated.emit(total_rows, total_rows)
+            self.progress.emit(total_rows, total_rows)
             self.filter_completed.emit(matched_indices, time.time() - start_time)
+            self.finished.emit("finished")
 
         except Exception as e:
-            self.filter_error.emit(f"過濾發生未預期錯誤: {e}")
+            self._last_error = f"過濾發生未預期錯誤: {e}"
+            self.log_emitted.emit("ERROR", self._last_error)
+            self.finished.emit("error")

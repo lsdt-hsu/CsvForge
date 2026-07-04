@@ -22,6 +22,10 @@ class PluginHostAdapter:
                序列化/反序列化設定、以及取得 UI Widget。
                內部持有實體面板 _panel 的強引用，並轉呼叫其 _internal_xxx() 方法。
 
+    [Thread 管理] PluginHostAdapter 是系統中唯一負責建立 QThread、
+               管理 Worker GC 保活的類別。外掛透過 api.run_worker() 委託，
+               由此類別統一接收並執行全套 Thread 生命週期管理。
+
     [存取禁令] 嚴禁外掛子類別（Plugin Developers 所編寫的 PanelClass 及其
                任何內部邏輯）持有或呼叫此物件。
                外掛應透過 self.api（PluginAPI 實例）進行所有對外通訊。
@@ -29,6 +33,10 @@ class PluginHostAdapter:
 
     def __init__(self, panel: "BasePluginPanel") -> None:
         self._panel = panel
+        # GC 保活清單：每個元素為 (worker, thread, throttled_forwarder) tuple
+        self._active_workers: list[tuple] = []
+        # 當前活躍的 Worker 引用，用於 cancel_task 與 is_task_running 查詢
+        self._current_worker = None
 
     # ── UI 整合 ──────────────────────────────────────────────────────────────
 
@@ -48,6 +56,70 @@ class PluginHostAdapter:
         """
         return self._panel
 
+    # ── Thread 生命週期管理（新架構核心）────────────────────────────────────
+
+    def _on_run_worker_requested(
+        self,
+        worker,
+        task_name: str,
+        total: int,
+        initial_log: str,
+        prevent_sleep: bool,
+    ) -> None:
+        """
+        攔截外掛的 api.run_worker() 請求，統一管理 QThread 生命週期。
+
+        由 LeftPanel._connect_panel_signals() 連接至 panel._request_run_worker 信號，
+        是整個架構中唯一合法建立 QThread 的位置。
+
+        執行流程：
+          a) 建立 QThread 並 worker.moveToThread()
+          b) 對 worker.progress 套用 ThrottledProgress(min_interval=0.2)，
+             節流後轉發至 panel._progress_updated
+          c) 將 (worker, thread, throttler) 加入 _active_workers GC 保活清單
+          d) 啟動 Thread
+          e) 攔截 worker.finished 信號，自動執行清理與 finish_task
+        """
+        from PyQt6.QtCore import QThread
+        from utils.throttler import ThrottledProgress
+
+        thread = QThread()
+        worker.moveToThread(thread)
+
+        # 節流轉發：worker.progress → ThrottledProgress → panel._progress_updated
+        # ThrottledProgress 包裝的是 target signal，限制轉發頻率
+        _throttled = ThrottledProgress(self._panel._progress_updated, min_interval=0.2)
+
+        def _on_worker_progress(current: int, total_count: int):
+            _throttled.emit(current, total_count)
+
+        worker.progress.connect(_on_worker_progress)
+
+        # GC 保活：將 worker、thread、throttler 與轉發 slot 全部加入清單防止被回收
+        entry = (worker, thread, _throttled, _on_worker_progress)
+        self._active_workers.append(entry)
+        self._current_worker = worker
+
+        # 完成回調：自動清理 + 通知主程式 finish_task
+        def _on_finished(status: str):
+            # 從 GC 清單移除
+            if entry in self._active_workers:
+                self._active_workers.remove(entry)
+            # 清除當前 Worker 引用
+            if self._current_worker is worker:
+                self._current_worker = None
+            # 通知主程式任務結束（解鎖 UI、停止計時器）
+            self._panel._task_finished.emit(status)
+            # 安全清理 Thread
+            thread.quit()
+            thread.wait()
+            thread.deleteLater()
+            worker.deleteLater()
+
+        worker.finished.connect(_on_finished)
+        thread.started.connect(worker.run)
+        thread.start()
+
     # ── 生命週期控制 ─────────────────────────────────────────────────────────
 
     def initialize(self) -> None:
@@ -59,10 +131,13 @@ class PluginHostAdapter:
 
     def cancel_task(self) -> None:
         """
-        命令外掛取消當前正在執行的背景任務。
+        命令當前 Worker 取消任務。
         主程式「取消」按鈕的信號槽應呼叫此方法。
+
+        新架構（run_worker）：直接對 _current_worker 呼叫 cancel()。
         """
-        self._panel._internal_cancel_task()
+        if self._current_worker is not None:
+            self._current_worker.cancel()
 
     def set_enabled(self, enabled: bool) -> None:
         """
@@ -76,9 +151,9 @@ class PluginHostAdapter:
     def is_task_running(self) -> bool:
         """
         查詢該外掛是否仍有背景任務在執行。
-        用於 LeftPanel 在切換分頁前的安全性檢查。
+        新架構：直接查詢 _current_worker 是否存在，不依賴外掛覆寫方法。
         """
-        return self._panel._internal_is_task_running()
+        return self._current_worker is not None
 
     # ── 識別資訊 ─────────────────────────────────────────────────────────────
 

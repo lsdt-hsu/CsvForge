@@ -1,7 +1,7 @@
 import os
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
-    QPushButton, QFrame, QScrollArea
+    QPushButton, QFrame, QScrollArea, QMessageBox
 )
 from PyQt6.QtCore import Qt
 
@@ -18,14 +18,14 @@ class AiPanel(BasePluginPanel):
     AiPanel — AI 處理面板。
     
     負責提供 UI 選項、連線測試交互、管理 VRAM 進階設定，
-    並於啟動處理時建立 CSVAIWorker 背景線程進行運算。
+    並於啟動處理時建立 CSVAIWorker，委託主程式統一管理 QThread 生命週期。
     """
 
     def __init__(self, parent=None, context=None):
         # require_data_loading=True 代表必須在載入 CSV 後才展示控制項
         super().__init__(parent, title_text="AI 批次處理", require_data_loading=True, context=context)
         self.config = AiPanelConfig()
-        self.worker = None
+        self._worker = None  # 當前 Worker 引用（用於按鈕停止判斷）
         
         self.init_ui()
 
@@ -157,7 +157,6 @@ class AiPanel(BasePluginPanel):
 
     def _on_target_col_changed(self):
         # 只有在已載入資料時，才從選單儲存 target_col。
-        # 避免在 clear/addItem 或剛啟動尚未載入資料時，因索引變化而誤將 -1 寫入。
         if self.context and self.context.is_data_loaded:
             self.config.target_col = self.prompt_widget.get_target_col()
             self._mark_dirty()
@@ -167,9 +166,7 @@ class AiPanel(BasePluginPanel):
         self._mark_dirty()
 
     def restore_from_config(self):
-        """
-        從自有的 AiPanelConfig 還原元件設定。
-        """
+        """從自有的 AiPanelConfig 還原元件設定。"""
         cfg = self.config
         
         self.cb_service.blockSignals(True)
@@ -202,9 +199,7 @@ class AiPanel(BasePluginPanel):
             self.prompt_widget.txt_prompt.blockSignals(False)
 
     def update_column_dropdowns(self, num_cols):
-        """
-        當 CSV 載入成功時，由 MainWindow 呼叫，用以更新 PromptWidget 的可用欄位與目標寫回選單。
-        """
+        """當 CSV 載入成功時，更新 PromptWidget 的可用欄位與目標寫回選單。"""
         limit = max(num_cols, self.config.target_col + 1)
         self.prompt_widget.cb_target_col.blockSignals(True)
         try:
@@ -214,74 +209,60 @@ class AiPanel(BasePluginPanel):
             self.prompt_widget.cb_target_col.blockSignals(False)
 
     def _internal_set_enabled(self, enabled: bool) -> None:
-        """
-        當任務執行中，鎖定所有輸入控制項防呆。
-        """
+        """當任務執行中，鎖定所有輸入控制項防呆。"""
         self.cb_service.setEnabled(enabled)
         self.google_widget.set_enabled(enabled)
         self.local_widget.set_enabled(enabled)
         self.prompt_widget.set_enabled(enabled)
-        
-        if not self.is_running():
+        if self._worker is None:
             self.btn_start.setEnabled(enabled)
-    # ── 背景執行緒控制 ────────────────────────────────────────────────────────
 
-    def is_running(self) -> bool:
-        return self.worker is not None and self.worker.isRunning()
+    # ── 任務控制 ──────────────────────────────────────────────────────────────
 
     def on_start_clicked(self):
-        """
-        開始/停止按鈕點擊處理 Slot。
-        """
-        if self.is_running():
-            self._internal_cancel_task()
+        """開始/停止按鈕點擊處理 Slot。"""
+        if self._worker is not None:
+            # 任務執行中：請求取消（由主程式透過 Adapter 直接呼叫 worker.cancel()）
+            self._worker.cancel()
+            self.btn_start.setText("正在停止...")
+            self.btn_start.setEnabled(False)
             return
-            
-        self.start_ai_task()
 
-    def start_ai_task(self):
-        # 1. 設定即時同步已由各控制項處理，直接讀取當前 config 物件
+        self._start_ai_task()
+
+    def _start_ai_task(self):
+        """執行前驗證並啟動 AI 處理任務。"""
         cfg = self.config
 
-        # 2. 基本校驗
+        # 基本校驗
         if cfg.target_col is None or cfg.target_col < 0:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "參數錯誤", "請選擇輸出欄位！")
             return
         if not cfg.prompt_template:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "參數錯誤", "請輸入 AI 指示詞 (Prompt)！")
             return
 
-        # 3. 獲取當前 CSV headers，點擊開始時才進行欄位正確性檢查
         is_hdr = self.context.csv_data.is_header
         all_rows = self.context.csv_data.all_rows
         if not all_rows:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "資料錯誤", "CSV 資料尚未載入！")
             return
 
         headers = [self.context.csv_data.get_column_header(i) for i in range(self.context.csv_data.num_cols)]
 
-        # 檢查 3.1: 輸出欄位正確性 (所選欄位索引必須小於當前 CSV 最大欄位數)
         if cfg.target_col >= self.context.csv_data.num_cols:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(
-                self, 
-                "參數錯誤", 
+                self, "參數錯誤",
                 f"輸出欄號 '{cfg.target_col + 1}' 不存在於目前 CSV 檔案中，請重新選擇！"
             )
             return
 
-        # 檢查 3.2: 檢查 Prompt 中引用的變數欄位是否皆存在
         from ai.ai_utils import extract_referenced_fields
         referenced_fields = extract_referenced_fields(cfg.prompt_template)
         missing_fields = [f for f in referenced_fields if f not in headers]
         if missing_fields:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(
-                self,
-                "參數錯誤",
+                self, "參數錯誤",
                 f"自訂 Prompt 中引用了不存在於目前 CSV 的欄位：\n"
                 f"{', '.join(f'{{{f}}}' for f in missing_fields)}\n\n"
                 f"請更正 Prompt 中的變數！"
@@ -289,26 +270,24 @@ class AiPanel(BasePluginPanel):
             return
 
         if cfg.ai_service == "Google AI" and not cfg.google_api_key:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "參數錯誤", "選擇 Google AI 服務時，API KEY 不能為空！")
             return
 
         if cfg.ai_service == "Local AI" and not cfg.local_model:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "參數錯誤", "選擇 Local AI 服務時，必須選擇使用的模型！")
             return
 
-        # 4. 取得行索引與資料
         visible_row_indices = self.context.csv_data.get_visible_indices()
+        total = len(visible_row_indices)
 
-        # 4. 實例化 Worker
-        self.worker = CSVAIWorker(
+        # 建立 Worker
+        self._worker = CSVAIWorker(
             all_rows=all_rows,
             visible_row_indices=visible_row_indices,
             is_header=is_hdr,
             target_col_name=cfg.target_col,
             user_prompt=cfg.prompt_template,
-            ai_service=cfg.ai_service.replace(" AI", ""), # 轉成 "Google" 或 "Local"
+            ai_service=cfg.ai_service.replace(" AI", ""),
             google_api_key=cfg.google_api_key,
             google_model=cfg.google_model,
             local_server_url=cfg.local_server_url,
@@ -318,89 +297,50 @@ class AiPanel(BasePluginPanel):
             headers=headers
         )
 
-        # 連接進度、狀態與日誌信號
-        self.worker.progress_updated.connect(self.api.update_progress)
-        self.worker.status_updated.connect(self.api.update_status)
-        self.worker.log_emitted.connect(self.api.write_log)
+        # 連接業務信號（面板自身處理的部分）
+        self._worker.status_updated.connect(self.api.update_status)
+        self._worker.log_emitted.connect(self.api.write_log)
+        self._worker.data_changed.connect(self._on_data_changed)
+        # 連接完成信號：面板負責更新按鈕狀態
+        self._worker.finished.connect(self._on_worker_done)
 
-        # 連接完成與變更信號
-        self.worker.finished_successfully.connect(self._on_task_finished)
-        self.worker.finished_with_error.connect(self._on_task_error)
-        self.worker.data_changed.connect(self._on_data_changed)
-
-        # 啟動 Worker (自主啟動，不經主視窗)
-        self.worker.start()
-        self._on_task_started()
-
-    def _internal_set_enabled(self, enabled: bool) -> None:
-        super()._internal_set_enabled(enabled)
-        self.cb_service.setEnabled(enabled)
-        self.google_widget.setEnabled(enabled)
-        self.local_widget.setEnabled(enabled)
-        self.prompt_widget.setEnabled(enabled)
-        if not self._internal_is_task_running():
-            self.btn_start.setEnabled(enabled)
-
-    def _internal_cancel_task(self):
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.btn_start.setText("正在停止...")
-            self.btn_start.setEnabled(False)
-
-    def _internal_is_task_running(self) -> bool:
-        return self.worker is not None and self.worker.isRunning()
-
-    def _on_task_started(self):
+        # 更新按鈕狀態
         self.btn_start.setText("停止 AI 處理")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=True)
         self._internal_set_enabled(False)
-        
-        # 通知主程式任務開始
-        total = len(self.context.csv_data.get_visible_indices()) if self.context and self.context.csv_data else 0
-        self.api.start_task(
+
+        # 委託主程式管理 Thread 生命週期（含 ThrottledProgress、GC、finish_task）
+        self.api.run_worker(
+            self._worker,
             task_name="AI 處理中...",
             total=total,
             initial_log="開始執行 CSV AI 處理...",
             prevent_sleep=True
         )
 
-    def _on_task_finished(self):
+    def _on_worker_done(self, status: str) -> None:
+        """Worker 結束時恢復面板 UI 狀態。由 worker.finished 信號觸發。"""
+        # 恢復按鈕狀態
         self.btn_start.setText("開始 AI 處理")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self._internal_set_enabled(True)
-        self.worker = None
-        
-        # 通知主程式任務結束
-        self.api.finish_task("finished")
-        
-        # 自動存檔 (跟 translation 面板行為保持一致)
-        self.api.request_silent_save()
 
-    def _on_task_error(self, err_msg):
-        self.btn_start.setText("開始 AI 處理")
-        self.btn_start.setEnabled(True)
-        applyPrimaryButtonStyle(self.btn_start, is_running=False)
-        self._internal_set_enabled(True)
-        self.worker = None
+        # 讀取錯誤訊息（Worker 尚未被 deleteLater，此時引用仍有效）
+        if status == "error" and self._worker is not None:
+            err_msg = getattr(self._worker, "_last_error", "未知錯誤")
+            if err_msg:
+                QMessageBox.critical(self, "AI 處理中斷", f"AI 處理過程中發生錯誤：\n{err_msg}")
 
-        # 區分使用者取消與真實錯誤
-        if "使用者已取消" in err_msg or "取消" in err_msg:
-            self.api.update_status("已取消")
-            self.api.write_log("WARNING", "AI 處理已被使用者中斷。")
-            self.api.finish_task("cancelled")
-        else:
-            # 彈出錯誤對話框
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "AI 處理中斷", f"AI 處理過程中發生錯誤：\n{err_msg}")
-            self.api.finish_task("error")
+        # 清除本地 Worker 引用（Adapter 端的 GC 清單另行管理）
+        self._worker = None
 
         # 自動存檔
         self.api.request_silent_save()
 
     def _on_data_changed(self):
-        # 標記主資料已修改，觸發介面重繪
+        """標記主資料已修改，觸發介面重繪。"""
         if self.context and self.context.csv_data:
             self.context.csv_data.set_modified(True)
             self.context.csv_data.data_changed.emit()

@@ -85,9 +85,6 @@ your_plugin_folder/
 # ✅ 正確：使用頂層套件名稱（主程式已處理 sys.path）
 from plugin_sdk import BasePluginPanel, PluginContext
 from plugin_sdk import theme
-
-# ✅ 選用：若使用 ThrottledProgress 限流工具
-from utils import ThrottledProgress
 ```
 
 > **注意**：`PluginHostAdapter` 刻意未在 `plugin_sdk/__init__.py` 中 export，外掛開發者**無法**且**不應**匯入它。
@@ -105,14 +102,13 @@ from utils import ThrottledProgress
 import uuid
 
 from PyQt6.QtWidgets import QPushButton, QLabel, QComboBox
-from PyQt6.QtCore import QThread, pyqtSignal, QObject
+from PyQt6.QtCore import pyqtSignal, QObject
 
 from plugin_sdk import BasePluginPanel, PluginContext
 from plugin_sdk import theme
-from utils import ThrottledProgress
 
 
-# ── (選用) 若有耗時背景任務，建議使用 Worker + QThread 模式 ──────────────
+# ── (選用) 若有耗時背景任務，建議使用 Worker 模式 ──────────────
 
 class _MyWorker(QObject):
     """背景 Worker：不阻塞主線程。"""
@@ -159,9 +155,7 @@ class PanelClass(BasePluginPanel):
             require_data_loading=True,   # True = 需等待 CSV 載入後才顯示操作 UI
             context=context,
         )
-        self._thread = None
         self._worker = None
-        self._throttled_progress = None  # 於任務啟動時初始化
         self._config_selected_col = 0   # 儲存還原的欄位設定值（預設選擇第 1 欄）
         self._setup_ui()
 
@@ -241,65 +235,16 @@ class PanelClass(BasePluginPanel):
     # ── 按鈕點擊邏輯 ───────────────────────────────────────────────────────
 
     def _on_btn_clicked(self):
-        """點擊「開始處理」的槽函數。"""
-        # 如果任務正在執行，則進行取消
-        if self._worker:
-            self._worker.cancel()
-            return
+        # 1. 執行前驗證：在此處檢查 Config 是否合法，若失敗則提示並 return
+        # if self._config_selected_col < 0:
+        #     self.api.write_log("WARNING", "請先選擇有效的欄位")
+        #     self.api.update_status("❌ 參數錯誤")
+        #     return
 
-        # 將按鈕轉為紅色停止狀態，並更改文字為「停止處理」
-        theme.applyPrimaryButtonStyle(self.btn_start, is_running=True)
-        self.btn_start.setText("停止處理")
-
-        # 1. 通知主程式任務開始（內部已隱含 UI 鎖定，禁止再呼叫 lock_ui(True)）
-        self.api.start_task(
-            task_name="我的外掛任務",
-            total=100,
-            initial_log="任務開始……",
-            prevent_sleep=False,
-        )
-        self.api.write_log("INFO", "Worker 啟動中…")
-
-        # 2. 建立限流器（防止進度信號過密卡死 UI）
+        # 2. 驗證通過，正式啟動任務
         self._worker = _MyWorker()
-        self._thread = QThread()
-        self._worker.moveToThread(self._thread)
-
-        # ThrottledProgress 包裝 worker.progress 信號，預設每 0.2 秒最多發一次
-        self._throttled_progress = ThrottledProgress(
-            self._worker.progress, min_interval=0.2
-        )
-
-        self._worker.progress.connect(self._on_progress)
-        self._worker.finished.connect(self._on_worker_finished)
-        self._thread.started.connect(self._worker.run)
-
-        self._thread.start()
-
-    def _on_progress(self, current: int, total: int):
-        """接收 Worker 進度更新（已由 ThrottledProgress 在 Worker 端節流）。"""
-        self.api.update_progress(current, total)
-        self.api.update_status(f"進度：{current}/{total}")
-
-    def _on_worker_finished(self, status: str):
-        """Worker 結束時的清理動作。"""
-        self.api.write_log("SUCCESS" if status == "finished" else "WARNING",
-                           f"任務結束，狀態：{status}")
-        # 3. 通知主程式任務結束（主程式將解鎖 UI）
-        self.api.finish_task(status)
-        self._cleanup_thread()
-
-    def _cleanup_thread(self):
-        # 恢復藍色狀態，並更改文字回「開始處理」
-        theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
-        self.btn_start.setText("開始處理")
-
-        if self._thread:
-            self._thread.quit()
-            self._thread.wait()
-            self._thread = None
-            self._worker = None
-            self._throttled_progress = None
+        # 主程式會自動接管 Thread、進度節流、UI 鎖定與結束清理
+        self.api.run_worker(self._worker, task_name="我的外掛任務", total=100)
 
     # ── _internal_ 生命週期方法（必須全部覆寫）────────────────────────────
 
@@ -342,16 +287,6 @@ class PanelClass(BasePluginPanel):
             # 使用 finally 確保即使發生例外，信號也必然被恢復
             self.combo_col.blockSignals(False)
 
-    def _internal_is_task_running(self) -> bool:
-        """主程式防呆查詢：任務是否仍在執行中？"""
-        return self._thread is not None and self._thread.isRunning()
-
-    def _internal_cancel_task(self) -> None:
-        """主程式要求取消任務時呼叫。"""
-        if self._worker:
-            self._worker.cancel()
-            self.api.write_log("WARNING", "使用者已要求取消任務。")
-
     def _internal_set_enabled(self, enabled: bool) -> None:
         """UI 鎖定/解鎖時同步更新內部元件狀態。"""
         super()._internal_set_enabled(enabled)
@@ -382,6 +317,8 @@ class PanelClass(BasePluginPanel):
 
 > **⚠️ 架構限制（極重要）**：呼叫 `start_task()` 後，**嚴禁**再呼叫 `self.api.lock_ui(True)`。
 > `start_task` 內部已隱含全域 UI 鎖定語意，重複呼叫將導致狀態不一致。
+>
+> **⚠️ 注意**：若外掛使用 `run_worker` 託管背景任務，主程式會自動呼叫此方法。外掛開發者【嚴禁】在呼叫 `run_worker` 前後手動呼叫 `start_task`，以免破壞主程式狀態機。
 
 ---
 
@@ -392,6 +329,25 @@ class PanelClass(BasePluginPanel):
 | 參數 | 型別 | 合法值 |
 |------|------|--------|
 | `status` | `str` | `"finished"` \| `"error"` \| `"cancelled"` |
+
+> **⚠️ 注意**：若外掛使用 `run_worker` 託管背景任務，主程式會自動呼叫此方法。外掛開發者【嚴禁】在呼叫 `run_worker` 前後手動呼叫 `finish_task`，以免破壞主程式狀態機。
+
+---
+
+#### `self.api.run_worker(worker, task_name, total, initial_log, prevent_sleep)`
+
+將一個背景 Worker 物件託管給主程式。主程式會自動為其建立 QThread、自動套用進度節流、管理資源釋放，並在結束時自動解鎖 UI。
+
+| 參數 | 型別 | 必填 | 說明 |
+|------|------|------|------|
+| `worker` | `QObject` | ✅ | 背景執行的 Worker 實例，必須具備 `run()` 與 `cancel()` 方法，以及標準的 `progress` 與 `finished` 信號 |
+| `task_name` | `str` | ✅ | 任務顯示名稱，出現在狀態列 |
+| `total` | `int` | ❌（預設 `0`） | 初始總進度量，`0` 表示不定量 |
+| `initial_log` | `str` | ❌（預設 `""`） | 任務開始時寫入日誌的初始訊息 |
+| `prevent_sleep` | `bool` | ❌（預設 `False`） | 任務期間是否阻止系統休眠 |
+
+> **⚠️ 架構鐵律：外掛嚴禁自行建立 QThread。必須將 Worker 交由此方法託管。**
+> 主程式會在內部自動將 `worker` 移動到新建立的線程，並對 `worker.progress` 自動套用 `ThrottledProgress(min_interval=0.2)`，無需開發者手動處理。
 
 ---
 
@@ -840,12 +796,13 @@ def _on_btn_clicked(self):
         return
 
     # ── 2. 驗證通過，正式啟動任務 ──────────────────────────────────────────
-    self.api.start_task(
+    self._worker = _MyWorker()
+    self.api.run_worker(
+        self._worker,
         task_name="我的外掛任務",
         total=self.context.csv_data.num_cols,
-        initial_log=f"任務開始：來源欄 {col_a}，目標欄 {col_b}",
+        initial_log=f"任務開始：來源欄 {col_a}，目標欄 {col_b}"
     )
-    # ... 啟動 Worker ...
 ```
 
 > **⚠️ 關鍵規則**：`start_task()` 之前的驗證失敗 `return` **不需要**呼叫 `finish_task()`，
@@ -971,11 +928,16 @@ _internal_get_package_name() → "my_plugin"
 
 ### 3.1 ThrottledProgress — 進度更新限流器
 
+> **注意：新版架構中，主程式在 `run_worker` 內部已自動對 `worker.progress` 套用 `ThrottledProgress(min_interval=0.2)`。外掛開發者通常【不需要】再手動實作進度節流。**
+
+#### 核心原則
+在新架構下，**Worker 內部只需直接呼叫 `self.progress.emit(current, total)`，完全不需要去實作、初始化或匯入節流邏輯。主程式會在外部攔截並自動套用節流效果。**
+
 #### 問題背景
 
-背景 Worker 在高頻率迴圈中（例如處理數萬筆資料），若每次迴圈都直接呼叫 `self.api.update_progress()`，將以每秒數千次的頻率觸發 Qt 信號。Qt 主線程會因此被信號處理淹沒，導致 UI 完全凍結、無法響應使用者操作。
+背景 Worker 在高頻率迴圈中（例如處理數萬筆資料），若每次迴圈都直接觸發進度信號，將以每秒數千次的頻率觸發 Qt 信號。Qt 主線程會因此被信號處理淹沒，導致 UI 完全凍結、無法響應使用者操作。主程式在底層正是使用 `ThrottledProgress` 進行限流以解決此問題。
 
-#### 解決方案
+#### ThrottledProgress 規格（僅供底層功能開發者參考）
 
 使用 `utils.ThrottledProgress` 對進度信號進行節流，預設**每 0.2 秒最多發送一次**（即每秒最多 5 次），大幅降低主線程負擔。
 
@@ -1007,7 +969,7 @@ ThrottledProgress(signal, min_interval: float = 0.2)
 
 回傳 `True` 表示本次信號已發送；回傳 `False` 表示被節流過濾。
 
-#### 在 Worker 中的標準用法
+#### 手動用法範例（僅供底層功能開發者參考）
 
 ```python
 class _MyWorker(QObject):
@@ -1017,8 +979,6 @@ class _MyWorker(QObject):
     def __init__(self):
         super().__init__()
         self._cancelled = False
-        # 建立限流器（包裝 self.progress 信號，每 0.2 秒最多發一次）
-        self._throttled = ThrottledProgress(self.progress, min_interval=0.2)
 
     def run(self):
         total = 50000
@@ -1026,14 +986,12 @@ class _MyWorker(QObject):
             if self._cancelled:
                 self.finished.emit("cancelled")
                 return
-
+            
             # --- 實際業務邏輯 ---
+            
+            # 直接發送進度即可，主程式會在外部攔截並自動限流
+            self.progress.emit(i + 1, total)
 
-            # 節流發送進度（高頻迴圈中安全呼叫）
-            self._throttled.emit(i + 1, total)
-
-        # 最後一筆強制發送，確保進度條到達 100%
-        self._throttled.emit(total, total, force=True)
         self.finished.emit("finished")
 ```
 
@@ -1175,9 +1133,9 @@ def on_csv_data_refreshed(self) -> None:
 
 | 方法簽名 | 預設行為 | 說明 |
 |---------|---------|------|
-| `_internal_is_task_running(self)` | 回傳 `False` | 有 Worker 時必須覆寫 |
-| `_internal_cancel_task(self)` | 寫入 WARNING 日誌 | 有 Worker 時必須覆寫 |
 | `_internal_set_enabled(self, enabled)` | 無操作 | 需自訂鎖定行為時覆寫 |
 | `on_csv_data_refreshed(self)` | 無操作 | 需回應資料事件時覆寫 |
 
+> **說明**：使用 `run_worker` 後，主程式自動持有 worker 引用並處理取消邏輯，無需外掛手動覆寫 `_internal_is_task_running` 與 `_internal_cancel_task` 二方法。
+> 
 > **提醒**：`_internal_get_icon()` 有預設實作（自動依 `_internal_get_package_name()` 產生縮寫圖示），外掛通常**不需要**覆寫此方法。

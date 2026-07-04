@@ -1,17 +1,36 @@
 import concurrent.futures
 import re
-from PyQt6.QtCore import QThread, pyqtSignal
+import time
+from PyQt6.QtCore import QObject, pyqtSignal
 from deep_translator import GoogleTranslator
 from utils.network import get_http_error_info
 
 # --- CSV 翻譯執行緒工人類 ---
-class CSVTranslatorWorker(QThread):
-    progress_updated = pyqtSignal(int, int)      # 已處理列數, 總列數
-    status_updated = pyqtSignal(str)             # 狀態欄更新日誌
-    log_emitted = pyqtSignal(str, str)           # 級別 (INFO/SUCCESS/WARNING/ERROR), 訊息
-    finished_successfully = pyqtSignal()         # 成功完成或取消完成
-    finished_with_error = pyqtSignal(str)        # 錯誤原因
-    data_changed = pyqtSignal()                  # 有任何列被修改時發射
+class CSVTranslatorWorker(QObject):
+    """
+    CSVTranslatorWorker — 在背景執行緒中執行 CSV 批次翻譯。
+
+    【架構規範】：此 Worker 繼承自 QObject（非 QThread），由主程式的
+    PluginHostAdapter 統一建立 QThread 並管理生命週期。
+
+    標準接口信號（run_worker 架構必要）：
+      progress(current, total): 進度更新，主程式自動套 ThrottledProgress 節流。
+      finished(status): 任務結束， "finished" | "error" | "cancelled"。
+
+    業務信號（外掛面板可自行連接）：
+      status_updated(status_str): 更新 UI 狀態列字串。
+      log_emitted(level, msg): 發送日誌訊息到日誌面板。
+      data_changed(): 有任意列被修改時發射。
+    """
+
+    # ── 標準接口信號（run_worker 架構必要）────────────────────────────────────────────
+    progress = pyqtSignal(int, int)      # current, total
+    finished = pyqtSignal(str)           # "finished" | "error" | "cancelled"
+
+    # ── 業務信號（外掛面板可連接）───────────────────────────────────────────────────
+    status_updated = pyqtSignal(str)     # 狀態欄更新日誌
+    log_emitted = pyqtSignal(str, str)   # 級別 (INFO/SUCCESS/WARNING/ERROR), 訊息
+    data_changed = pyqtSignal()          # 有任意列被修改時發射
 
     def __init__(self, all_rows, visible_row_indices,
                  source_col_idx, target_col_idx,
@@ -29,10 +48,13 @@ class CSVTranslatorWorker(QThread):
         self.batch_size = batch_size
         self._is_cancelled = False
         self.error_rank = 0
+        # 供面板在 finished("error") 時讀取錯誤詳情
+        self._last_error: str = ""
         self.prevent_sleep = True
         self.task_name = "翻譯中..."
 
-    def cancel(self):
+    def cancel(self) -> None:
+        """供主程式呼叫，用以要求終止背景處理迴圈。"""
         self._is_cancelled = True
 
     def pause(self):
@@ -251,7 +273,7 @@ class CSVTranslatorWorker(QThread):
                     row.append("")
                 
                 processed_count += 1
-                self.progress_updated.emit(processed_count, total_to_translate)
+                self.progress.emit(processed_count, total_to_translate)
                 
                 target_val = row[self.target_col_idx].strip()
                 source_val = row[self.source_col_idx]
@@ -272,14 +294,15 @@ class CSVTranslatorWorker(QThread):
                     
             if self._is_cancelled:
                 self.log_emitted.emit("WARNING", "使用者已取消翻譯。")
+                self.finished.emit("cancelled")
             else:
                 if tag_buffer:
                     self.log_emitted.emit("INFO", f"開始處理最後殘留批次，共 {len(tag_buffer)} 筆...")
                     self.translate_batch(tag_buffer, self.target_col_idx)
                 self.log_emitted.emit("SUCCESS", "翻譯完成！")
-
-            self.finished_successfully.emit()
+                self.finished.emit("finished")
   
         except Exception as e:
+            self._last_error = str(e)
             self.log_emitted.emit("ERROR", f"翻譯過程發生錯誤：{str(e)}")
-            self.finished_with_error.emit(str(e))
+            self.finished.emit("error")

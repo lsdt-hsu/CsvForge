@@ -38,6 +38,10 @@ class BasePluginPanel(QFrame):
     _request_silent_save = pyqtSignal()
     _task_started = pyqtSignal(str, int, str, bool)
     _task_finished = pyqtSignal(str)
+    # Worker 生命週期委託信號：外掛透過 api.run_worker() 觸發，
+    # 由主程式端 PluginHostAdapter 接收並統一管理 QThread 生命週期。
+    # 參數：(worker: QObject, task_name: str, total: int, initial_log: str, prevent_sleep: bool)
+    _request_run_worker = pyqtSignal(object, str, int, str, bool)
 
     def __init__(self, parent=None, title_text="", require_data_loading=True, context: PluginContext = None):
         super().__init__(parent)

@@ -14,7 +14,7 @@ translation_panel.py — 翻譯面板 (外掛版本)
 """
 
 from dataclasses import dataclass
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit, QMessageBox
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator
 # pyrefly: ignore [missing-import]
@@ -38,14 +38,8 @@ class PanelClass(BasePluginPanel):
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="翻譯外掛", require_data_loading=True, context=context)
         self.config = TranslatePanelConfig()
-        
-        from csv_translator import CSVTranslator
-        self.translator = CSVTranslator(parent=self, context=context)
-        self.translator.started.connect(self.on_translator_started)
-        self.translator.finished.connect(self.on_translator_finished)
-        self.translator.cancelled.connect(self.on_translator_cancelled)
-        self.translator.translation_done.connect(self._on_translation_done)
-        self.translator.data_changed.connect(self._on_data_changed)
+        # 當前 Worker 引用（用於按鈕停止判斷）
+        self._worker = None
         
         self.init_ui()
 
@@ -323,57 +317,76 @@ class PanelClass(BasePluginPanel):
         self.slider_batch_size.setEnabled(enabled)
         self.txt_src_col.setEnabled(enabled)
         self.txt_tgt_col.setEnabled(enabled)
-        if not self.translator.is_running():
+        # 按鈕在任務執行中不停用（供使用者點擊停止）
+        if self._worker is None:
             self.btn_start.setEnabled(enabled)
 
     def on_start_clicked(self):
-        if self.translator.is_running():
-            self.translator.cancel_task()
-        else:
-            self.translator.start_translation_task(
-                src_lang=self.get_src_lang(),
-                tgt_lang=self.get_tgt_lang(),
-                batch_interval=self.get_batch_interval(),
-                single_interval=self.get_single_interval(),
-                batch_size=self.get_batch_size(),
-                src_col=self.get_src_col(),
-                tgt_col=self.get_tgt_col()
-            )
+        """開始/停止按鈕點擊處理 Slot。"""
+        if self._worker is not None:
+            # 任務執行中：請求取消
+            self._worker.cancel()
+            self.btn_start.setText("正在停止...")
+            self.btn_start.setEnabled(False)
+            return
+        self._start_translation_task()
 
-    def on_translator_started(self):
+    def _start_translation_task(self) -> None:
+        """執行前驗證並建立譯總 Worker。"""
+        src_col = self.get_src_col()
+        tgt_col = self.get_tgt_col()
+
+        # 執行前驗證
+        if src_col == tgt_col:
+            self.api.write_log("WARNING", "來源欄位與目標欄位不可相同，請重新選擇。")
+            self.api.update_status("❌ 參數錯誤：欄位不可相同")
+            return
+
+        visible_row_indices = self.context.csv_data.get_visible_indices()
+        all_rows = self.context.csv_data.all_rows
+        total = len(visible_row_indices)
+
+        from translation.csv_translator_worker import CSVTranslatorWorker
+        self._worker = CSVTranslatorWorker(
+            all_rows=all_rows,
+            visible_row_indices=visible_row_indices,
+            source_col_idx=src_col,
+            target_col_idx=tgt_col,
+            source_lang=self.get_src_lang(),
+            target_lang=self.get_tgt_lang(),
+            batch_interval=self.get_batch_interval(),
+            single_interval=self.get_single_interval(),
+            batch_size=self.get_batch_size(),
+        )
+
+        # 連接業務信號
+        self._worker.status_updated.connect(self.api.update_status)
+        self._worker.log_emitted.connect(self.api.write_log)
+        self._worker.data_changed.connect(self._on_data_changed)
+        self._worker.finished.connect(self._on_worker_done)
+
+        # 更新按鈕狀態
         self.btn_start.setText("停止翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=True)
         self._internal_set_enabled(False)
-        
-        total = len(self.context.csv_data.get_visible_indices()) if self.context and self.context.csv_data else 0
-        self.api.start_task(
+
+        # 委託主程式管理 Thread 生命週期
+        self.api.run_worker(
+            self._worker,
             task_name="翻譯中...",
             total=total,
             initial_log="開始執行 CSV 翻譯...",
             prevent_sleep=True
         )
 
-    def on_translator_finished(self):
+    def _on_worker_done(self, status: str) -> None:
+        """Worker 結束時恢復面板 UI 狀態。由 worker.finished 信號觸發。"""
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self._internal_set_enabled(True)
-        
-        status = "error" if self.translator._has_error else "finished"
-        self.api.finish_task(status)
+        self._worker = None
 
-    def on_translator_cancelled(self):
-        self.btn_start.setText("開始翻譯")
-        self.btn_start.setEnabled(True)
-        applyPrimaryButtonStyle(self.btn_start, is_running=False)
-        self._internal_set_enabled(True)
-        
-        self.api.finish_task("cancelled")
-
-    def _internal_is_task_running(self) -> bool:
-        return self.translator.is_running()
-
-    def _internal_cancel_task(self) -> None:
-        if self.translator.is_running():
-            self.translator.cancel_task()
+        if status == "finished":
+            self._on_translation_done()

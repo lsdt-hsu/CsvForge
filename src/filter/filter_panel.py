@@ -346,8 +346,6 @@ class FilterPanel(BasePluginPanel):
             "logic_tree": logic_tree.serialize_tree(self.logic_tree)
         }
 
-
-
         # 驗證行號輸入
         start_row_str = self.txt_filter_start_row.text().strip()
         if start_row_str == "":
@@ -384,24 +382,19 @@ class FilterPanel(BasePluginPanel):
             end_row=end_row_val,
             is_header=is_header,
             filter_config=filter_config,
-            parent=self.window()
         )
-        
-        worker_instance.task_name = "過濾中..."
-        worker_instance.initial_progress_total = len(rows)
-        
+
         self.worker = worker_instance
-        
-        # 連接進度信號（FilterWorker 僅提供此基本信號，未定義 status_updated / log_emitted）
-        worker_instance.progress_updated.connect(self.api.update_progress)
-        
+
+        # 連接業務信號（面板自身處理的部分）
         worker_instance.filter_completed.connect(self.on_filter_completed)
-        worker_instance.filter_error.connect(self.on_filter_error)
-        
-        worker_instance.start()
-        
-        # 發送任務開始信號
-        self.api.start_task(
+        worker_instance.log_emitted.connect(self.api.write_log)
+        # 連接完成信號：面板負責更新狀態與錯誤處理
+        worker_instance.finished.connect(self._on_filter_done)
+
+        # 委託主程式管理 Thread 生命週期（含 ThrottledProgress、GC、finish_task）
+        self.api.run_worker(
+            worker_instance,
             task_name="過濾中...",
             total=len(rows),
             initial_log="開始執行 CSV 資料過濾...",
@@ -409,32 +402,23 @@ class FilterPanel(BasePluginPanel):
         )
 
     def on_filter_completed(self, matched_indices, elapsed_time: float) -> None:
+        """FilterWorker 順利完成過濾時的業務回調（圖式更新）。"""
         self.context.csv_data.set_filtered_indices(matched_indices)
         self.api.update_status("完成")
-        self.api.write_log("SUCCESS", f"過濾完成！共匹配 {len(matched_indices) if matched_indices is not None else 0} 筆資料，耗時 {elapsed_time:.2f} 秒。")
-        self.api.finish_task("finished")
+        count = len(matched_indices) if matched_indices is not None else 0
+        self.api.write_log("SUCCESS", f"過濾完成！共匹配 {count} 筆資料，耗時 {elapsed_time:.2f} 秒。")
+
+    def _on_filter_done(self, status: str) -> None:
+        """標準完成回調。由 worker.finished 信號觸發，在 Adapter 自動呼叫 finish_task 前執行。"""
+        if status == "error" and self.worker is not None:
+            err_msg = getattr(self.worker, "_last_error", "未知錯誤")
+            if err_msg:
+                QMessageBox.critical(self, "過濾錯誤", err_msg)
+        # 清除本地 Worker 引用（Adapter 端的 GC 清單另行管理）
         self.worker = None
-
-    def on_filter_error(self, err_msg: str) -> None:
-        self.worker = None
-        if "使用者已取消" in err_msg or "取消" in err_msg:
-            self.api.update_status("已取消")
-            self.api.write_log("WARNING", "過濾工作已被使用者取消。")
-            self.api.finish_task("cancelled")
-        else:
-            self.api.update_status("錯誤")
-            self.api.write_log("ERROR", f"過濾錯誤：{err_msg}")
-            QMessageBox.critical(self, "過濾錯誤", err_msg)
-            self.api.finish_task("error")
-
-    def _internal_is_task_running(self) -> bool:
-        return self.worker is not None and self.worker.isRunning()
-
-    def _internal_cancel_task(self) -> None:
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
 
     def _internal_set_enabled(self, enabled: bool) -> None:
+        """主程式 UI 鎖定/解鎖時同步更新內部元件狀態。"""
         self.txt_filter_start_row.setEnabled(enabled)
         self.txt_filter_end_row.setEnabled(enabled)
         self.btn_add_rule.setEnabled(enabled)
