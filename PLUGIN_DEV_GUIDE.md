@@ -870,12 +870,17 @@ def _on_combo_changed(self, ui_index: int) -> None:
 
 ```python
 from PyQt6.QtWidgets import QScrollArea, QWidget, QVBoxLayout
+from PyQt6.QtCore import Qt
 
 def _setup_ui(self):
     # 建立可捲動容器
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
     scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # 關閉水平捲動
+    
+    # 【UI 防呆】：必須消除 QScrollArea 預設的邊框與背景色，否則會出現突兀的色塊
+    scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+    scroll.viewport().setStyleSheet("background: transparent;")
 
     inner = QWidget()
     inner_layout = QVBoxLayout(inner)
