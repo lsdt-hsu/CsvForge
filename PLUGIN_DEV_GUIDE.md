@@ -7,6 +7,7 @@
 
 ## 目錄
 
+- [第零部分：AI Agent 實作提問指引](#第零部分-ai-agent-實作提問指引-agent-directives)
 - [第一部分：核心觀念與快速起步](#第一部分核心觀念與快速起步-core-concepts--boilerplate)
   - [1.1 雙門面隔離](#11-雙門面隔離-dual-facade-isolation)
   - [1.2 檔案結構規範](#12-檔案結構規範)
@@ -32,6 +33,14 @@
   - [反模式 6：在 Config 操作中省略 blockSignals](#-反模式-6在-config-操作中省略-blocksignals)
   - [反模式 7：在資料解除載入或重載時清除 Config 狀態](#-反模式-7在資料解除載入或重載時清除-config-狀態)
 - [附錄：_internal_ 方法快速參考](#附錄internal_-方法快速參考)
+
+---
+
+## 第零部分：AI Agent 實作提問指引 (Agent Directives)
+
+身為 AI 開發助理，在協助使用者建立全新的外掛實作計畫（Implementation Plan）時，【必須】主動將以下 Optional 進階功能列為 **Open Questions** 向使用者確認，絕對不可擅自省略：
+1. **防止系統休眠**：任務耗時是否較長？是否需要在呼叫 `run_worker` 時開啟 `prevent_sleep=True`？
+2. **靜默存檔 (Silent Save)**：任務結束或中斷後，是否需要呼叫 `self.api.request_silent_save()` 進行背景存檔？（建議：若任務會大量修改 CSV 資料，強烈建議開啟）
 
 ---
 
@@ -175,14 +184,14 @@ class PanelClass(BasePluginPanel):
         self.combo_col.currentIndexChanged.connect(self._on_combo_changed)
         self.controls_layout.addWidget(self.combo_col)
 
+        # 彈性填充（將上方元件推頂，讓主按鈕固定於面板底部）
+        self.controls_layout.addStretch()
+
         # 主要動作按鈕
         self.btn_start = QPushButton("開始處理")
         theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self.btn_start.clicked.connect(self._on_btn_clicked)
         self.controls_layout.addWidget(self.btn_start)
-
-        # 彈性填充（讓元件靠上排列）
-        self.controls_layout.addStretch()
 
     # ── 欄位選項 Index 映射 ──────────────────────────────────────────────────
     # 映射規則：
@@ -909,18 +918,38 @@ _internal_get_package_name() → "my_plugin"
 
 > **實作說明**：此為全自動機制，不需要在外掛目錄中放置任何圖片檔案，無需額外設定。
 
-#### 視覺一致性建議
+#### 自訂圖示設計標準 (Custom Icon Guidelines)
 
-為維持主程式活動列的極簡視覺風格，若外掛有自訂圖示的需求，在設計時應遵循以下原則：
+為了融入主程式側邊欄，手動提供圖示時強烈建議遵循以下規範：
 
-| 設計要素 | 要求 |
-|----------|------|
-| **圖案顏色** | 白色（`#FFFFFF`）或接近白色的高亮色 |
-| **背景** | 完全透明 |
-| **邊框** | 無邊框 |
-| **尺寸** | 建議正方形，主程式會自動縮放至適合大小 |
+| 設計要素 | 強制規範與建議 |
+|----------|----------------|
+| **顏色 (Color)** | 統一使用 **`#a9b1d6`** (主題標準淡藍灰色) 或 **`#FFFFFF`** (純白色)。避免使用鮮豔色彩或漸層（除特殊 Badge 外）。 |
+| **風格 (Style)** | 強烈建議採用「**線條風格 (Outline/Stroke)**」，線條粗細保持一致（約 2px）；若為文字或實心圖案，請保持極簡。 |
+| **畫布與邊距 (Canvas)** | 必須為正方形 (1:1)，建議最小尺寸 40x40 px。圖形**絕對不可填滿畫布邊緣**，四周需保留約 10%~15% 的透明 Padding，確保視覺重量與內建圖示一致。 |
+| **背景 (Background)** | 必須完全透明。 |
+| **檔案格式 (Format)** | 建議使用具有透明通道的 `.png`，或向量格式 `.svg`。 |
+
+##### 程式碼實作範例
+
+```python
+from PyQt6.QtGui import QIcon
+import os
+
+def _internal_get_icon(self) -> QIcon:
+    """覆寫預設的圖示生成邏輯，載入自訂圖示。"""
+    # 假設圖示檔案放在外掛目錄下的 assets/icon.png
+    icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
+    return QIcon(icon_path)
+```
 
 > **建議**：若沒有品牌識別需求，**直接沿用預設實作即可**，無需覆寫 `_internal_get_icon()`。
+
+---
+
+### 規範 3：主要動作按鈕位置
+
+若無特殊需求（例如：Filter 面板下方需保留空間給動態新增的規則清單），外掛的『主要動作按鈕（如：開始處理）』應放置於面板的最底部。實作上，請在加入主要按鈕【之前】先呼叫 `self.controls_layout.addStretch()`，將上方元件推頂。
 
 ---
 
