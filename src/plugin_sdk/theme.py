@@ -175,15 +175,23 @@ def applyStandardSliderStyle(widget) -> None:
     """
     widget.setStyleSheet(qss)
 
+def getTitleTextColor() -> str:
+    """獲取面板標題的標準文字色彩"""
+    return "#7aa2f7"
+
+def getTitleFontSize() -> int:
+    """獲取面板標題的標準字型大小"""
+    return 14
+
 def applyTitleLabel(widget) -> None:
     """套用面板中的標題樣式 (如「翻譯」字樣)"""
-    qss = """
-        QLabel {
-            color: #7aa2f7;
+    qss = f"""
+        QLabel {{
+            color: {getTitleTextColor()};
             font-family: "Microsoft JhengHei", "Segoe UI", sans-serif;
-            font-size: 14px;
+            font-size: {getTitleFontSize()}px;
             font-weight: bold;
-        }
+        }}
     """
     widget.setStyleSheet(qss)
 

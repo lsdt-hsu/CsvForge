@@ -8,7 +8,7 @@ except ImportError:
 
 from plugin_sdk.panel_base import BasePluginPanel
 from plugin_sdk import theme
-from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QPushButton
+from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QPushButton, QWidget, QVBoxLayout
 from PyQt6.QtCore import Qt, QObject, pyqtSignal
 
 
@@ -66,7 +66,7 @@ class EditPanel(BasePluginPanel):
     def __init__(self, parent=None, context=None):
         super().__init__(
             parent=parent,
-            title_text="批次取代",
+            title_text="編輯",
             require_data_loading=True,
             context=context,
         )
@@ -75,10 +75,39 @@ class EditPanel(BasePluginPanel):
         self._config_mode = 0  # 0: PCRE, 1: BRE (Sed)
         self._config_find_text = ""
         self._config_replace_text = ""
+        self._is_replace_expanded = True
         self._setup_ui()
 
     def _setup_ui(self):
-        # 1. 說明文字 QLabel
+        # 建立折疊控制按鈕 (Header)
+        self.btn_toggle_replace = QPushButton("▼ 批次取代")
+        # 設定游標為點擊手勢
+        self.btn_toggle_replace.setCursor(Qt.CursorShape.PointingHandCursor)
+        # 套用去按鈕化的純文字標題樣式
+        self.btn_toggle_replace.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                font-weight: bold;
+                font-size: {theme.getTitleFontSize()}px;
+                color: {theme.getTitleTextColor()};
+                padding: 5px 0px;
+            }}
+            QPushButton:hover {{
+                color: #89ddff;
+            }}
+        """)
+        self.btn_toggle_replace.clicked.connect(self._toggle_replace_panel)
+        self.controls_layout.addWidget(self.btn_toggle_replace)
+
+        # 建立子面板容器 (Content Area)與其 Layout
+        self.replace_content_widget = QWidget()
+        replace_layout = QVBoxLayout()
+        replace_layout.setContentsMargins(0, 0, 0, 0)
+        self.replace_content_widget.setLayout(replace_layout)
+
+        # 1. 說明文字 QLabel (移入子面板內部最上方)
         self.lbl_desc = QLabel()
         if HAS_ADVANCED_REGEX:
             self.lbl_desc.setText("進階模式 (支援 \\U, \\L 大小寫轉換等進階語法)")
@@ -86,57 +115,60 @@ class EditPanel(BasePluginPanel):
             self.lbl_desc.setText("內建模式 (基礎功能。若需大小寫轉換，請於環境中安裝 regex 套件)")
         theme.applyStandardLabelStyle(self.lbl_desc)
         self.lbl_desc.setWordWrap(True)
-        self.controls_layout.addWidget(self.lbl_desc)
+        replace_layout.addWidget(self.lbl_desc)
 
         # 2. 目標欄位
         lbl_dst = QLabel("目標欄位")
         theme.applyStandardLabelStyle(lbl_dst)
-        self.controls_layout.addWidget(lbl_dst)
+        replace_layout.addWidget(lbl_dst)
 
         self.combo_dst_col = QComboBox()
         theme.applyStandardComboBoxStyle(self.combo_dst_col)
         self.combo_dst_col.currentIndexChanged.connect(self._on_dst_col_changed)
-        self.controls_layout.addWidget(self.combo_dst_col)
+        replace_layout.addWidget(self.combo_dst_col)
 
         # 3. 處理模式
         lbl_mode = QLabel("處理模式")
         theme.applyStandardLabelStyle(lbl_mode)
-        self.controls_layout.addWidget(lbl_mode)
+        replace_layout.addWidget(lbl_mode)
 
         self.combo_mode = QComboBox()
         self.combo_mode.addItems(["正規表達式 (PCRE)", "Sed 語法 (BRE)"])
         theme.applyStandardComboBoxStyle(self.combo_mode)
         self.combo_mode.currentIndexChanged.connect(self._on_mode_changed)
-        self.controls_layout.addWidget(self.combo_mode)
+        replace_layout.addWidget(self.combo_mode)
 
         # 4. 尋找
         lbl_find = QLabel("尋找")
         theme.applyStandardLabelStyle(lbl_find)
-        self.controls_layout.addWidget(lbl_find)
+        replace_layout.addWidget(lbl_find)
 
         self.edit_find = QLineEdit()
         theme.applyStandardLineEditStyle(self.edit_find)
         self.edit_find.textChanged.connect(self._on_find_changed)
-        self.controls_layout.addWidget(self.edit_find)
+        replace_layout.addWidget(self.edit_find)
 
         # 5. 取代為
         lbl_replace = QLabel("取代為")
         theme.applyStandardLabelStyle(lbl_replace)
-        self.controls_layout.addWidget(lbl_replace)
+        replace_layout.addWidget(lbl_replace)
 
         self.edit_replace = QLineEdit()
         theme.applyStandardLineEditStyle(self.edit_replace)
         self.edit_replace.textChanged.connect(self._on_replace_changed)
-        self.controls_layout.addWidget(self.edit_replace)
+        replace_layout.addWidget(self.edit_replace)
 
-        # 6. 彈性填充，將按鈕推到最下方
-        self.controls_layout.addStretch()
-
-        # 7. 主要動作按鈕
+        # 7. 主要動作按鈕 (移入容器內部最下方)
         self.btn_start = QPushButton("開始取代")
         theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self.btn_start.clicked.connect(self._on_btn_clicked)
-        self.controls_layout.addWidget(self.btn_start)
+        replace_layout.addWidget(self.btn_start)
+
+        # 將容器加入主 layout
+        self.controls_layout.addWidget(self.replace_content_widget)
+
+        # 所有子面板加入完畢後，在 controls_layout 的最底端加入 addStretch()
+        self.controls_layout.addStretch()
 
     def _ui_to_stored(self, ui_index: int) -> int:
         return ui_index - self._N_NON_COL_OPTIONS
@@ -155,6 +187,14 @@ class EditPanel(BasePluginPanel):
 
     def _on_replace_changed(self, text: str) -> None:
         self._config_replace_text = text
+
+    def _toggle_replace_panel(self) -> None:
+        self._is_replace_expanded = not self._is_replace_expanded
+        self.replace_content_widget.setVisible(self._is_replace_expanded)
+        if self._is_replace_expanded:
+            self.btn_toggle_replace.setText("▼ 批次取代")
+        else:
+            self.btn_toggle_replace.setText("▶ 批次取代")
 
     def on_csv_data_refreshed(self) -> None:
         if not self.context or not self.context.is_data_loaded:

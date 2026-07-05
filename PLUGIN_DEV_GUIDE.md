@@ -652,6 +652,8 @@ from plugin_sdk.theme import WidgetType
 | `theme.getStandardBgColor(widget_type, state="normal")` | `str` | 取得背景顏色 HEX 值 |
 | `theme.getStandardBorder(widget_type, state="normal")` | `str` | 取得邊框樣式字串 |
 | `theme.getStandardBorderRadius(widget_type)` | `str` | 取得圓角半徑字串（目前恆為 `"6px"`） |
+| `theme.getTitleTextColor()` | `str` | 取得面板標題的標準文字色彩 HEX 值 |
+| `theme.getTitleFontSize()` | `int` | 取得面板標題的標準字型大小 |
 
 **`state` 合法值**：
 
