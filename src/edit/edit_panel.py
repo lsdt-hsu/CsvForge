@@ -3,6 +3,7 @@ from PyQt6.QtCore import Qt
 
 from plugin_sdk.panel_base import BasePluginPanel
 from edit.replace_sub_panel import ReplaceSubPanel
+from edit.paste_sub_panel import PasteSubPanel
 
 class EditPanel(BasePluginPanel):
     _UUID = "4e47a9e3-8287-48f8-b39f-26b669fcf72a"
@@ -34,6 +35,7 @@ class EditPanel(BasePluginPanel):
 
         # 2. 註冊子面板
         self._register_sub_panel("replace", ReplaceSubPanel(self.api, self.context))
+        self._register_sub_panel("paste", PasteSubPanel(self.api, self.context))
         
         # 3. 彈性推頂
         self.inner_layout.addStretch()
