@@ -52,6 +52,7 @@ class CSVTranslatorWorker(QObject):
         self._last_error: str = ""
         self.prevent_sleep = True
         self.task_name = "翻譯中..."
+        self._executor = None
 
     def cancel(self) -> None:
         """供主程式呼叫，用以要求終止背景處理迴圈。"""
@@ -76,6 +77,24 @@ class CSVTranslatorWorker(QObject):
             return f" (Error: {reason})"
         return ""
 
+    def msleep(self, msecs: int) -> None:
+        """使執行緒暫停指定的毫秒數。"""
+        from PyQt6.QtCore import QThread
+        QThread.msleep(msecs)
+
+    def _wait_for_future(self, future, timeout=20.0):
+        """非阻塞式輪詢等待 Future 完成，並支援即時取消。"""
+        start_time = time.time()
+        while not future.done():
+            if self._is_cancelled:
+                future.cancel()
+                raise RuntimeError("使用者已取消翻譯")
+            if time.time() - start_time > timeout:
+                future.cancel()
+                raise concurrent.futures.TimeoutError("翻譯超時")
+            self.msleep(100)
+        return future.result()
+
     def _do_batch_translate(self, joined_string, tag_buffer):
         """
         嘗試批取翻譯。
@@ -88,9 +107,10 @@ class CSVTranslatorWorker(QObject):
         
         try:
             translator = GoogleTranslator(source=self.source_lang, target=self.target_lang)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(translator.translate, joined_string)
-                translated_text = future.result(timeout=20.0)
+            if not self._executor:
+                raise RuntimeError("ThreadPoolExecutor 未初始化")
+            future = self._executor.submit(translator.translate, joined_string)
+            translated_text = self._wait_for_future(future, timeout=20.0)
             
             if not translated_text:
                 raise ValueError("翻譯結果為空")
@@ -132,9 +152,10 @@ class CSVTranslatorWorker(QObject):
             
             try:
                 translator_single = GoogleTranslator(source=self.source_lang, target=self.target_lang)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future_single = executor.submit(translator_single.translate, source_val)
-                    single_translated = future_single.result(timeout=20.0)
+                if not self._executor:
+                    raise RuntimeError("ThreadPoolExecutor 未初始化")
+                future_single = self._executor.submit(translator_single.translate, source_val)
+                single_translated = self._wait_for_future(future_single, timeout=20.0)
                 
                 if not single_translated:
                     raise ValueError("個別翻譯結果為空")
@@ -250,6 +271,7 @@ class CSVTranslatorWorker(QObject):
             raise RuntimeError(fail_status)
 
     def run(self):
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
             self.error_rank = 0
             self.log_emitted.emit("INFO", "開始執行記憶體 CSV 翻譯工作...")
@@ -306,3 +328,7 @@ class CSVTranslatorWorker(QObject):
             self._last_error = str(e)
             self.log_emitted.emit("ERROR", f"翻譯過程發生錯誤：{str(e)}")
             self.finished.emit("error")
+        finally:
+            if self._executor:
+                self._executor.shutdown(wait=False)
+                self._executor = None
