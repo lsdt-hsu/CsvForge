@@ -82,9 +82,15 @@ class PluginHostAdapter:
         """
         from PyQt6.QtCore import QThread
         from utils.throttler import ThrottledProgress
+        import weakref
 
         thread = QThread()
         worker.moveToThread(thread)
+
+        # 建立弱引用以打破閉包循環引用
+        weak_self = weakref.ref(self)
+        weak_worker = weakref.ref(worker)
+        weak_thread = weakref.ref(thread)
 
         # 節流轉發：worker.progress → ThrottledProgress → panel._progress_updated
         # ThrottledProgress 包裝的是 target signal，限制轉發頻率
@@ -102,19 +108,40 @@ class PluginHostAdapter:
 
         # 完成回調：自動清理 + 通知主程式 finish_task
         def _on_finished(status: str):
-            # 從 GC 清單移除
-            if entry in self._active_workers:
-                self._active_workers.remove(entry)
+            host = weak_self()
+            w = weak_worker()
+            t = weak_thread()
+            if not host or not w or not t:
+                return
+
+            # 從 GC 清單移除：使用弱引用 w 遍歷尋找 matching entry，避免閉包強引用 entry
+            for e in list(host._active_workers):
+                if e[0] is w:
+                    host._active_workers.remove(e)
+                    break
+
             # 清除當前 Worker 引用
-            if self._current_worker is worker:
-                self._current_worker = None
+            if host._current_worker is w:
+                host._current_worker = None
+
+            # 斷開信號連接以解除 PyQt 信號對閉包的強引用
+            try:
+                w.finished.disconnect(_on_finished)
+            except (TypeError, AttributeError):
+                pass
+            try:
+                w.progress.disconnect(_on_worker_progress)
+            except (TypeError, AttributeError):
+                pass
+
             # 通知主程式任務結束（解鎖 UI、停止計時器）
-            self._panel._task_finished.emit(status)
+            host._panel._task_finished.emit(status)
+            
             # 安全清理 Thread
-            thread.quit()
-            thread.wait()
-            thread.deleteLater()
-            worker.deleteLater()
+            t.quit()
+            t.wait()
+            t.deleteLater()
+            w.deleteLater()
 
         worker.finished.connect(_on_finished)
         thread.started.connect(worker.run)
