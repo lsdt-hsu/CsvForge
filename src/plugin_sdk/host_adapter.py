@@ -146,6 +146,54 @@ class PluginHostAdapter:
         """
         self._panel._internal_set_enabled(enabled)
 
+    def cleanup(self) -> None:
+        """
+        清理外掛面板與主程式或全域信號的連接，防範記憶體洩漏與懸空信號。
+        """
+        # 1. 斷開與全域 CsvData 的連接
+        if (
+            hasattr(self._panel, "context")
+            and self._panel.context
+            and hasattr(self._panel.context, "csv_data")
+            and self._panel.context.csv_data
+        ):
+            csv_data = self._panel.context.csv_data
+            
+            # 斷開 data_loaded 信號的 _on_global_data_loaded 與 on_csv_data_refreshed
+            if hasattr(csv_data, "data_loaded"):
+                if hasattr(self._panel, "_on_global_data_loaded"):
+                    try:
+                        csv_data.data_loaded.disconnect(self._panel._on_global_data_loaded)
+                    except (TypeError, AttributeError):
+                        pass
+                if hasattr(self._panel, "on_csv_data_refreshed"):
+                    try:
+                        csv_data.data_loaded.disconnect(self._panel.on_csv_data_refreshed)
+                    except (TypeError, AttributeError):
+                        pass
+            
+            # 斷開 header_state_changed 信號的 on_csv_data_refreshed
+            if hasattr(csv_data, "header_state_changed") and hasattr(self._panel, "on_csv_data_refreshed"):
+                try:
+                    csv_data.header_state_changed.disconnect(self._panel.on_csv_data_refreshed)
+                except (TypeError, AttributeError):
+                    pass
+
+        # 2. 斷開面板本身的私有信號（防範與主程式 Host 之間的信號懸空）
+        for signal_name in [
+            "_request_lock_ui", "_progress_updated", "_status_updated",
+            "_log_emitted", "_task_started", "_task_finished",
+            "_request_silent_save", "_request_run_worker"
+        ]:
+            if hasattr(self._panel, signal_name):
+                try:
+                    getattr(self._panel, signal_name).disconnect()
+                except (TypeError, AttributeError):
+                    pass
+
+        # 3. 若有活躍的 worker 任務，強制取消以防止 Thread 洩漏
+        self.cancel_task()
+
     # ── 狀態查詢 ─────────────────────────────────────────────────────────────
 
     def is_task_running(self) -> bool:

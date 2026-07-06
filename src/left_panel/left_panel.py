@@ -458,16 +458,9 @@ class LeftPanel(QFrame):
                 self.switch_sidebar_tab("filter", force_expand=True)
             self.sidebar_stacked.removeWidget(panel)
 
-            # 防止信號記憶體洩漏與懸空信號：解除該外掛面板私有信號的所有串接
+            # 防止信號記憶體洩漏與懸空信號：呼叫 adapter.cleanup() 進行統一清理
             try:
-                panel._request_lock_ui.disconnect()
-                panel._progress_updated.disconnect()
-                panel._status_updated.disconnect()
-                panel._log_emitted.disconnect()
-                panel._task_started.disconnect()
-                panel._task_finished.disconnect()
-                panel._request_silent_save.disconnect()
-                panel._request_run_worker.disconnect()
+                adapter.cleanup()
             except Exception:
                 pass
 
