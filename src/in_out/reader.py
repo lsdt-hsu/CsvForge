@@ -3,8 +3,8 @@ import csv
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 from .csv_worker import CSVWorker
-from common_data.csv_data import CsvData
 from utils import ThrottledProgress
+from utils.profiler import profile_memory_growth
 
 class CSVEditWorker(CSVWorker):
     def __init__(self, source_path, output_path):
@@ -15,6 +15,7 @@ class CSVEditWorker(CSVWorker):
         self.progress_throttler = ThrottledProgress(self.progress_updated, min_interval=0.2)
         self.log_throttler = ThrottledProgress(self.log_emitted, min_interval=0.2)
 
+    #@profile_memory_growth
     def run(self):
         try:
             self.log_throttler.emit("INFO", "開始載入 CSV 資料以供編輯...", force=True)
@@ -64,7 +65,7 @@ class CSVEditWorker(CSVWorker):
 class CSVReader(QObject):
     task_started = pyqtSignal(str, int, str, bool)
     task_finished = pyqtSignal(str)
-    load_completed = pyqtSignal(CsvData)
+    load_completed = pyqtSignal(dict)
     load_error = pyqtSignal(str)
     
     started = pyqtSignal()
@@ -107,6 +108,8 @@ class CSVReader(QObject):
         # 連接完成與錯誤信號
         worker_instance.finished_successfully.connect(self._on_worker_success)
         worker_instance.finished_with_error.connect(self._on_worker_error)
+        # ✅ 安全銷毀：等底層 Thread "徹底" 跑完退出後，C++ 才會自動回收它，絕不閃退
+        worker_instance.finished.connect(worker_instance.deleteLater)
 
         # 連接進度、狀態、日誌信號到主視窗槽函數
         if self.parent_win:
@@ -126,21 +129,37 @@ class CSVReader(QObject):
             return
         worker = self._current_worker
         
-        # 轉換為共用資料結構 CsvData
-        data = CsvData(
-            all_rows=worker.loaded_rows,
-            delimiter=getattr(worker, "delimiter", ","),
-            encoding=getattr(worker, "encoding", "utf-8"),
-            file_path=worker.source_path,
-            num_cols=getattr(worker, "num_cols", 0)
-        )
+        # 轉換為資料字典以傳遞
+        data = {
+            "all_rows": worker.loaded_rows,
+            "delimiter": getattr(worker, "delimiter", ","),
+            "encoding": getattr(worker, "encoding", "utf-8"),
+            "file_path": worker.source_path,
+            "num_cols": getattr(worker, "num_cols", 0)
+        }
         # 先行標記背景載入任務結束，解鎖 UI，防止後續在 load_completed 回呼中自動啟動新任務時發生衝突
         self.task_finished.emit("finished")
-        self.load_completed.emit(data)
-        self.finished.emit()
-        self._current_worker = None
+        
+        # 🔪 終極防護：不管 UI 更新時發生什麼事，finally 保證一定會執行！
+        try:
+            self.load_completed.emit(data)
+            self.finished.emit()
+        finally:
+            self._current_worker = None
+            
+            # 物理釋放龐大資料與斬斷循環參照
+            worker.loaded_rows = []             
+            worker.progress_throttler = None    
+            worker.log_throttler = None         
+            
+            # 💡 測試用：確認清理邏輯真的有跑到
+            print("🔍 Worker 記憶體清理完畢 (Success)！")
 
     def _on_worker_error(self, err_msg):
+        if not self._current_worker:
+            return
+        worker = self._current_worker
+
         if "使用者已取消" in err_msg or "取消" in err_msg:
             self.task_finished.emit("cancelled")
             self.cancelled.emit()
@@ -151,3 +170,10 @@ class CSVReader(QObject):
             self.task_finished.emit("error")
             self.finished.emit()
         self._current_worker = None
+
+        # 🔪 發生錯誤或取消時，也要斬斷循環參照
+        worker.loaded_rows = []
+        worker.progress_throttler = None
+        worker.log_throttler = None
+        
+        print("🔍 Worker 記憶體清理完畢 (Error/Cancel)！")

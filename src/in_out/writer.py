@@ -102,6 +102,8 @@ class CSVWriter(QObject):
         # 連接完成與錯誤信號
         worker_instance.finished_successfully.connect(self._on_worker_success)
         worker_instance.finished_with_error.connect(self._on_worker_error)
+        # ✅ 安全銷毀：等底層 Thread "徹底" 跑完退出後，C++ 才會自動回收它，絕不閃退
+        worker_instance.finished.connect(worker_instance.deleteLater)
 
         if not self.is_silent:
             # 非靜默存檔時，連接進度、狀態與日誌信號到主視窗槽函數
@@ -118,28 +120,55 @@ class CSVWriter(QObject):
         self.started.emit()
 
     def _on_worker_success(self, out_path):
-        self.save_completed.emit(out_path)
+        if not self._current_worker:
+            return
+        worker = self._current_worker
         
-        # 僅在非靜默狀態下彈出提示
-        if not self.is_silent:
-            parent_win = self.parent_win.window() if self.parent_win else None
-            QMessageBox.information(parent_win, "成功", f"存檔成功！\n檔案已儲存至：\n{out_path}")
-            self.task_finished.emit("finished")
+        try:
+            self.save_completed.emit(out_path)
             
-        self.finished.emit()
-        self._current_worker = None
-
-    def _on_worker_error(self, err_msg):
-        if "使用者已取消" in err_msg or "取消" in err_msg:
-            if not self.is_silent:
-                self.task_finished.emit("cancelled")
-            self.cancelled.emit()
-        else:
-            self.save_error.emit(err_msg)
-            # 僅在非靜默狀態下彈出錯誤提示
+            # 僅在非靜默狀態下彈出提示
             if not self.is_silent:
                 parent_win = self.parent_win.window() if self.parent_win else None
-                QMessageBox.critical(parent_win, "儲存中斷", f"儲存過程發生錯誤：\n{err_msg}")
-                self.task_finished.emit("error")
+                QMessageBox.information(parent_win, "成功", f"存檔成功！\n檔案已儲存至：\n{out_path}")
+                self.task_finished.emit("finished")
+                
             self.finished.emit()
-        self._current_worker = None
+        finally:
+            self._current_worker = None
+            
+            # 物理釋放龐大資料與斬斷循環參照
+            worker.all_rows = []             
+            worker.progress_throttler = None    
+            worker.log_throttler = None         
+            
+            # 💡 測試用：確認清理邏輯真的有跑到
+            print("🔍 Writer 記憶體清理完畢 (Success)！")
+
+    def _on_worker_error(self, err_msg):
+        if not self._current_worker:
+            return
+        worker = self._current_worker
+
+        try:
+            if "使用者已取消" in err_msg or "取消" in err_msg:
+                if not self.is_silent:
+                    self.task_finished.emit("cancelled")
+                self.cancelled.emit()
+            else:
+                self.save_error.emit(err_msg)
+                # 僅在非靜默狀態下彈出錯誤提示
+                if not self.is_silent:
+                    parent_win = self.parent_win.window() if self.parent_win else None
+                    QMessageBox.critical(parent_win, "儲存中斷", f"儲存過程發生錯誤：\n{err_msg}")
+                    self.task_finished.emit("error")
+                self.finished.emit()
+        finally:
+            self._current_worker = None
+            
+            # 🔪 發生錯誤或取消時，也要斬斷循環參照
+            worker.all_rows = []
+            worker.progress_throttler = None
+            worker.log_throttler = None
+            
+            print("🔍 Writer 記憶體清理完畢 (Error/Cancel)！")

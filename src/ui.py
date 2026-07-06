@@ -170,17 +170,51 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
                 self.right_splitter.setSizes([total_h - header_h, header_h])
 
     def on_csv_load_completed(self, data) -> None:
+        # 💉 --- 記憶體吐真劑開始 ---
+        import gc
+        
+        print("--- 準備接收新資料 ---")
+        if hasattr(self, 'csv_data') and hasattr(self.csv_data, 'all_rows') and self.csv_data.all_rows:
+            old_rows = self.csv_data.all_rows
+            
+            # 1. 斬斷當前模型對舊資料的掌控
+            self.csv_data.all_rows = []
+            
+            # 2. 強制 Python 立刻去收垃圾
+            gc.collect()
+            
+            # 3. 抓出綁匪：取得記憶體中所有還牽著 old_rows 的物件
+            referrers = gc.get_referrers(old_rows)
+            
+            # 過濾掉我們這段偵錯代碼自己產生的 frame
+            suspicious = [r for r in referrers if type(r).__name__ not in ('frame', 'tuple')]
+            
+            if suspicious:
+                print(f"🚨 警告！發現 {len(suspicious)} 個綁匪扣留了舊資料：")
+                for i, ref in enumerate(suspicious):
+                    if isinstance(ref, dict):
+                        # 若綁匪是某個物件的 __dict__，印出它的屬性來確認是誰
+                        keys = list(ref.keys())
+                        print(f"  [綁匪 {i+1}] 某個物件的內部，它的變數有: {keys[:5]}...")
+                    elif isinstance(ref, list):
+                        print(f"  [綁匪 {i+1}] 某個 List！可能是 History 陣列，長度: {len(ref)}")
+                    else:
+                        print(f"  [綁匪 {i+1}] 型別: {type(ref)}")
+            else:
+                print("✅ 舊資料已無人綁架，可完美回收。")
+        # 💉 --- 記憶體吐真劑結束 ---
+
         # 1. 將資料寫入 Model，這會自動觸發各面板訂閱的刷新信號
         self.csv_data.set_csv_data(
-            all_rows=data.all_rows,
-            delimiter=data.delimiter,
-            encoding=data.encoding,
-            file_path=data.file_path,
-            num_cols=data.num_cols
+            all_rows=data["all_rows"],
+            delimiter=data["delimiter"],
+            encoding=data["encoding"],
+            file_path=data["file_path"],
+            num_cols=data["num_cols"]
         )
         
         # 2. 自動展開側面板，切換到第一個功能（過濾）
-        if data.all_rows:
+        if data["all_rows"]:
             self.left_panel.switch_sidebar_tab("filter", force_expand=True)
 
     def on_source_file_changed(self, file_path: str) -> None:
