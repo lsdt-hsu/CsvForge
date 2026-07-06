@@ -172,12 +172,32 @@ class LocalAiWidget(QWidget):
         self.advanced_widget.setVisible(visible)
         self.btn_advanced_toggle.setText("▼ 進階設定 (VRAM 防護)" if visible else "▶ 進階設定 (VRAM 防護)")
 
+    def _cleanup_tester(self, tester):
+        """
+        清理指定的 ConnectionTester 執行緒資源。
+        """
+        if not tester:
+            return
+        try:
+            tester.success.disconnect()
+            tester.failed.disconnect()
+            tester.finished.disconnect()
+            tester.deleteLater()
+        except RuntimeError:
+            pass
+            
+        if self.tester is tester:
+            self.tester = None
+
     def start_connection_test(self, force=False):
         """
         非同步探測 Local AI (Ollama) Port 是否可用。
         """
-        if self.tester and self.tester.isRunning():
-            return
+        if self.tester:
+            if self.tester.isRunning():
+                return
+            else:
+                self._cleanup_tester(self.tester)
 
         url = self.txt_local_url.text().strip()
         backend = self.cb_local_backend.currentText()
@@ -198,10 +218,12 @@ class LocalAiWidget(QWidget):
         self._last_checked_backend = backend
         self._last_checked_url = url
 
-        self.tester = ConnectionTester(url)
-        self.tester.success.connect(self._on_test_success)
-        self.tester.failed.connect(self._on_test_failed)
-        self.tester.start()
+        tester = ConnectionTester(url)
+        self.tester = tester
+        tester.success.connect(self._on_test_success)
+        tester.failed.connect(self._on_test_failed)
+        tester.finished.connect(lambda t=tester: self._cleanup_tester(t))
+        tester.start()
 
     def _on_test_success(self, models):
         self._update_conn_ui(state="success")
@@ -288,3 +310,27 @@ class LocalAiWidget(QWidget):
             cfg.advanced_temperature = float(self.txt_temp.text())
         except ValueError:
             cfg.advanced_temperature = 0.7
+
+    def destroy(self, destroyWindow=True, destroySubWindows=True):
+        """
+        Widget 銷毀時安全清理 Thread，防止 use-after-free 崩潰。
+        """
+        if self.tester:
+            try:
+                self.tester.success.disconnect()
+                self.tester.failed.disconnect()
+                self.tester.finished.disconnect()
+            except RuntimeError:
+                pass
+            
+            if self.tester.isRunning():
+                self.tester.quit()
+                self.tester.wait(5000)
+                
+            try:
+                self.tester.deleteLater()
+            except RuntimeError:
+                pass
+            self.tester = None
+            
+        super().destroy(destroyWindow, destroySubWindows)
