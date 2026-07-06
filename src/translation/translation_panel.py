@@ -399,6 +399,26 @@ class TranslationPanel(BasePluginPanel):
         self.btn_start.setEnabled(True)
         applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self._internal_set_enabled(True)
+
+        # 斷開業務信號連接，避免記憶體洩漏與已銷毀 Slot 觸發問題
+        if self._worker is not None:
+            try:
+                self._worker.status_updated.disconnect(self.api.update_status)
+            except TypeError:
+                pass
+            try:
+                self._worker.log_emitted.disconnect(self.api.write_log)
+            except TypeError:
+                pass
+            try:
+                self._worker.data_changed.disconnect(self._on_data_changed)
+            except TypeError:
+                pass
+            try:
+                self._worker.finished.disconnect(self._on_worker_done)
+            except TypeError:
+                pass
+
         self._worker = None
 
         if status == "finished":

@@ -333,6 +333,25 @@ class AiPanel(BasePluginPanel):
             if err_msg:
                 QMessageBox.critical(self, "AI 處理中斷", f"AI 處理過程中發生錯誤：\n{err_msg}")
 
+        # 斷開業務信號連接，避免記憶體洩漏與已銷毀 Slot 觸發問題
+        if self._worker is not None:
+            try:
+                self._worker.status_updated.disconnect(self.api.update_status)
+            except TypeError:
+                pass
+            try:
+                self._worker.log_emitted.disconnect(self.api.write_log)
+            except TypeError:
+                pass
+            try:
+                self._worker.data_changed.disconnect(self._on_data_changed)
+            except TypeError:
+                pass
+            try:
+                self._worker.finished.disconnect(self._on_worker_done)
+            except TypeError:
+                pass
+
         # 清除本地 Worker 引用（Adapter 端的 GC 清單另行管理）
         self._worker = None
 
