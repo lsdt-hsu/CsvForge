@@ -6,6 +6,33 @@ from .csv_worker import CSVWorker
 from utils import ThrottledProgress
 from utils.profiler import profile_memory_growth
 
+class ByteProgressReader:
+    """
+    包裝 text 檔案物件，用於在 csv.reader 讀取時計算位元組進度，避免雙讀。
+    """
+    def __init__(self, file_obj, encoding, total_bytes):
+        self.file_obj = file_obj
+        self.encoding = encoding
+        self.total_bytes = total_bytes
+        self.bytes_read = 0
+
+    def readline(self):
+        line = self.file_obj.readline()
+        if not line:
+            return ''
+        self.bytes_read += len(line.encode(self.encoding, errors='replace'))
+        return line
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        line = self.readline()
+        if not line:
+            raise StopIteration
+        return line
+
+
 class CSVEditWorker(CSVWorker):
     def __init__(self, source_path, output_path):
         super().__init__(source_path, output_path)
@@ -21,14 +48,15 @@ class CSVEditWorker(CSVWorker):
             self.log_throttler.emit("INFO", "開始載入 CSV 資料以供編輯...", force=True)
             encoding, delimiter = self.detect_format()
             
-            # 統計總行數
-            total_file_rows = self.count_total_rows(encoding, delimiter)
-            self.log_throttler.emit("INFO", f"來源檔案讀取完成，共 {total_file_rows} 行。", force=True)
+            total_bytes = os.path.getsize(self.source_path)
+            total_kb = max(1, total_bytes // 1024)
+            self.log_throttler.emit("INFO", f"來源檔案大小：{total_bytes} bytes，開始載入...", force=True)
 
             all_rows = []
             num_cols = 0
-            with open(self.source_path, 'r', encoding=encoding, errors='replace') as f:
-                reader = csv.reader(f, delimiter=delimiter)
+            with open(self.source_path, 'r', encoding=encoding, errors='replace', newline='') as f:
+                wrapped_f = ByteProgressReader(f, encoding, total_bytes)
+                reader = csv.reader(wrapped_f, delimiter=delimiter)
                 for idx, row in enumerate(reader):
                     if self._is_cancelled:
                         raise RuntimeError("使用者已取消載入編輯工作")
@@ -38,11 +66,12 @@ class CSVEditWorker(CSVWorker):
                     if row_len > num_cols:
                         num_cols = row_len
                     
-                    # 限制進度更新頻率為每秒最多 5 次
-                    self.progress_throttler.emit(idx, total_file_rows)
-                    self.log_throttler.emit("INFO", f"已讀取 {idx} 行...")
+                    # 限頻發送進度 (以 KB 為單位，使 UI 顯示更具可讀性)
+                    current_kb = wrapped_f.bytes_read // 1024
+                    self.progress_throttler.emit(current_kb, total_kb)
+                    self.log_throttler.emit("INFO", f"已讀取 {idx + 1} 行 ({wrapped_f.bytes_read}/{total_bytes} bytes)...")
 
-            self.progress_throttler.emit(total_file_rows, total_file_rows, force=True)
+            self.progress_throttler.emit(total_kb, total_kb, force=True)
             self.loaded_rows = all_rows
             self.num_cols = num_cols
             self.log_throttler.emit("SUCCESS", f"編輯資料載入成功，共 {len(all_rows)} 行。", force=True)
