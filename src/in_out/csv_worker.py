@@ -26,8 +26,6 @@ class CSVWorker(QThread):
     progress_updated = pyqtSignal(int, int)      # 已處理列數, 總列數
     status_updated = pyqtSignal(str)             # 狀態欄更新日誌
     log_emitted = pyqtSignal(str, str)           # 級別 (INFO/SUCCESS/WARNING/ERROR), 訊息
-    finished_successfully = pyqtSignal(str)      # 成功時的輸出檔案路徑
-    finished_with_error = pyqtSignal(str)        # 錯誤原因
 
     def __init__(self, source_path, output_path):
         super().__init__()
@@ -37,6 +35,10 @@ class CSVWorker(QThread):
         self._is_cancelled = False
         self.encoding = None
         self.delimiter = ","
+        
+        # 狀態與訊息暫存變數
+        self.is_success = False
+        self.error_message = ""
 
     def pause(self):
         self._is_paused = True
