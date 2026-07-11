@@ -36,10 +36,6 @@ class IoPanel(BasePanel):
         self.writer.finished.connect(self.on_writer_finished)
         self.writer.cancelled.connect(self.on_writer_cancelled)
 
-        self.test_timer = QTimer(self)
-        self.test_timer.timeout.connect(self.on_test_timer_timeout)
-        self.test_count = 0
-
         self.init_ui()
 
     def init_ui(self):
@@ -125,12 +121,10 @@ class IoPanel(BasePanel):
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(15)
 
-        self.btn_test = QPushButton("Test")
-        self.btn_test.setObjectName("btnTest")
-        self.btn_test.setMinimumWidth(START_BUTTON_MIN_WIDTH)
-        self.btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_test.clicked.connect(self.on_test_clicked)
-        self.btn_test.setVisible(self.SHOW_TEST_BTN)
+        self.test_widget = None
+        if self.SHOW_TEST_BTN:
+            from .test_widget import TestWidget
+            self.test_widget = TestWidget(parent=self, start_callback=self.on_start_clicked)
 
         self.btn_start = QPushButton("載入")
         self.btn_start.setObjectName("btnStart")
@@ -146,7 +140,8 @@ class IoPanel(BasePanel):
         self.btn_save.clicked.connect(self.on_save_clicked)
 
         row2_layout.addStretch()
-        row2_layout.addWidget(self.btn_test)
+        if self.test_widget:
+            row2_layout.addWidget(self.test_widget)
         row2_layout.addSpacing(10)
         row2_layout.addWidget(self.btn_start)
         row2_layout.addSpacing(10)
@@ -240,23 +235,7 @@ class IoPanel(BasePanel):
             output = self.txt_out_path.text().strip()
             self.loader.start_load_task(source, output)
 
-    def on_test_clicked(self) -> None:
-        if self.test_timer.isActive():
-            self.test_timer.stop()
-            self.btn_test.setText("Test")
-        else:
-            self.test_count = 0
-            self.test_timer.start(8000)
-            self.btn_test.setText("Stop Test")
 
-    def on_test_timer_timeout(self) -> None:
-        if self.test_count >= 1000:
-            self.test_timer.stop()
-            self.btn_test.setText("Test")
-            return
-        
-        self.test_count += 1
-        self.btn_start.click()
 
     def on_save_clicked(self) -> None:
         if self.writer.is_running():
@@ -348,6 +327,6 @@ class IoPanel(BasePanel):
                 is_modified = self.context.csv_data.is_modified
             self.btn_save.setEnabled(self._ui_enabled_state and is_modified)
 
-        # 3. 更新 Test 按鈕
-        self.btn_test.setEnabled(self._ui_enabled_state)
-        self.btn_test.setVisible(self.SHOW_TEST_BTN)
+        # 3. 更新 Test Widget
+        if hasattr(self, "test_widget") and self.test_widget:
+            self.test_widget.setEnabled(self._ui_enabled_state)
