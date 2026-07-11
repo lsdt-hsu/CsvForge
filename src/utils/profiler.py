@@ -5,9 +5,16 @@ import gc
 import tracemalloc
 import psutil
 from typing import Any, Optional
+from enum import Enum
+
+class ProfilerMode(Enum):
+    NORMAL = "normal"
+    CONTINUOUS = "continuous"
+    COMPARE_TO_FIRST = "compare_to_first"
 
 class MemoryProfiler:
     _instance = None
+    _mode: ProfilerMode = ProfilerMode.COMPARE_TO_FIRST
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -17,20 +24,34 @@ class MemoryProfiler:
     def __init__(self):
         if not hasattr(self, "_initialized"):
             self._initialized = True
-            self.load_count = 0
-            self._snap_before = None
-            self._rss_before = None
             self._proc = psutil.Process()
+            self.reset()
+
+    def reset(self):
+        """
+        重設所有診斷狀態與計數。
+        """
+        self.load_count = 0
+        self._snap_before = None
+        self._rss_before = None
+        if tracemalloc.is_tracing():
+            try:
+                tracemalloc.stop()
+            except RuntimeError:
+                pass
 
     def start_diagnostic(self, target_obj: Optional[Any] = None, target_name: str = "OBJECT"):
         """
         開始記憶體診斷，記錄當前快照。
         """
-        # 開始時也呼叫一次 gc.collect()
+        self.load_count += 1
+
+        if self._snap_before is not None:
+            return
+
+        # 開始時呼叫 gc.collect()
         gc.collect()
 
-        self.load_count += 1
-        
         # 啟動記憶體追蹤
         if not tracemalloc.is_tracing():
             tracemalloc.start()
@@ -53,42 +74,57 @@ class MemoryProfiler:
         else:
             print(f"[DIAG #{self.load_count}] OLD {target_name} is empty, skipping refcount check")
 
-        # ── 2. 記錄 tracemalloc 快照與 OS RSS ──
+        # ── 2. 記錄當前快照作為基準 ──
         self._snap_before = tracemalloc.take_snapshot()
         self._rss_before = self._proc.memory_info().rss / (1024 * 1024)  # 轉換為 MB
 
+    def _print_comparison(self, baseline_snap, baseline_rss, current_snap, current_rss, label: str):
+        _py_current, _py_peak = tracemalloc.get_traced_memory()
+        print(f"[DIAG {label}] RSS: before={baseline_rss:.1f}MB, after={current_rss:.1f}MB, delta={current_rss - baseline_rss:+.1f}MB")
+        print(f"[DIAG {label}] Python traced: current={_py_current / (1024*1024):.1f}MB, peak={_py_peak / (1024*1024):.1f}MB")
+
+        _stats = current_snap.compare_to(baseline_snap, 'lineno')
+        print(f"[DIAG {label}] tracemalloc Top 5 增量:")
+        for _s in _stats[:5]:
+            print(f"  {_s}")
+        print(f"{'='*60}")
+        del _stats
+
     def end_diagnostic(self):
         """
-        結束診斷，印出與 start 之間的記憶體與快照變化，並徹底清理診斷資料。
+        結束診斷，印出與 start 之間的記憶體與快照變化，並依據模式處理/清理診斷資料。
         """
         if self._snap_before is None or self._rss_before is None:
             print(f"[DIAG #{self.load_count}] Warning: end_diagnostic called without a matching start_diagnostic.")
             return
 
+        # 開始時呼叫 gc.collect()
         gc.collect()
         
         _snap_after = tracemalloc.take_snapshot()
         _rss_after = self._proc.memory_info().rss / (1024 * 1024)  # MB
-        _py_current, _py_peak = tracemalloc.get_traced_memory()
 
-        # 印出記憶體增量結果
-        print(f"[DIAG #{self.load_count}] RSS: before={self._rss_before:.1f}MB, after={_rss_after:.1f}MB, delta={_rss_after - self._rss_before:+.1f}MB")
-        print(f"[DIAG #{self.load_count}] Python traced: current={_py_current / (1024*1024):.1f}MB, peak={_py_peak / (1024*1024):.1f}MB")
+        # 進行比對與輸出
+        self._print_comparison(
+            baseline_snap=self._snap_before,
+            baseline_rss=self._rss_before,
+            current_snap=_snap_after,
+            current_rss=_rss_after,
+            label=f"#{self.load_count}"
+        )
 
-        # 顯示 tracemalloc 分配差異 Top 5
-        _stats = _snap_after.compare_to(self._snap_before, 'lineno')
-        print(f"[DIAG #{self.load_count}] tracemalloc Top 5 增量:")
-        for _s in _stats[:5]:
-            print(f"  {_s}")
-        print(f"{'='*60}")
+        # ── 依據不同 mode 處理基準快照 ──
+        if self._mode == ProfilerMode.NORMAL:
+            self._snap_before = None
+            self._rss_before = None
+        elif self._mode == ProfilerMode.CONTINUOUS:
+            self._snap_before = _snap_after
+            self._rss_before = _rss_after
+        elif self._mode == ProfilerMode.COMPARE_TO_FIRST:
+            pass  # 保留第一次快照作為基準，捨棄新的快照，不修改 self._snap_before
 
-        # ── 3. 確實清理所有診斷資料（避免本身造成 Memory Leak）──
-        self._snap_before = None
-        self._rss_before = None
-        
-        # 刪除與釋放本地暫存物件
+        # 結束時呼叫 gc.collect()
         del _snap_after
-        del _stats
         gc.collect()
 
 # 全域單一實例，供跨模組匯入使用
