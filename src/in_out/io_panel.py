@@ -16,7 +16,7 @@ from .io_panel_validator import validate_paths_not_equal
 class IoPanel(BasePanel):
     source_file_changed = pyqtSignal(str)
 
-    # 用於控制 Test 按鈕顯示/隱藏的變數，預設為 True (顯示)
+    # 用於控制 Test 按鈕顯示/隱藏的變數
     SHOW_TEST_BTN = False
 
     def __init__(self, parent=None, context=None):

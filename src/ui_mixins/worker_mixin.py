@@ -37,7 +37,10 @@ class WorkerMixin:
         # 🔪 用全新 QTextDocument 取代 clear()，徹底釋放舊 Document 的 fragment pool 記憶體
         from PyQt6.QtGui import QTextDocument
         if self.status_panel:
+            old_doc = self.status_panel.txt_log.document()
             self.status_panel.txt_log.setDocument(QTextDocument(self.status_panel.txt_log))
+            if old_doc:
+                old_doc.deleteLater()
         self.elapsed_time_str = "00:00:00"
 
         # 根據參數設定進度條與狀態文字

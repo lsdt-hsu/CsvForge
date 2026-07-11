@@ -55,6 +55,8 @@ class StatusPanel(BasePanel):
 
         # 日誌輸出框
         self.txt_log = QTextEdit()
+        from PyQt6.QtGui import QTextDocument
+        self.txt_log.setDocument(QTextDocument(self.txt_log))
         self.txt_log.setObjectName("logConsole")
         self.txt_log.setReadOnly(True)
         layout.addWidget(self.txt_log)
