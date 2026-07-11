@@ -4,7 +4,6 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
 from .csv_worker import CSVWorker
 from utils import ThrottledProgress
-from utils.profiler import profile_memory_growth
 
 class ByteProgressReader:
     """
@@ -42,7 +41,6 @@ class CSVEditWorker(CSVWorker):
         self.progress_throttler = ThrottledProgress(self.progress_updated, min_interval=0.2)
         self.log_throttler = ThrottledProgress(self.log_emitted, min_interval=0.2)
 
-    #@profile_memory_growth
     def run(self):
         try:
             self.log_throttler.emit("INFO", "開始載入 CSV 資料以供編輯...", force=True)

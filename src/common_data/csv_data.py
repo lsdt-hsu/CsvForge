@@ -1,5 +1,6 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 from typing import List, Optional
+from src.utils.profiler import profiler
 
 class CsvData(QObject):
     data_loaded = pyqtSignal()
@@ -64,36 +65,7 @@ class CsvData(QObject):
     def set_csv_data(self, all_rows: List[List[str]], delimiter: str, encoding: str, file_path: Optional[str] = None, num_cols: Optional[int] = None):
         # ═══════════ [DIAG] Memory leak 診斷區塊 START ═══════════
         if self.ENABLE_DIAG:
-            import sys, gc, tracemalloc, psutil
-            _diag_load_count = getattr(self, '_diag_load_count', 0) + 1
-            self._diag_load_count = _diag_load_count
-
-            # ── 1. 檢查舊 all_rows 的 refcount 與 referrers ──
-            old = self.all_rows
-            if old and len(old) > 0:
-                rc = sys.getrefcount(old) - 1  # getrefcount 本身會 +1
-                non_frame_referrers = []
-                for r in gc.get_referrers(old):
-                    t = type(r).__name__
-                    if t == 'frame':
-                        continue
-                    if t == 'dict':
-                        owners = [type(o).__name__ for o in gc.get_referrers(r) if type(o).__name__ != 'frame']
-                        non_frame_referrers.append(f"dict(len={len(r)}, owners={owners[:3]})")
-                    else:
-                        non_frame_referrers.append(f"{t}: {repr(r)[:80]}")
-                print(f"[DIAG #{_diag_load_count}] OLD all_rows: len={len(old)}, refcount={rc}")
-                print(f"[DIAG #{_diag_load_count}]   referrers={non_frame_referrers}")
-            else:
-                print(f"[DIAG #{_diag_load_count}] OLD all_rows is empty, skipping refcount check")
-            del old
-
-            # ── 2. 記錄 tracemalloc 快照（賦值前）──
-            _snap_before = tracemalloc.take_snapshot()
-
-            # ── 3. 記錄 OS process RSS ──
-            _proc = psutil.Process()
-            _rss_before = _proc.memory_info().rss / (1024 * 1024)  # MB
+            profiler.start_diagnostic(self.all_rows, "all_rows")
         # ═══════════ [DIAG] 診斷區塊 PAUSE ═══════════
 
         self.all_rows = all_rows
@@ -109,20 +81,7 @@ class CsvData(QObject):
 
         # ═══════════ [DIAG] Memory leak 診斷區塊 END ═══════════
         if self.ENABLE_DIAG:
-            gc.collect()
-            _snap_after = tracemalloc.take_snapshot()
-            _rss_after = _proc.memory_info().rss / (1024 * 1024)  # MB
-            _py_current, _py_peak = tracemalloc.get_traced_memory()
-
-            print(f"[DIAG #{_diag_load_count}] RSS: before={_rss_before:.1f}MB, after={_rss_after:.1f}MB, delta={_rss_after - _rss_before:+.1f}MB")
-            print(f"[DIAG #{_diag_load_count}] Python traced: current={_py_current / (1024*1024):.1f}MB, peak={_py_peak / (1024*1024):.1f}MB")
-
-            # 顯示 tracemalloc 分配差異 Top 5
-            _stats = _snap_after.compare_to(_snap_before, 'lineno')
-            print(f"[DIAG #{_diag_load_count}] tracemalloc Top 5 增量:")
-            for _s in _stats[:5]:
-                print(f"  {_s}")
-            print(f"{'='*60}")
+            profiler.end_diagnostic()
         # ═══════════ [DIAG] 診斷區塊 DONE ═══════════
 
     def get_visible_indices(self) -> List[int]:
