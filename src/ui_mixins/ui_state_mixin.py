@@ -23,7 +23,8 @@ class UiStateMixin:
         return getattr(self, "_ui_locked", False)
 
     def append_log(self: "MainWindow", level: str, message: str) -> None:
-        self.status_panel.append_log(level, message)
+        if self.status_panel:
+            self.status_panel.append_log(level, message)
 
     def set_ui_enabled(self: "MainWindow", enabled: bool) -> None:
         self._ui_locked = not enabled
@@ -33,7 +34,7 @@ class UiStateMixin:
         self.left_panel.set_enabled(enabled)
 
         # 第一行為標題與存檔按鈕 (在 DataEditorPanel 內)
-        if hasattr(self, "edit_content_panel"):
+        if getattr(self, "edit_content_panel", None):
             self.edit_content_panel.chk_first_row_header.setEnabled(enabled)
             # 禁止/允許編輯 TableView
             self.edit_content_panel.set_table_editable(enabled)

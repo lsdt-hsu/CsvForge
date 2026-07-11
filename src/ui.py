@@ -26,8 +26,9 @@ from in_out.io_panel_validator import validate_paths_not_equal
 from status_panel import StatusPanel
 from left_panel import LeftPanel
 
-
 class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
+    LOAD_STATUS_PANEL = True
+    LOAD_EDIT_PANEL = True
     """
     主視窗：負責 UI 佈局建構與初始化。
     各項業務邏輯透過 Mixin 繼承組合：
@@ -35,7 +36,6 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
       SettingsMixin   — 設定持久化與 Splitter 管理
       WorkerMixin     — Worker 生命週期管理
     """
-
     def __init__(self):
         super().__init__()
         self.worker = None
@@ -96,7 +96,10 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         # 實例化包含所有子面板的功能 Package 的側面板
         self.left_panel = LeftPanel(parent=self, context=self.context)
         self.io_panel = IoPanel(parent=self, context=self.context)
-        self.status_panel = StatusPanel(parent=self, context=self.context)
+        if self.LOAD_STATUS_PANEL:
+            self.status_panel = StatusPanel(parent=self, context=self.context)
+        else:
+            self.status_panel = None
 
         # 連接 CSVReader 與 CSVWriter 信號 (自 io_panel)
         self.io_panel.loader.load_completed.connect(self.on_csv_load_completed)
@@ -125,17 +128,23 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self.right_splitter.setObjectName("rightSplitter")
 
         # 內容面板
-        self.edit_content_panel = DataEditorPanel(context=self.context)
+        if self.LOAD_EDIT_PANEL:
+            self.edit_content_panel = DataEditorPanel(context=self.context)
+        else:
+            self.edit_content_panel = None
         self.csv_data.modified_changed.connect(self.io_panel.on_modified_changed)
 
-        self.status_panel.setMinimumHeight(140)
-        # 連接 StatusPanel 訊號
-        self.status_panel.toggle_clicked.connect(self.on_status_panel_toggle)
+        if self.status_panel:
+            self.status_panel.setMinimumHeight(140)
+            # 連接 StatusPanel 訊號
+            self.status_panel.toggle_clicked.connect(self.on_status_panel_toggle)
 
-        self.right_splitter.addWidget(self.edit_content_panel)
-        self.right_splitter.addWidget(self.status_panel)
-        self.right_splitter.setStretchFactor(0, 1)
-        self.right_splitter.setStretchFactor(1, 0)
+        if self.edit_content_panel:
+            self.right_splitter.addWidget(self.edit_content_panel)
+        if self.status_panel:
+            self.right_splitter.addWidget(self.status_panel)
+            self.right_splitter.setStretchFactor(0, 1)
+            self.right_splitter.setStretchFactor(1, 0)
         self.right_splitter.splitterMoved.connect(self.on_splitter_moved)
 
         right_panel.addWidget(self.right_splitter)
@@ -143,8 +152,9 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
 
         self.apply_style()
 
-
     def on_status_panel_toggle(self, collapsed: bool) -> None:
+        if not self.status_panel:
+            return
         cfg = self.context.status_panel_config
         if not collapsed:
             self.status_panel.setMinimumHeight(140)
@@ -170,41 +180,10 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
                 self.right_splitter.setSizes([total_h - header_h, header_h])
 
     def on_csv_load_completed(self, data) -> None:
-        # 💉 --- 記憶體吐真劑開始 ---
-        import gc
-        
-        print("--- 準備接收新資料 ---")
-        if hasattr(self, 'csv_data') and hasattr(self.csv_data, 'all_rows') and self.csv_data.all_rows:
-            old_rows = self.csv_data.all_rows
-            
-            # 1. 斬斷當前模型對舊資料的掌控
-            self.csv_data.all_rows = []
-            
-            # 2. 強制 Python 立刻去收垃圾
-            gc.collect()
-            
-            # 3. 抓出綁匪：取得記憶體中所有還牽著 old_rows 的物件
-            referrers = gc.get_referrers(old_rows)
-            
-            # 過濾掉我們這段偵錯代碼自己產生的 frame
-            suspicious = [r for r in referrers if type(r).__name__ not in ('frame', 'tuple')]
-            
-            if suspicious:
-                print(f"🚨 警告！發現 {len(suspicious)} 個綁匪扣留了舊資料：")
-                for i, ref in enumerate(suspicious):
-                    if isinstance(ref, dict):
-                        # 若綁匪是某個物件的 __dict__，印出它的屬性來確認是誰
-                        keys = list(ref.keys())
-                        print(f"  [綁匪 {i+1}] 某個物件的內部，它的變數有: {keys[:5]}...")
-                    elif isinstance(ref, list):
-                        print(f"  [綁匪 {i+1}] 某個 List！可能是 History 陣列，長度: {len(ref)}")
-                    else:
-                        print(f"  [綁匪 {i+1}] 型別: {type(ref)}")
-            else:
-                print("✅ 舊資料已無人綁架，可完美回收。")
-        # 💉 --- 記憶體吐真劑結束 ---
-
         # 1. 將資料寫入 Model，這會自動觸發各面板訂閱的刷新信號
+        #    CSVTableModel.on_data_loaded() 內部透過 beginResetModel/endResetModel
+        #    通知 QTableView 清除所有視圖快取（selection model、delegate 快取等），
+        #    這是 Qt Model/View 架構的標準做法，無需手動拔插 Model。
         self.csv_data.set_csv_data(
             all_rows=data["all_rows"],
             delimiter=data["delimiter"],
@@ -216,6 +195,10 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         # 2. 自動展開側面板，切換到第一個功能（過濾）
         if data["all_rows"]:
             self.left_panel.switch_sidebar_tab("filter", force_expand=True)
+            
+        # 3. 順手呼叫一次垃圾回收，確保 dict 空殼被即時清理
+        import gc
+        gc.collect()
 
     def on_source_file_changed(self, file_path: str) -> None:
         self.csv_data.set_csv_data([], ",", "utf-8", None)
@@ -241,12 +224,16 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
                 self.append_log("ERROR", "自動存檔失敗：來源 CSV 與輸出 CSV 路徑相同！")
                 return
 
-        all_rows = self.edit_content_panel.get_all_rows()
+        if self.edit_content_panel:
+            all_rows = self.edit_content_panel.get_all_rows()
+            delimiter = self.edit_content_panel.get_delimiter()
+        else:
+            all_rows = self.csv_data.all_rows
+            delimiter = self.csv_data.delimiter
+
         if not all_rows:
             self.append_log("ERROR", "自動存檔失敗：沒有資料可儲存。")
             return
-
-        delimiter = self.edit_content_panel.get_delimiter()
 
         try:
             self.io_panel.writer.start_save_task(out_path, all_rows, delimiter, silent=True)

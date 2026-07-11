@@ -267,6 +267,13 @@ class FilterPanel(BasePluginPanel):
             r.update_columns(num_cols)
 
     def on_filter_clicked(self):
+        # 防止 Worker 累積：清理上一個尚未結束的 Worker
+        if self.worker is not None:
+            self.worker.cancel()
+            self.worker.all_rows = None
+            self.worker.filter_config = None
+            self.worker = None
+
         if not self.check_expression_validity():
             return
 
@@ -414,8 +421,18 @@ class FilterPanel(BasePluginPanel):
             err_msg = getattr(self.worker, "_last_error", "未知錯誤")
             if err_msg:
                 QMessageBox.critical(self, "過濾錯誤", err_msg)
-        # 清除本地 Worker 引用（Adapter 端的 GC 清單另行管理）
-        self.worker = None
+        # 🔪 斷開 FilterPanel 自己連接的業務信號，防止信號表阻止 GC
+        if self.worker is not None:
+            try:
+                self.worker.filter_completed.disconnect(self.on_filter_completed)
+                self.worker.log_emitted.disconnect(self.api.write_log)
+                self.worker.finished.disconnect(self._on_filter_done)
+            except (TypeError, RuntimeError):
+                pass
+            # 主動清除 Worker 持有的大型資料引用
+            self.worker.all_rows = None
+            self.worker.filter_config = None
+            self.worker = None
 
     def _internal_set_enabled(self, enabled: bool) -> None:
         """主程式 UI 鎖定/解鎖時同步更新內部元件狀態。"""

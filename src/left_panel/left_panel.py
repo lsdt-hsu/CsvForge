@@ -32,6 +32,10 @@ BUILTIN_UUIDS = {
     "8f521c7d-3047-4929-873b-eb8df0b5c1a7"   # ai
 }
 
+LOAD_FILTER_PANEL = True
+LOAD_TRANSLATE_PANEL = True
+LOAD_AI_PANEL = True
+LOAD_EDIT_PANEL = True
 
 class LeftPanel(QFrame):
     plugin_removed = pyqtSignal(str)
@@ -91,63 +95,67 @@ class LeftPanel(QFrame):
         activity_layout.setSpacing(10)
         activity_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        # 註解：過濾面板是第一個功能，不得任意變更。
-        # 過濾按鈕
-        filter_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "filter.png"
-        )
-        self.btn_filter = QPushButton()
-        self.btn_filter.setObjectName("btnActivityFilter")
-        self.btn_filter.setProperty("type", "activity")
-        self.btn_filter.setFixedSize(40, 40)
-        self.btn_filter.setIcon(QIcon(filter_icon_path))
-        self.btn_filter.setIconSize(QSize(40, 40))
-        self.btn_filter.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_filter.clicked.connect(lambda: self.switch_sidebar_tab("filter"))
-        self.btn_filter.setProperty("active", True)
-        activity_layout.addWidget(self.btn_filter)
+        if LOAD_FILTER_PANEL:
+            # 註解：過濾面板是第一個功能，不得任意變更。
+            # 過濾按鈕
+            filter_icon_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "filter.png"
+            )
+            self.btn_filter = QPushButton()
+            self.btn_filter.setObjectName("btnActivityFilter")
+            self.btn_filter.setProperty("type", "activity")
+            self.btn_filter.setFixedSize(40, 40)
+            self.btn_filter.setIcon(QIcon(filter_icon_path))
+            self.btn_filter.setIconSize(QSize(40, 40))
+            self.btn_filter.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_filter.clicked.connect(lambda: self.switch_sidebar_tab("filter"))
+            self.btn_filter.setProperty("active", True)
+            activity_layout.addWidget(self.btn_filter)
 
-        # 翻譯按鈕
-        translate_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "translate.png"
-        )
-        self.btn_translate = QPushButton()
-        self.btn_translate.setObjectName("btnActivityTranslate")
-        self.btn_translate.setProperty("type", "activity")
-        self.btn_translate.setFixedSize(40, 40)
-        self.btn_translate.setIcon(QIcon(translate_icon_path))
-        self.btn_translate.setIconSize(QSize(40, 40))
-        self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_translate.clicked.connect(lambda: self.switch_sidebar_tab("translate"))
-        self.btn_translate.setProperty("active", False)
-        activity_layout.addWidget(self.btn_translate)
+        if LOAD_TRANSLATE_PANEL:
+            # 翻譯按鈕
+            translate_icon_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "translate.png"
+            )
+            self.btn_translate = QPushButton()
+            self.btn_translate.setObjectName("btnActivityTranslate")
+            self.btn_translate.setProperty("type", "activity")
+            self.btn_translate.setFixedSize(40, 40)
+            self.btn_translate.setIcon(QIcon(translate_icon_path))
+            self.btn_translate.setIconSize(QSize(40, 40))
+            self.btn_translate.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_translate.clicked.connect(lambda: self.switch_sidebar_tab("translate"))
+            self.btn_translate.setProperty("active", False)
+            activity_layout.addWidget(self.btn_translate)
 
-        # AI 按鈕
-        self.btn_ai = QPushButton()
-        self.btn_ai.setObjectName("btnActivityAi")
-        self.btn_ai.setProperty("type", "activity")
-        self.btn_ai.setFixedSize(40, 40)
-        self.btn_ai.setIcon(self.create_ai_icon())
-        self.btn_ai.setIconSize(QSize(40, 40))
-        self.btn_ai.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_ai.clicked.connect(lambda: self.switch_sidebar_tab("ai"))
-        self.btn_ai.setProperty("active", False)
-        activity_layout.addWidget(self.btn_ai)
+        if LOAD_AI_PANEL:
+            # AI 按鈕
+            self.btn_ai = QPushButton()
+            self.btn_ai.setObjectName("btnActivityAi")
+            self.btn_ai.setProperty("type", "activity")
+            self.btn_ai.setFixedSize(40, 40)
+            self.btn_ai.setIcon(self.create_ai_icon())
+            self.btn_ai.setIconSize(QSize(40, 40))
+            self.btn_ai.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_ai.clicked.connect(lambda: self.switch_sidebar_tab("ai"))
+            self.btn_ai.setProperty("active", False)
+            activity_layout.addWidget(self.btn_ai)
 
-        # 編輯按鈕
-        edit_icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "edit.png"
-        )
-        self.btn_edit = QPushButton()
-        self.btn_edit.setObjectName("btnActivityEdit")
-        self.btn_edit.setProperty("type", "activity")
-        self.btn_edit.setFixedSize(40, 40)
-        self.btn_edit.setIcon(QIcon(edit_icon_path))
-        self.btn_edit.setIconSize(QSize(40, 40))
-        self.btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_edit.clicked.connect(lambda: self.switch_sidebar_tab("edit"))
-        self.btn_edit.setProperty("active", False)
-        activity_layout.addWidget(self.btn_edit)
+        if LOAD_EDIT_PANEL:
+            # 編輯按鈕
+            edit_icon_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets", "edit.png"
+            )
+            self.btn_edit = QPushButton()
+            self.btn_edit.setObjectName("btnActivityEdit")
+            self.btn_edit.setProperty("type", "activity")
+            self.btn_edit.setFixedSize(40, 40)
+            self.btn_edit.setIcon(QIcon(edit_icon_path))
+            self.btn_edit.setIconSize(QSize(40, 40))
+            self.btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_edit.clicked.connect(lambda: self.switch_sidebar_tab("edit"))
+            self.btn_edit.setProperty("active", False)
+            activity_layout.addWidget(self.btn_edit)
 
         # 添加外掛 (圓圈+) 按鈕
         self.btn_add_plugin = QPushButton()
@@ -184,12 +192,19 @@ class LeftPanel(QFrame):
 
         self._panels = {}
         
-        # 註解：過濾面板是第一個功能，不得任意變更。
-        # 實例化各個 Package 的 Panel 並註冊 (側面板按鈕對應關係)
-        self.add_panel("filter", FilterPanel(context=self.plugin_context))
-        self.add_panel("translate", TranslationPanel(context=self.plugin_context))
-        self.add_panel("ai", AiPanel(context=self.plugin_context))
-        self.add_panel("edit", EditPanel(context=self.plugin_context))
+        if LOAD_FILTER_PANEL:
+            # 註解：過濾面板是第一個功能，不得任意變更。
+            # 實例化各個 Package 的 Panel 並註冊 (側面板按鈕對應關係)
+            self.add_panel("filter", FilterPanel(context=self.plugin_context))
+        
+        if LOAD_TRANSLATE_PANEL:
+            self.add_panel("translate", TranslationPanel(context=self.plugin_context))
+
+        if LOAD_AI_PANEL:
+            self.add_panel("ai", AiPanel(context=self.plugin_context))
+
+        if LOAD_EDIT_PANEL:
+            self.add_panel("edit", EditPanel(context=self.plugin_context))
 
     def add_panel(self, name: str, panel: BasePluginPanel) -> None:
         """接受實體 Panel，立刻封裝為 PluginHostAdapter 再存入 _panels。"""
@@ -294,10 +309,10 @@ class LeftPanel(QFrame):
             self.sidebar.setVisible(False)
             self.v_line.setVisible(False)
             self.setFixedWidth(SIDEBAR_MIN_WIDTH)
-            self.btn_translate.setProperty("active", False)
-            self.btn_ai.setProperty("active", False)
-            self.btn_edit.setProperty("active", False)
-            self.btn_filter.setProperty("active", False)
+            if hasattr(self, "btn_translate"): self.btn_translate.setProperty("active", False)
+            if hasattr(self, "btn_ai"): self.btn_ai.setProperty("active", False)
+            if hasattr(self, "btn_edit"): self.btn_edit.setProperty("active", False)
+            if hasattr(self, "btn_filter"): self.btn_filter.setProperty("active", False)
             for btn in self._plugin_buttons.values():
                 btn.setProperty("active", False)
         else:
@@ -310,18 +325,18 @@ class LeftPanel(QFrame):
                 self.sidebar_stacked.setCurrentWidget(current_panel.get_widget())
             
             # 設定按鈕 active 狀態
-            self.btn_filter.setProperty("active", tab_name == "filter")
-            self.btn_translate.setProperty("active", tab_name == "translate")
-            self.btn_ai.setProperty("active", tab_name == "ai")
-            self.btn_edit.setProperty("active", tab_name == "edit")
+            if hasattr(self, "btn_filter"): self.btn_filter.setProperty("active", tab_name == "filter")
+            if hasattr(self, "btn_translate"): self.btn_translate.setProperty("active", tab_name == "translate")
+            if hasattr(self, "btn_ai"): self.btn_ai.setProperty("active", tab_name == "ai")
+            if hasattr(self, "btn_edit"): self.btn_edit.setProperty("active", tab_name == "edit")
             for p_key, btn in self._plugin_buttons.items():
                 btn.setProperty("active", tab_name == p_key)
 
         # 刷新按鈕樣式
-        self.btn_translate.style().polish(self.btn_translate)
-        self.btn_ai.style().polish(self.btn_ai)
-        self.btn_edit.style().polish(self.btn_edit)
-        self.btn_filter.style().polish(self.btn_filter)
+        if hasattr(self, "btn_translate"): self.btn_translate.style().polish(self.btn_translate)
+        if hasattr(self, "btn_ai"): self.btn_ai.style().polish(self.btn_ai)
+        if hasattr(self, "btn_edit"): self.btn_edit.style().polish(self.btn_edit)
+        if hasattr(self, "btn_filter"): self.btn_filter.style().polish(self.btn_filter)
         for btn in self._plugin_buttons.values():
             btn.style().polish(btn)
 
@@ -335,10 +350,10 @@ class LeftPanel(QFrame):
             self.sidebar.setVisible(False)
             self.v_line.setVisible(False)
             self.setFixedWidth(SIDEBAR_MIN_WIDTH)
-            self.btn_translate.setProperty("active", False)
-            self.btn_ai.setProperty("active", False)
-            self.btn_edit.setProperty("active", False)
-            self.btn_filter.setProperty("active", False)
+            if hasattr(self, "btn_translate"): self.btn_translate.setProperty("active", False)
+            if hasattr(self, "btn_ai"): self.btn_ai.setProperty("active", False)
+            if hasattr(self, "btn_edit"): self.btn_edit.setProperty("active", False)
+            if hasattr(self, "btn_filter"): self.btn_filter.setProperty("active", False)
             for btn in self._plugin_buttons.values():
                 btn.setProperty("active", False)
         else:
@@ -359,10 +374,10 @@ class LeftPanel(QFrame):
         main_cfg.dirty = True
 
     def set_enabled(self, enabled: bool) -> None:
-        self.btn_translate.setEnabled(enabled)
-        self.btn_ai.setEnabled(enabled)
-        self.btn_edit.setEnabled(enabled)
-        self.btn_filter.setEnabled(enabled)
+        if hasattr(self, "btn_translate"): self.btn_translate.setEnabled(enabled)
+        if hasattr(self, "btn_ai"): self.btn_ai.setEnabled(enabled)
+        if hasattr(self, "btn_edit"): self.btn_edit.setEnabled(enabled)
+        if hasattr(self, "btn_filter"): self.btn_filter.setEnabled(enabled)
         self.btn_add_plugin.setEnabled(enabled)
         for btn in self._plugin_buttons.values():
             btn.setEnabled(enabled)

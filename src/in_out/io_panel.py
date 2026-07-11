@@ -1,6 +1,6 @@
 import os
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox, QFrame, QFileDialog
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QIntValidator, QIcon
 
 from base.main_base_panel import BasePanel
@@ -15,6 +15,9 @@ from .io_panel_validator import validate_paths_not_equal
 
 class IoPanel(BasePanel):
     source_file_changed = pyqtSignal(str)
+
+    # 用於控制 Test 按鈕顯示/隱藏的變數，預設為 True (顯示)
+    SHOW_TEST_BTN = False
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent, context=context)
@@ -32,6 +35,10 @@ class IoPanel(BasePanel):
         self.writer.started.connect(self.on_writer_started)
         self.writer.finished.connect(self.on_writer_finished)
         self.writer.cancelled.connect(self.on_writer_cancelled)
+
+        self.test_timer = QTimer(self)
+        self.test_timer.timeout.connect(self.on_test_timer_timeout)
+        self.test_count = 0
 
         self.init_ui()
 
@@ -118,6 +125,13 @@ class IoPanel(BasePanel):
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(15)
 
+        self.btn_test = QPushButton("Test")
+        self.btn_test.setObjectName("btnTest")
+        self.btn_test.setMinimumWidth(START_BUTTON_MIN_WIDTH)
+        self.btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_test.clicked.connect(self.on_test_clicked)
+        self.btn_test.setVisible(self.SHOW_TEST_BTN)
+
         self.btn_start = QPushButton("載入")
         self.btn_start.setObjectName("btnStart")
         self.btn_start.setMinimumWidth(START_BUTTON_MIN_WIDTH)
@@ -132,6 +146,8 @@ class IoPanel(BasePanel):
         self.btn_save.clicked.connect(self.on_save_clicked)
 
         row2_layout.addStretch()
+        row2_layout.addWidget(self.btn_test)
+        row2_layout.addSpacing(10)
         row2_layout.addWidget(self.btn_start)
         row2_layout.addSpacing(10)
         row2_layout.addWidget(self.btn_save)
@@ -224,6 +240,24 @@ class IoPanel(BasePanel):
             output = self.txt_out_path.text().strip()
             self.loader.start_load_task(source, output)
 
+    def on_test_clicked(self) -> None:
+        if self.test_timer.isActive():
+            self.test_timer.stop()
+            self.btn_test.setText("Test")
+        else:
+            self.test_count = 0
+            self.test_timer.start(8000)
+            self.btn_test.setText("Stop Test")
+
+    def on_test_timer_timeout(self) -> None:
+        if self.test_count >= 1000:
+            self.test_timer.stop()
+            self.btn_test.setText("Test")
+            return
+        
+        self.test_count += 1
+        self.btn_start.click()
+
     def on_save_clicked(self) -> None:
         if self.writer.is_running():
             if not self.writer.is_cancelled():
@@ -239,11 +273,20 @@ class IoPanel(BasePanel):
                 return
             
             # 獲取資料
-            all_rows = self.context._win.edit_content_panel.get_all_rows() if self.context and self.context._win else []
+            win = self.context._win if self.context else None
+            if win and getattr(win, "edit_content_panel", None):
+                all_rows = win.edit_content_panel.get_all_rows()
+                delimiter = win.edit_content_panel.get_delimiter()
+            elif win:
+                all_rows = win.csv_data.all_rows
+                delimiter = win.csv_data.delimiter
+            else:
+                all_rows = []
+                delimiter = ","
+
             if not all_rows:
                 QMessageBox.warning(self, "錯誤", "沒有資料可儲存。")
                 return
-            delimiter = self.context._win.edit_content_panel.get_delimiter() if self.context and self.context._win else ","
             
             self.writer.start_save_task(output, all_rows, delimiter, silent=False)
 
@@ -304,3 +347,7 @@ class IoPanel(BasePanel):
             if self.context and self.context.csv_data:
                 is_modified = self.context.csv_data.is_modified
             self.btn_save.setEnabled(self._ui_enabled_state and is_modified)
+
+        # 3. 更新 Test 按鈕
+        self.btn_test.setEnabled(self._ui_enabled_state)
+        self.btn_test.setVisible(self.SHOW_TEST_BTN)

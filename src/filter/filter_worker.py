@@ -387,76 +387,83 @@ class FilterWorker(QObject):
         return self.eval_logic_tree(tree, rule_results)
 
     def run(self):
-        start_time = time.time()
-        matched_indices = []
-        
         try:
-            from filter import logic_tree
-            
-            total_rows = len(self.all_rows)
-            end_bound = self.end_row if self.end_row is not None else total_rows
-            end_bound = min(end_bound, total_rows)
-            
-            rules_cfg = self.filter_config.get("rules", [])
-            lt_cfg = self.filter_config.get("logic_tree")
-            tree = logic_tree.deserialize_tree(lt_cfg)
-            
-            # 效能優化判定：若無實質行號限制且滿足「無過濾規則」或「所有規則都是不過濾」，直接回傳 None (回復顯示全部)
-            actual_start = max(2, self.start_row) if self.is_header else self.start_row
-            has_row_limit = (actual_start > (2 if self.is_header else 1)) or (self.end_row is not None and self.end_row < total_rows)
-            is_no_rules_filter = not rules_cfg or not tree or all(r.get("compare_col") == "none" for r in rules_cfg)
-            
-            if not has_row_limit and is_no_rules_filter:
-                self.filter_completed.emit(None, time.time() - start_time)
-                self.finished.emit("finished")
-                return
+            start_time = time.time()
+            matched_indices = []
 
-            # 正規表達式預先編譯
-            regex_patterns = []
-            for j, r_cfg in enumerate(rules_cfg):
-                col = r_cfg.get("compare_col", "none")
-                method = r_cfg.get("compare_method")
-                target = r_cfg.get("compare_target")
-                val = r_cfg.get("compare_value", "")
-                
-                pat = None
-                if col != "none" and method == "正規表達式" and target == "manual":
-                    try:
-                        pat = re.compile(val)
-                    except re.error as e:
-                        self._last_error = f"規則 #{j+1} 正規表達式語法錯誤: {e}"
-                        self.log_emitted.emit("ERROR", self._last_error)
-                        self.finished.emit("error")
-                        return
-                regex_patterns.append(pat)
+            try:
+                from filter import logic_tree
 
-            for i, row in enumerate(self.all_rows):
-                if self._is_cancelled:
-                    self.finished.emit("cancelled")
+                total_rows = len(self.all_rows)
+                end_bound = self.end_row if self.end_row is not None else total_rows
+                end_bound = min(end_bound, total_rows)
+
+                rules_cfg = self.filter_config.get("rules", [])
+                lt_cfg = self.filter_config.get("logic_tree")
+                tree = logic_tree.deserialize_tree(lt_cfg)
+
+                # 效能優化判定：若無實質行號限制且滿足「無過濾規則」或「所有規則都是不過濾」，直接回傳 None (回復顯示全部)
+                actual_start = max(2, self.start_row) if self.is_header else self.start_row
+                has_row_limit = (actual_start > (2 if self.is_header else 1)) or (self.end_row is not None and self.end_row < total_rows)
+                is_no_rules_filter = not rules_cfg or not tree or all(r.get("compare_col") == "none" for r in rules_cfg)
+
+                if not has_row_limit and is_no_rules_filter:
+                    self.filter_completed.emit(None, time.time() - start_time)
+                    self.finished.emit("finished")
                     return
-                
-                # 報告進度
-                if i % 10000 == 0:
-                    self.progress.emit(i, total_rows)
-                
-                # 排除標題行
-                r_num = i + 1
-                if self.is_header and r_num == 1:
-                    continue
-                    
-                # 程式流程明確判定：起始行號限制 AND 結束行號限制 AND (一般規則總結果)
-                in_start_limit = (r_num >= actual_start)
-                in_end_limit = (self.end_row is None or r_num <= end_bound)
-                rules_match = self.evaluate_general_rules(row, rules_cfg, tree, regex_patterns)
-                
-                if in_start_limit and in_end_limit and rules_match:
-                    matched_indices.append(i)
 
-            self.progress.emit(total_rows, total_rows)
-            self.filter_completed.emit(matched_indices, time.time() - start_time)
-            self.finished.emit("finished")
+                # 正規表達式預先編譯
+                regex_patterns = []
+                for j, r_cfg in enumerate(rules_cfg):
+                    col = r_cfg.get("compare_col", "none")
+                    method = r_cfg.get("compare_method")
+                    target = r_cfg.get("compare_target")
+                    val = r_cfg.get("compare_value", "")
 
-        except Exception as e:
-            self._last_error = f"過濾發生未預期錯誤: {e}"
-            self.log_emitted.emit("ERROR", self._last_error)
-            self.finished.emit("error")
+                    pat = None
+                    if col != "none" and method == "正規表達式" and target == "manual":
+                        try:
+                            pat = re.compile(val)
+                        except re.error as e:
+                            self._last_error = f"規則 #{j+1} 正規表達式語法錯誤: {e}"
+                            self.log_emitted.emit("ERROR", self._last_error)
+                            self.finished.emit("error")
+                            return
+                    regex_patterns.append(pat)
+
+                for i, row in enumerate(self.all_rows):
+                    if self._is_cancelled:
+                        self.finished.emit("cancelled")
+                        return
+
+                    # 報告進度
+                    if i % 10000 == 0:
+                        self.progress.emit(i, total_rows)
+
+                    # 排除標題行
+                    r_num = i + 1
+                    if self.is_header and r_num == 1:
+                        continue
+
+                    # 程式流程明確判定：起始行號限制 AND 結束行號限制 AND (一般規則總結果)
+                    in_start_limit = (r_num >= actual_start)
+                    in_end_limit = (self.end_row is None or r_num <= end_bound)
+                    rules_match = self.evaluate_general_rules(row, rules_cfg, tree, regex_patterns)
+
+                    if in_start_limit and in_end_limit and rules_match:
+                        matched_indices.append(i)
+
+                self.progress.emit(total_rows, total_rows)
+                self.filter_completed.emit(matched_indices, time.time() - start_time)
+                self.finished.emit("finished")
+
+            except Exception as e:
+                self._last_error = f"過濾發生未預期錯誤: {e}"
+                self.log_emitted.emit("ERROR", self._last_error)
+                self.finished.emit("error")
+        finally:
+            # 🔪 主動釋放大型資料引用，不等 deleteLater
+            self.all_rows = None
+            self.filter_config = None
+            self.cc_t2s = None
+            self.cc_s2t = None

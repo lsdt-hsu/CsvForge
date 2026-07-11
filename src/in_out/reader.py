@@ -176,13 +176,20 @@ class CSVReader(QObject):
         finally:
             self._current_worker = None
             
+            # 🔪 斷開所有 signal 連接，防止 Qt 信號表持有 Worker 引用延遲 GC
+            try:
+                worker.progress_updated.disconnect()
+                worker.log_emitted.disconnect()
+                worker.status_updated.disconnect()
+                worker.finished_successfully.disconnect()
+                worker.finished_with_error.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            
             # 物理釋放龐大資料與斬斷循環參照
             worker.loaded_rows = []             
             worker.progress_throttler = None    
-            worker.log_throttler = None         
-            
-            # 💡 測試用：確認清理邏輯真的有跑到
-            print("🔍 Worker 記憶體清理完畢 (Success)！")
+            worker.log_throttler = None
 
     def _on_worker_error(self, err_msg):
         if not self._current_worker:
@@ -200,9 +207,17 @@ class CSVReader(QObject):
             self.finished.emit()
         self._current_worker = None
 
+        # 🔪 斷開所有 signal 連接，防止 Qt 信號表持有 Worker 引用延遲 GC
+        try:
+            worker.progress_updated.disconnect()
+            worker.log_emitted.disconnect()
+            worker.status_updated.disconnect()
+            worker.finished_successfully.disconnect()
+            worker.finished_with_error.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+
         # 🔪 發生錯誤或取消時，也要斬斷循環參照
         worker.loaded_rows = []
         worker.progress_throttler = None
         worker.log_throttler = None
-        
-        print("🔍 Worker 記憶體清理完畢 (Error/Cancel)！")

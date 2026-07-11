@@ -50,8 +50,10 @@ class SettingsMixin:
         try:
             self.io_panel.apply_config(self.context.io_panel_config)
             self.left_panel.apply_config(self.context.side_panel_config, self.context.main_config)
-            self.status_panel.apply_config(self.context.status_panel_config)
-            self.edit_content_panel.restore_from_config()
+            if self.status_panel:
+                self.status_panel.apply_config(self.context.status_panel_config)
+            if self.edit_content_panel:
+                self.edit_content_panel.restore_from_config()
             
             # 委託 LeftPanel 還原所有面板的設定
             self.left_panel.restore_panel_states(self._configs)
@@ -76,7 +78,8 @@ class SettingsMixin:
         self._update_window_config()
         self.left_panel.update_config(self.context.side_panel_config, self.context.main_config)
         self.io_panel.update_config(self.context.io_panel_config)
-        self.status_panel.update_config(self.context.status_panel_config, self.right_splitter.sizes())
+        if self.status_panel:
+            self.status_panel.update_config(self.context.status_panel_config, self.right_splitter.sizes())
         
         # 委託 LeftPanel 收集所有面板的最新設定
         self.left_panel.save_panel_states(self._configs)
@@ -123,6 +126,8 @@ class SettingsMixin:
         return editor_h, status_h
 
     def apply_splitter_sizes(self: "MainWindow") -> None:
+        if not self.status_panel:
+            return
         cfg = self.context.status_panel_config
         total_h = self.right_splitter.height()
         handle_w = self.right_splitter.handleWidth()

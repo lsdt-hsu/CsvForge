@@ -1,5 +1,7 @@
 import os
 import sys
+import tracemalloc  # [DIAG] Memory leak 診斷用，完成後刪除
+tracemalloc.start()  # [DIAG] Memory leak 診斷用，完成後刪除
 
 # 將 src 目錄加到 sys.path，使底下的模組可以直接 import
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))

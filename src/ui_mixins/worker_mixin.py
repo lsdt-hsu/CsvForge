@@ -34,18 +34,22 @@ class WorkerMixin:
         self._task_failed = False
 
         # 重置 UI 顯示狀態
-        self.status_panel.txt_log.clear()
+        # 🔪 用全新 QTextDocument 取代 clear()，徹底釋放舊 Document 的 fragment pool 記憶體
+        from PyQt6.QtGui import QTextDocument
+        if self.status_panel:
+            self.status_panel.txt_log.setDocument(QTextDocument(self.status_panel.txt_log))
         self.elapsed_time_str = "00:00:00"
 
         # 根據參數設定進度條與狀態文字
-        if total_rows > 0:
-            self.status_panel.progress_bar.setRange(0, total_rows)
-            self.status_panel.progress_bar.setValue(0)
-            self.status_panel.progress_bar.setFormat(f"0/{total_rows}")
-        else:
-            self.status_panel.progress_bar.setRange(0, 0)
-            self.status_panel.progress_bar.setValue(0)
-            self.status_panel.progress_bar.setFormat("0/0")
+        if self.status_panel:
+            if total_rows > 0:
+                self.status_panel.progress_bar.setRange(0, total_rows)
+                self.status_panel.progress_bar.setValue(0)
+                self.status_panel.progress_bar.setFormat(f"0/{total_rows}")
+            else:
+                self.status_panel.progress_bar.setRange(0, 0)
+                self.status_panel.progress_bar.setValue(0)
+                self.status_panel.progress_bar.setFormat("0/0")
 
         self.task_status_str = task_name
 
@@ -68,10 +72,12 @@ class WorkerMixin:
         self.lock_ui_from_panel(True)
 
     def update_status_summary(self: "MainWindow") -> None:
-        self.status_panel.update_status(self.elapsed_time_str, self.task_status_str)
+        if self.status_panel:
+            self.status_panel.update_status(self.elapsed_time_str, self.task_status_str)
 
     def on_worker_progress(self: "MainWindow", current: int, total: int) -> None:
-        self.status_panel.update_progress(current, total)
+        if self.status_panel:
+            self.status_panel.update_progress(current, total)
 
     def update_elapsed_time(self: "MainWindow") -> None:
         elapsed = int(time.time() - self.start_time)

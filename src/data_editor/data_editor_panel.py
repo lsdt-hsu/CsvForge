@@ -259,9 +259,47 @@ class DataEditorPanel(BasePanel):
         
         self.lbl_status.setText(f"<{filename}> 共 {n} / {m} 行")
 
-    def on_model_loaded(self):
+    def on_model_loaded(self) -> None:
+        # 🔪 終極解法：信號定向除疤。不銷毀實體，只把重複 connect 的舊線剪斷
+        if hasattr(self, "table_view") and self.table_view:
+            model = self.table_view.model()
+            if model and hasattr(model, "csv_data") and model.csv_data:
+                # 🎯 拔除 Model 內部重複疊加的全域信號
+                try:
+                    model.csv_data.data_loaded.disconnect(model.on_data_loaded)
+                    model.csv_data.data_changed.disconnect(model.on_data_changed)
+                    model.csv_data.filter_changed.disconnect(model.on_filter_changed)
+                    model.csv_data.header_state_changed.disconnect(model.on_header_state_changed)
+                except Exception:
+                    pass # 防止未連結時拋出異常
+                
+                # 🎯 重新只連一條乾淨的線，維持外掛面板的穩定度
+                model.csv_data.data_loaded.connect(model.on_data_loaded)
+                model.csv_data.data_changed.connect(model.on_data_changed)
+                model.csv_data.filter_changed.connect(model.on_filter_changed)
+                model.csv_data.header_state_changed.connect(model.on_header_state_changed)
+
+        # 🎯 拔除 Panel 本身重複疊加的全域信號（防止 resize_columns_fast 執行次數呈等差級數暴增）
+        if self.context and self.context.csv_data:
+            try:
+                self.context.csv_data.data_loaded.disconnect(self.on_model_loaded)
+                self.context.csv_data.filter_changed.disconnect(self.on_status_updated)
+                self.context.csv_data.header_state_changed.disconnect(self.on_status_updated)
+            except Exception:
+                pass
+            
+            # 重新綁定唯一的合法連線
+            self.context.csv_data.data_loaded.connect(self.on_model_loaded)
+            self.context.csv_data.filter_changed.connect(self.on_status_updated)
+            self.context.csv_data.header_state_changed.connect(self.on_status_updated)
+
+        # 更新狀態與重算欄寬
         self.on_status_updated()
         self.resize_columns_fast()
+        
+        # 強制讓 Python GC 把剛才斷開的信號殘留空殼收走
+        import gc
+        gc.collect()
 
     def resize_columns_fast(self):
         csv_data = self.context.csv_data if self.context else None
