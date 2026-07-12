@@ -72,7 +72,7 @@ class MainWindow(UiStateMixin, SettingsMixin, WorkerMixin, QMainWindow):
         self._restore_all_panel_configs()
 
     def init_ui(self):
-        self.setWindowTitle("CsvTranslator - CSV 批次翻譯工具")
+        self.setWindowTitle("CsvForge - CSV 批次處理工具組")
         self.resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
         self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
 

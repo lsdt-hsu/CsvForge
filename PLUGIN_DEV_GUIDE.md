@@ -1,4 +1,4 @@
-# CsvTranslator 外掛開發指南 (PLUGIN_DEV_GUIDE.md)
+# CsvForge 外掛開發指南 (PLUGIN_DEV_GUIDE.md)
 
 > **版本基準**：本指南依照 `src/plugin_sdk/panel_base.py`、`src/plugin_sdk/plugin_api.py`、`src/plugin_sdk/theme.py`、`src/utils/throttler.py`、`src/common_data/csv_data.py` 最新原始碼撰寫。
 > **AI Agent 使用說明**：閱讀本文件後，你應能在不詢問人類的前提下，100% 正確產出合規的外掛面板。
