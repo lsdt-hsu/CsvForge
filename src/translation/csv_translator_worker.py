@@ -35,7 +35,8 @@ class CSVTranslatorWorker(QObject):
     def __init__(self, all_rows, visible_row_indices,
                  source_col_idx, target_col_idx,
                  source_lang, target_lang,
-                 batch_interval=10, single_interval=1, batch_size=18):
+                 batch_interval=10, single_interval=1, batch_size=18,
+                 skip_translated=True):
         super().__init__()
         self.all_rows = all_rows
         self.visible_row_indices = visible_row_indices
@@ -46,6 +47,7 @@ class CSVTranslatorWorker(QObject):
         self.batch_interval = batch_interval
         self.single_interval = single_interval
         self.batch_size = batch_size
+        self.skip_translated = skip_translated
         self._is_cancelled = False
         self.error_rank = 0
         # 供面板在 finished("error") 時讀取錯誤詳情
@@ -300,8 +302,8 @@ class CSVTranslatorWorker(QObject):
                 target_val = row[self.target_col_idx].strip()
                 source_val = row[self.source_col_idx]
                 
-                # 若目標列的值不為空，跳過不翻譯
-                if target_val != "":
+                # 若目標列的值不為空，且設定為略過已翻譯欄位，跳過不翻譯
+                if self.skip_translated and target_val != "":
                     continue
                 
                 row_num = idx + 1

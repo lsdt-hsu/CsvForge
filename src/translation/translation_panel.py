@@ -14,11 +14,11 @@ translation_panel.py — 翻譯面板
 """
 
 from dataclasses import dataclass
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit, QMessageBox
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit, QMessageBox, QCheckBox
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator
 from plugin_sdk.panel_base import BasePluginPanel
-from plugin_sdk.theme import applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardSliderStyle, applyPrimaryButtonStyle
+from plugin_sdk.theme import applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardSliderStyle, applyPrimaryButtonStyle, applyStandardCheckBoxStyle
 
 @dataclass
 class TranslatePanelConfig:
@@ -30,6 +30,7 @@ class TranslatePanelConfig:
     tgt_lang: str = "zh-TW"
     src_col: int = 0
     tgt_col: int = 1
+    skip_translated: bool = True
 
 class TranslationPanel(BasePluginPanel):
 
@@ -125,6 +126,10 @@ class TranslationPanel(BasePluginPanel):
         self.txt_tgt_col = QComboBox()
         applyStandardComboBoxStyle(self.txt_tgt_col)
 
+        self.chk_skip_translated = QCheckBox("略過已翻譯欄位")
+        applyStandardCheckBoxStyle(self.chk_skip_translated)
+        self.chk_skip_translated.setChecked(True)
+
         self.lbl_batch_title = QLabel("批次間隔：10 秒")
         applyStandardLabelStyle(self.lbl_batch_title)
         self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
@@ -157,12 +162,13 @@ class TranslationPanel(BasePluginPanel):
         grid.addWidget(self.txt_src_col, 2, 1)
         grid.addWidget(lbl_tgt_col, 3, 0)
         grid.addWidget(self.txt_tgt_col, 3, 1)
-        grid.addWidget(self.lbl_batch_title, 4, 0)
-        grid.addWidget(self.slider_batch_interval, 4, 1)
-        grid.addWidget(self.lbl_single_title, 5, 0)
-        grid.addWidget(self.slider_single_interval, 5, 1)
-        grid.addWidget(self.lbl_batch_size_title, 6, 0)
-        grid.addWidget(self.slider_batch_size, 6, 1)
+        grid.addWidget(self.chk_skip_translated, 4, 1)
+        grid.addWidget(self.lbl_batch_title, 5, 0)
+        grid.addWidget(self.slider_batch_interval, 5, 1)
+        grid.addWidget(self.lbl_single_title, 6, 0)
+        grid.addWidget(self.slider_single_interval, 6, 1)
+        grid.addWidget(self.lbl_batch_size_title, 7, 0)
+        grid.addWidget(self.slider_batch_size, 7, 1)
 
         self.controls_layout.addLayout(grid)
         self.controls_layout.addStretch()
@@ -178,6 +184,7 @@ class TranslationPanel(BasePluginPanel):
         self.cb_tgt_lang.currentIndexChanged.connect(self._on_tgt_lang_changed)
         self.txt_src_col.currentIndexChanged.connect(self._on_src_col_changed)
         self.txt_tgt_col.currentIndexChanged.connect(self._on_tgt_col_changed)
+        self.chk_skip_translated.toggled.connect(self._on_skip_translated_toggled)
 
     # ── Config 變動事件 Handler ───────────────────────────────────────────────
     # 各控件變動時直接寫入 TranslatePanelConfig，設定 dirty flag。
@@ -219,6 +226,10 @@ class TranslationPanel(BasePluginPanel):
             self.config.tgt_col = val
             self.config.dirty = True
 
+    def _on_skip_translated_toggled(self, checked: bool) -> None:
+        self.config.skip_translated = checked
+        self.config.dirty = True
+
     # ── Interface 實作 ────────────────────────────────────────────────────────
     def _internal_get_package_name(self) -> str:
         return "translate_panel"
@@ -236,6 +247,7 @@ class TranslationPanel(BasePluginPanel):
             "tgt_lang": cfg.tgt_lang,
             "src_col": cfg.src_col,
             "tgt_col": cfg.tgt_col,
+            "skip_translated": cfg.skip_translated,
         }
 
     def _internal_deserialize_config(self, data: dict) -> None:
@@ -247,6 +259,7 @@ class TranslationPanel(BasePluginPanel):
         cfg.tgt_lang = data.get("tgt_lang", "zh-TW")
         cfg.src_col = int(data.get("src_col", 0))
         cfg.tgt_col = int(data.get("tgt_col", 1))
+        cfg.skip_translated = bool(data.get("skip_translated", True))
         self.restore_from_config()
 
     # ── Config 還原 ───────────────────────────────────────────────────────────
@@ -266,6 +279,7 @@ class TranslationPanel(BasePluginPanel):
         self.cb_tgt_lang.blockSignals(True)
         self.txt_src_col.blockSignals(True)
         self.txt_tgt_col.blockSignals(True)
+        self.chk_skip_translated.blockSignals(True)
 
         try:
             self.slider_batch_interval.setValue(int(cfg.batch_interval))
@@ -286,6 +300,8 @@ class TranslationPanel(BasePluginPanel):
             if idx != -1:
                 self.cb_tgt_lang.setCurrentIndex(idx)
 
+            self.chk_skip_translated.setChecked(cfg.skip_translated)
+
             self.update_column_dropdowns()
         finally:
             self.slider_batch_interval.blockSignals(False)
@@ -295,6 +311,7 @@ class TranslationPanel(BasePluginPanel):
             self.cb_tgt_lang.blockSignals(False)
             self.txt_src_col.blockSignals(False)
             self.txt_tgt_col.blockSignals(False)
+            self.chk_skip_translated.blockSignals(False)
 
     # ── 便捷讀取方法（供 start_translation_task 使用）────────────────────────
 
@@ -319,6 +336,9 @@ class TranslationPanel(BasePluginPanel):
     def get_tgt_col(self) -> int:
         return self.txt_tgt_col.currentData() if self.txt_tgt_col.currentData() is not None else 1
 
+    def get_skip_translated(self) -> bool:
+        return self.chk_skip_translated.isChecked()
+
     def _internal_set_enabled(self, enabled: bool) -> None:
         super()._internal_set_enabled(enabled)
         self.cb_src_lang.setEnabled(enabled)
@@ -328,6 +348,7 @@ class TranslationPanel(BasePluginPanel):
         self.slider_batch_size.setEnabled(enabled)
         self.txt_src_col.setEnabled(enabled)
         self.txt_tgt_col.setEnabled(enabled)
+        self.chk_skip_translated.setEnabled(enabled)
         # 按鈕在任務執行中不停用（供使用者點擊停止）
         if self._worker is None:
             self.btn_start.setEnabled(enabled)
@@ -369,6 +390,7 @@ class TranslationPanel(BasePluginPanel):
             batch_interval=self.get_batch_interval(),
             single_interval=self.get_single_interval(),
             batch_size=self.get_batch_size(),
+            skip_translated=self.get_skip_translated(),
         )
 
         # 連接業務信號（面板自身處理的部分）
