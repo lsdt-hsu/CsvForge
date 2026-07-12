@@ -976,6 +976,7 @@ def _internal_get_icon(self) -> QIcon:
 #### ThrottledProgress 規格（僅供底層功能開發者參考）
 
 使用 `utils.ThrottledProgress` 對進度信號進行節流，預設**每 0.2 秒最多發送一次**（即每秒最多 5 次），大幅降低主線程負擔。
+同時支援 **Trailing Edge (尾端補發)** 機制：當進度更新在節流時間內被過濾時，定時器會自動在間隔到期時補發最後一次的最新進度，確保 UI 最終能收到如 100% 的進度通知。
 
 #### Import
 
@@ -986,12 +987,13 @@ from utils import ThrottledProgress
 #### 建構函式
 
 ```python
-ThrottledProgress(signal, min_interval: float = 0.2)
+ThrottledProgress(signal, parent, min_interval: float = 0.2)
 ```
 
 | 參數 | 型別 | 說明 |
 |------|------|------|
 | `signal` | PyQt Signal | 要被節流的 PyQt 信號物件 |
+| `parent` | QObject / any | 生命週期綁定的父物件實例（**不可為 `None`**），內部以弱引用保存，供存活檢測防禦使用 |
 | `min_interval` | `float` | 兩次發送之間的最小時間間隔（秒），預設 `0.2` |
 
 #### `emit(*args, force=False) -> bool`
@@ -1001,9 +1003,13 @@ ThrottledProgress(signal, min_interval: float = 0.2)
 | 參數 | 型別 | 說明 |
 |------|------|------|
 | `*args` | any | 傳遞給底層信號的參數 |
-| `force` | `bool` | 若 `True`，忽略時間限制強制發送 |
+| `force` | `bool` | 若 `True`，忽略時間限制強制發送並立即取消排程中的補發 |
 
-回傳 `True` 表示本次信號已發送；回傳 `False` 表示被節流過濾。
+回傳 `True` 表示本次信號已立即發送；回傳 `False` 表示被節流過濾（但會自動排程在未來進行尾端補發）。
+
+#### `cancel() -> None`
+
+取消任何懸掛的補發定時器。在發送者（如 Panel 或 Worker）即將被銷毀或完成工作時，**必須主動呼叫此方法**以釋放背景定時執行緒與清理快取。
 
 #### 手動用法範例（僅供底層功能開發者參考）
 
@@ -1031,7 +1037,7 @@ class _MyWorker(QObject):
         self.finished.emit("finished")
 ```
 
-> **注意**：`ThrottledProgress` 是純 Python 工具類別，在 Worker 線程內使用完全安全，無需跨線程同步。
+> **注意**：`ThrottledProgress` 是純 Python 工具類別，但在初始化時**強制要求傳入有效的 `parent` 參數**（傳入 `None` 將引發 `ValueError` 崩潰）。此外，呼叫端必須在 parent 銷毀或工作結束時主動調用 `cancel()` 釋放定時器。未正確 cancel 將依循 Fail-Fast 原則拋出 C++ 物件銷毀異常，以利開發除錯。
 
 ---
 
