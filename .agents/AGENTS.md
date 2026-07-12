@@ -35,3 +35,8 @@
 - **Strict Anti-Patterns**:
   - DO NOT use `hasattr()` or `getattr()` to guess properties, state, or methods across the Host-Plugin boundary.
   - DO NOT export `PluginHostAdapter` in `plugin_sdk/__init__.py`. It must remain hidden from plugin developers.
+
+## 5. Fail-Fast Principle
+- NEVER use `try-except` to swallow programming errors or lifecycle bugs (e.g., deleted C++ objects), unless evaluated as an unavoidable exception and approved by the user.
+- Validate parameters early (e.g., raise `ValueError` for invalid `parent` references) and crash immediately.
+- Rely on active cleanup and weak references rather than defensive error swallowing.
