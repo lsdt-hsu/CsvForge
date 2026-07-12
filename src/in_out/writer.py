@@ -24,8 +24,8 @@ class CSVWriteWorker(CSVWorker):
         self.delimiter = delimiter
         self.task_name = "儲存中..."
         
-        self.progress_throttler = ThrottledProgress(self.progress_updated, min_interval=0.2)
-        self.log_throttler = ThrottledProgress(self.log_emitted, min_interval=0.2)
+        self.progress_throttler = ThrottledProgress(self.progress_updated, parent=self, min_interval=0.2)
+        self.log_throttler = ThrottledProgress(self.log_emitted, parent=self, min_interval=0.2)
 
     def run(self):
         try:
@@ -58,6 +58,9 @@ class CSVWriteWorker(CSVWorker):
             self.log_throttler.emit("ERROR", f"儲存過程發生錯誤：{str(e)}", force=True)
             self.error_message = str(e)
             self.is_success = False
+        finally:
+            self.progress_throttler.cancel()
+            self.log_throttler.cancel()
 
     def get_success_message(self, out_path):
         return "成功", "編輯資料儲存完成！"

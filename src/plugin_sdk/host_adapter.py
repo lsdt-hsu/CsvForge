@@ -94,7 +94,7 @@ class PluginHostAdapter:
 
         # 節流轉發：worker.progress → ThrottledProgress → panel._progress_updated
         # ThrottledProgress 包裝的是 target signal，限制轉發頻率
-        _throttled = ThrottledProgress(self._panel._progress_updated, min_interval=0.2)
+        _throttled = ThrottledProgress(self._panel._progress_updated, parent=self._panel, min_interval=0.2)
 
         def _on_worker_progress(current: int, total_count: int):
             _throttled.emit(current, total_count)
@@ -108,6 +108,7 @@ class PluginHostAdapter:
 
         # 完成回調：自動清理 + 通知主程式 finish_task
         def _on_finished(status: str):
+            _throttled.cancel()  # 主動取消任何懸掛的補發定時器
             host = weak_self()
             w = weak_worker()
             t = weak_thread()
