@@ -443,5 +443,6 @@ class TranslationPanel(BasePluginPanel):
 
         self._worker = None
 
-        if status == "finished":
+        # 無論是正常完成 (finished)、取消 (cancelled) 還是出錯 (error)，皆自動存檔已翻譯部分
+        if status in ("finished", "cancelled", "error"):
             self._on_translation_done()
