@@ -1,4 +1,4 @@
-# AI Rules (From .antigravityrc)
+# AI Rules
 
 ## 1. Language & Terminology
 - Chat, implementation plans, and all reports MUST be in Traditional Chinese (繁體中文) by default.
@@ -13,7 +13,7 @@
   - Auto local `git commit` allowed. No auto `git push`.
   - *Exception*: If the change is for a bug fix, follow "Logical Changes" rule below.
 - **If Logical Changes** (new features, control flows, data processing, architecture, or **ANY bug fixes** including tiny changes like variable renaming or missing imports):
-  - MUST generate an implementation plan within Antigravity as the primary reference. A backup copy of this plan MUST be saved to a local file named LocalReports/AI_PLAN.md in the project root directory BEFORE requesting approval or editing.
+  - MUST generate an implementation plan within Antigravity as the primary reference. A backup copy of this plan MUST be saved to a local file named .local_reports/AI_PLAN.md in the project root directory BEFORE requesting approval or editing.
   - No auto commit, no auto push.
 
 ## 3. Override Rule

@@ -10,6 +10,6 @@ settings.json
 .vscode/
 .idea/
 *.lnk
-/LocalReports/
+/.local_reports/
 /settings.ini
 /settings.json
