@@ -14,13 +14,16 @@ translation_panel.py — 翻譯面板 (外掛版本)
 """
 
 from dataclasses import dataclass
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider, QPushButton, QWidget, QLineEdit, QMessageBox
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QIntValidator
-# pyrefly: ignore [missing-import]
-from plugin_sdk.panel_base import BasePluginPanel
-# pyrefly: ignore [missing-import]
-from plugin_sdk.theme import applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardSliderStyle, applyPrimaryButtonStyle
+from PyQt6.QtWidgets import (
+    QVBoxLayout, QLabel, QGridLayout, QComboBox, QSlider,
+    QPushButton, QWidget, QScrollArea
+)
+from PyQt6.QtCore import Qt
+
+from common_data.task_status import TaskStatus
+from plugin_sdk import BasePluginPanel, PluginContext
+from plugin_sdk import theme
+
 
 @dataclass
 class TranslatePanelConfig:
@@ -33,25 +36,37 @@ class TranslatePanelConfig:
     src_col: int = 0
     tgt_col: int = 1
 
+
 class PanelClass(BasePluginPanel):
 
-    def __init__(self, parent=None, context=None):
-        super().__init__(parent, title_text="翻譯外掛", require_data_loading=True, context=context)
+    _UUID = "a9b8c7d6-e5f4-3210-fedc-ba9876543210"
+    _N_NON_COL_OPTIONS = 0
+
+    def __init__(self, context: PluginContext, parent=None):
+        super().__init__(
+            parent=parent,
+            title_text="翻譯外掛",
+            require_data_loading=True,
+            context=context
+        )
         self.config = TranslatePanelConfig()
         # 當前 Worker 引用（用於按鈕停止判斷）
         self._worker = None
         
         self.init_ui()
 
-    def on_csv_data_refreshed(self):
-        if self.context and self.context.is_data_loaded:
-            if not self.controls_container.isVisible():
-                self.show_controls()
-            self.update_column_dropdowns()
-        else:
-            self.hide_controls()
+    def _ui_to_stored(self, ui_index: int) -> int:
+        return ui_index - self._N_NON_COL_OPTIONS
 
-    def update_column_dropdowns(self):
+    def _stored_to_ui(self, stored: int) -> int:
+        return stored + self._N_NON_COL_OPTIONS
+
+    def on_csv_data_refreshed(self) -> None:
+        if not self.context or not self.context.is_data_loaded:
+            return
+        self.update_column_dropdowns()
+
+    def update_column_dropdowns(self) -> None:
         if not self.context or not self.context.csv_data:
             return
         csv_data = self.context.csv_data
@@ -59,34 +74,56 @@ class PanelClass(BasePluginPanel):
         
         self.txt_src_col.blockSignals(True)
         self.txt_tgt_col.blockSignals(True)
-        
-        self.txt_src_col.clear()
-        self.txt_tgt_col.clear()
-        
-        for i in range(limit):
-            col_name = csv_data.get_column_header(i)
-            self.txt_src_col.addItem(col_name, i)
-            self.txt_tgt_col.addItem(col_name, i)
+        try:
+            self.txt_src_col.clear()
+            self.txt_tgt_col.clear()
             
-        self.restore_columns_from_config()
-        
-        self.txt_src_col.blockSignals(False)
-        self.txt_tgt_col.blockSignals(False)
+            for i in range(limit):
+                col_name = csv_data.get_column_header(i)
+                self.txt_src_col.addItem(col_name, i)
+                self.txt_tgt_col.addItem(col_name, i)
+                
+            self.restore_columns_from_config()
+        finally:
+            self.txt_src_col.blockSignals(False)
+            self.txt_tgt_col.blockSignals(False)
 
-    def restore_columns_from_config(self):
+    def restore_columns_from_config(self) -> None:
         cfg = self.config
-        self.txt_src_col.setCurrentIndex(cfg.src_col)
-        self.txt_tgt_col.setCurrentIndex(cfg.tgt_col)
+        
+        src_ui = self._stored_to_ui(cfg.src_col)
+        max_src_idx = self.txt_src_col.count() - 1
+        safe_src_idx = max(0, min(src_ui, max_src_idx)) if max_src_idx >= 0 else 0
+        self.txt_src_col.setCurrentIndex(safe_src_idx)
+        
+        tgt_ui = self._stored_to_ui(cfg.tgt_col)
+        max_tgt_idx = self.txt_tgt_col.count() - 1
+        safe_tgt_idx = max(0, min(tgt_ui, max_tgt_idx)) if max_tgt_idx >= 0 else 0
+        self.txt_tgt_col.setCurrentIndex(safe_tgt_idx)
 
-    def _on_translation_done(self):
+    def _on_translation_done(self) -> None:
         self.api.request_silent_save()
 
-    def _on_data_changed(self):
+    def _on_data_changed(self) -> None:
         if self.context and self.context.csv_data:
             self.context.csv_data.set_modified(True)
             self.context.csv_data.data_changed.emit()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
+        # 建立可捲動容器以符合 UI 佈局規範
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        # 消除 QScrollArea 預設邊框與背景色
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.viewport().setStyleSheet("background: transparent;")
+
+        inner = QWidget()
+        inner_layout = QVBoxLayout(inner)
+        inner_layout.setContentsMargins(0, 0, 0, 0)
+        inner_layout.setSpacing(10)
+
         grid = QGridLayout()
         grid.setSpacing(10)
 
@@ -99,51 +136,51 @@ class PanelClass(BasePluginPanel):
         ]
 
         lbl_src_lang = QLabel("來源語言：")
-        applyStandardLabelStyle(lbl_src_lang)
+        theme.applyStandardLabelStyle(lbl_src_lang)
         self.cb_src_lang = QComboBox()
-        applyStandardComboBoxStyle(self.cb_src_lang)
+        theme.applyStandardComboBoxStyle(self.cb_src_lang)
         for code, name in self.langs:
             self.cb_src_lang.addItem(name, code)
         self.cb_src_lang.setCurrentIndex(0)
 
         lbl_tgt_lang = QLabel("目標語言：")
-        applyStandardLabelStyle(lbl_tgt_lang)
+        theme.applyStandardLabelStyle(lbl_tgt_lang)
         self.cb_tgt_lang = QComboBox()
-        applyStandardComboBoxStyle(self.cb_tgt_lang)
+        theme.applyStandardComboBoxStyle(self.cb_tgt_lang)
         for code, name in self.langs:
             self.cb_tgt_lang.addItem(name, code)
         self.cb_tgt_lang.setCurrentIndex(1)
 
         lbl_src_col = QLabel("來源欄號：")
-        applyStandardLabelStyle(lbl_src_col)
+        theme.applyStandardLabelStyle(lbl_src_col)
         self.txt_src_col = QComboBox()
-        applyStandardComboBoxStyle(self.txt_src_col)
+        theme.applyStandardComboBoxStyle(self.txt_src_col)
 
         lbl_tgt_col = QLabel("目標欄號：")
-        applyStandardLabelStyle(lbl_tgt_col)
+        theme.applyStandardLabelStyle(lbl_tgt_col)
         self.txt_tgt_col = QComboBox()
-        applyStandardComboBoxStyle(self.txt_tgt_col)
+        theme.applyStandardComboBoxStyle(self.txt_tgt_col)
 
         self.lbl_batch_title = QLabel("批次間隔：10 秒")
-        applyStandardLabelStyle(self.lbl_batch_title)
+        theme.applyStandardLabelStyle(self.lbl_batch_title)
         self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
-        applyStandardSliderStyle(self.slider_batch_interval)
+        theme.applyStandardSliderStyle(self.slider_batch_interval)
         self.slider_batch_interval.setRange(10, 30)
         self.slider_batch_interval.setValue(10)
         self.slider_batch_interval.valueChanged.connect(self._on_batch_interval_changed)
 
         self.lbl_single_title = QLabel("單筆間隔：1.0 秒")
-        applyStandardLabelStyle(self.lbl_single_title)
+        theme.applyStandardLabelStyle(self.lbl_single_title)
         self.slider_single_interval = QSlider(Qt.Orientation.Horizontal)
-        applyStandardSliderStyle(self.slider_single_interval)
+        theme.applyStandardSliderStyle(self.slider_single_interval)
         self.slider_single_interval.setRange(2, 10)
         self.slider_single_interval.setValue(2)
         self.slider_single_interval.valueChanged.connect(self._on_single_interval_changed)
 
         self.lbl_batch_size_title = QLabel("批次筆數：18 筆")
-        applyStandardLabelStyle(self.lbl_batch_size_title)
+        theme.applyStandardLabelStyle(self.lbl_batch_size_title)
         self.slider_batch_size = QSlider(Qt.Orientation.Horizontal)
-        applyStandardSliderStyle(self.slider_batch_size)
+        theme.applyStandardSliderStyle(self.slider_batch_size)
         self.slider_batch_size.setRange(10, 20)
         self.slider_batch_size.setValue(18)
         self.slider_batch_size.valueChanged.connect(self._on_batch_size_changed)
@@ -163,11 +200,15 @@ class PanelClass(BasePluginPanel):
         grid.addWidget(self.lbl_batch_size_title, 6, 0)
         grid.addWidget(self.slider_batch_size, 6, 1)
 
-        self.controls_layout.addLayout(grid)
+        inner_layout.addLayout(grid)
+        inner_layout.addStretch()
+        scroll.setWidget(inner)
+
+        self.controls_layout.addWidget(scroll)
         self.controls_layout.addStretch()
 
         self.btn_start = QPushButton("開始翻譯")
-        applyPrimaryButtonStyle(self.btn_start, is_running=False)
+        theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.on_start_clicked)
         self.controls_layout.addWidget(self.btn_start)
@@ -196,23 +237,23 @@ class PanelClass(BasePluginPanel):
         self.config.dirty = True
 
     def _on_src_lang_changed(self, idx: int) -> None:
-        self.config.src_lang = self.cb_src_lang.currentData()
-        self.config.dirty = True
+        if idx >= 0:
+            self.config.src_lang = self.cb_src_lang.itemData(idx)
+            self.config.dirty = True
 
     def _on_tgt_lang_changed(self, idx: int) -> None:
-        self.config.tgt_lang = self.cb_tgt_lang.currentData()
-        self.config.dirty = True
+        if idx >= 0:
+            self.config.tgt_lang = self.cb_tgt_lang.itemData(idx)
+            self.config.dirty = True
 
     def _on_src_col_changed(self, idx: int) -> None:
-        val = self.txt_src_col.itemData(idx)
-        if val is not None:
-            self.config.src_col = val
+        if idx >= 0:
+            self.config.src_col = self._ui_to_stored(idx)
             self.config.dirty = True
 
     def _on_tgt_col_changed(self, idx: int) -> None:
-        val = self.txt_tgt_col.itemData(idx)
-        if val is not None:
-            self.config.tgt_col = val
+        if idx >= 0:
+            self.config.tgt_col = self._ui_to_stored(idx)
             self.config.dirty = True
 
     # ── Interface 實作 ────────────────────────────────────────────────────────
@@ -220,7 +261,7 @@ class PanelClass(BasePluginPanel):
         return "translation2"
 
     def _internal_get_uuid(self) -> str:
-        return "a9b8c7d6-e5f4-3210-fedc-ba9876543210"
+        return self._UUID
 
     def _internal_serialize_config(self) -> dict:
         cfg = self.config
@@ -321,7 +362,7 @@ class PanelClass(BasePluginPanel):
         if self._worker is None:
             self.btn_start.setEnabled(enabled)
 
-    def on_start_clicked(self):
+    def on_start_clicked(self) -> None:
         """開始/停止按鈕點擊處理 Slot。"""
         if self._worker is not None:
             # 任務執行中：請求取消
@@ -332,22 +373,34 @@ class PanelClass(BasePluginPanel):
         self._start_translation_task()
 
     def _start_translation_task(self) -> None:
-        """執行前驗證並建立譯總 Worker。"""
+        """執行前驗證並建立翻譯 Worker。"""
         src_col = self.get_src_col()
         tgt_col = self.get_tgt_col()
 
-        # 執行前驗證
+        # 執行前驗證：欄位不可相同
         if src_col == tgt_col:
             self.api.write_log("WARNING", "來源欄位與目標欄位不可相同，請重新選擇。")
             self.api.update_status("❌ 參數錯誤：欄位不可相同")
+            return
+
+        # 執行前驗證：邊界檢查
+        num_cols = self.context.csv_data.num_cols
+        if src_col < 0 or src_col >= num_cols:
+            self.api.write_log("WARNING", f"來源欄位索引 {src_col} 超出資料範圍（共 {num_cols} 欄）。")
+            self.api.update_status("❌ 參數錯誤：欄位索引超出範圍")
+            return
+
+        if tgt_col < 0 or tgt_col >= num_cols:
+            self.api.write_log("WARNING", f"目標欄位索引 {tgt_col} 超出資料範圍（共 {num_cols} 欄）。")
+            self.api.update_status("❌ 參數錯誤：欄位索引超出範圍")
             return
 
         visible_row_indices = self.context.csv_data.get_visible_indices()
         all_rows = self.context.csv_data.all_rows
         total = len(visible_row_indices)
 
-        from translation.csv_translator_worker import CSVTranslatorWorker
-        self._worker = CSVTranslatorWorker(
+        from worker import PluginWorker
+        self._worker = PluginWorker(
             all_rows=all_rows,
             visible_row_indices=visible_row_indices,
             source_col_idx=src_col,
@@ -368,7 +421,7 @@ class PanelClass(BasePluginPanel):
         # 更新按鈕狀態
         self.btn_start.setText("停止翻譯")
         self.btn_start.setEnabled(True)
-        applyPrimaryButtonStyle(self.btn_start, is_running=True)
+        theme.applyPrimaryButtonStyle(self.btn_start, is_running=True)
         self._internal_set_enabled(False)
 
         # 委託主程式管理 Thread 生命週期
@@ -380,13 +433,13 @@ class PanelClass(BasePluginPanel):
             prevent_sleep=True
         )
 
-    def _on_worker_done(self, status: str) -> None:
+    def _on_worker_done(self, status: TaskStatus) -> None:
         """Worker 結束時恢復面板 UI 狀態。由 worker.finished 信號觸發。"""
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
-        applyPrimaryButtonStyle(self.btn_start, is_running=False)
+        theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
         self._internal_set_enabled(True)
         self._worker = None
 
-        if status == "finished":
-            self._on_translation_done()
+        # 不論任務執行狀態如何，皆自動存檔已翻譯部分
+        self._on_translation_done()
