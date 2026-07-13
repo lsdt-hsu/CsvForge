@@ -2,6 +2,7 @@ import re
 import time
 import unicodedata
 from PyQt6.QtCore import QObject, pyqtSignal
+from common_data.task_status import TaskStatus
 
 # 全角數字/符號轉換表
 FULL_TO_HALF_MAP = {
@@ -39,7 +40,7 @@ class FilterWorker(QObject):
 
     # ── 標準接口信號（run_worker 架構必要）────────────────────────────────────────────
     progress = pyqtSignal(int, int)          # current, total
-    finished = pyqtSignal(str)               # "finished" | "error" | "cancelled"
+    finished = pyqtSignal(TaskStatus)               # TaskStatus Enum
 
     # ── 業務信號（外掛面板可連接）───────────────────────────────────────────────────
     filter_completed = pyqtSignal(object, float)  # matched_indices, elapsed_time
@@ -409,7 +410,7 @@ class FilterWorker(QObject):
 
                 if not has_row_limit and is_no_rules_filter:
                     self.filter_completed.emit(None, time.time() - start_time)
-                    self.finished.emit("finished")
+                    self.finished.emit(TaskStatus.FINISHED)
                     return
 
                 # 正規表達式預先編譯
@@ -427,13 +428,13 @@ class FilterWorker(QObject):
                         except re.error as e:
                             self._last_error = f"規則 #{j+1} 正規表達式語法錯誤: {e}"
                             self.log_emitted.emit("ERROR", self._last_error)
-                            self.finished.emit("error")
+                            self.finished.emit(TaskStatus.ERROR)
                             return
                     regex_patterns.append(pat)
 
                 for i, row in enumerate(self.all_rows):
                     if self._is_cancelled:
-                        self.finished.emit("cancelled")
+                        self.finished.emit(TaskStatus.CANCELLED)
                         return
 
                     # 報告進度
@@ -455,12 +456,12 @@ class FilterWorker(QObject):
 
                 self.progress.emit(total_rows, total_rows)
                 self.filter_completed.emit(matched_indices, time.time() - start_time)
-                self.finished.emit("finished")
+                self.finished.emit(TaskStatus.FINISHED)
 
             except Exception as e:
                 self._last_error = f"過濾發生未預期錯誤: {e}"
                 self.log_emitted.emit("ERROR", self._last_error)
-                self.finished.emit("error")
+                self.finished.emit(TaskStatus.ERROR)
         finally:
             # 🔪 主動釋放大型資料引用，不等 deleteLater
             self.all_rows = None

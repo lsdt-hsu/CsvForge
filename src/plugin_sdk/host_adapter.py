@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from plugin_sdk.panel_base import BasePluginPanel
 
 
+from common_data.task_status import TaskStatus
+
+
 class PluginHostAdapter:
     """
     主程式方向盤 ── 主程式控制外掛生命週期的唯一合法代理。
@@ -107,7 +110,7 @@ class PluginHostAdapter:
         self._current_worker = worker
 
         # 完成回調：自動清理 + 通知主程式 finish_task
-        def _on_finished(status: str):
+        def _on_finished(status: TaskStatus):
             _throttled.cancel()  # 主動取消任何懸掛的補發定時器
             host = weak_self()
             w = weak_worker()

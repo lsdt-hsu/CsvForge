@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING
+from common_data.task_status import TaskStatus
 
 if TYPE_CHECKING:
     from ui import MainWindow
@@ -90,7 +91,7 @@ class WorkerMixin:
         self.elapsed_time_str = f"{hrs:02d}:{mins:02d}:{secs:02d}"
         self.update_status_summary()
 
-    def on_task_finished(self: "MainWindow", status: str) -> None:
+    def on_task_finished(self: "MainWindow", status: TaskStatus) -> None:
         """當背景任務結束時由 Panel/IO 元件觸發"""
         self.timer.stop()
         
@@ -104,13 +105,25 @@ class WorkerMixin:
             self.append_log("INFO", "已恢復系統正常休眠設定。")
 
         # 根據狀態決定狀態列文字
-        if status == "error":
+        if status == TaskStatus.ERROR:
             self.task_status_str = "錯誤"
             self._task_failed = True
-        elif status == "cancelled":
+            if self.status_panel:
+                self.status_panel.progress_bar.setRange(0, 100)
+                self.status_panel.progress_bar.setValue(0)
+                self.status_panel.progress_bar.setFormat("0/0")
+        elif status == TaskStatus.CANCELLED:
             self.task_status_str = "已取消"
+            if self.status_panel:
+                self.status_panel.progress_bar.setRange(0, 100)
+                self.status_panel.progress_bar.setValue(0)
+                self.status_panel.progress_bar.setFormat("0/0")
         else:
             self.task_status_str = "完成"
+            if self.status_panel:
+                self.status_panel.progress_bar.setRange(0, 100)
+                self.status_panel.progress_bar.setValue(100)
+                self.status_panel.progress_bar.setFormat("100/100")
 
         self.update_status_summary()
 

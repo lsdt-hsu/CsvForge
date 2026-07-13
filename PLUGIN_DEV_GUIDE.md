@@ -18,10 +18,11 @@
   - [2.2 事件鉤子](#22-事件鉤子-lifecycle-hooks)
   - [2.3 UI 輔助方法](#23-ui-輔助方法)
   - [2.4 CsvData 資料介面參考](#24-csvdata-資料介面參考)
-  - [2.5 核心一致性策略](#25-核心一致性策略-core-consistency-rules)
-  - [2.6 樣式套用規範](#26-樣式套用規範-theme)
-  - [2.7 UI 與 Config 最佳實踐](#27-ui-與-config-最佳實踐-ux-best-practices)
-  - [2.8 UI 佈局與圖示設計規範](#28-ui-佈局與圖示設計規範-layout--icon-design)
+  - [2.5 TaskStatus 任務狀態列舉值參考](#25-taskstatus-任務狀態列舉值參考)
+  - [2.6 核心一致性策略](#26-核心一致性策略-core-consistency-rules)
+  - [2.7 樣式套用規範](#27-樣式套用規範-theme)
+  - [2.8 UI 與 Config 最佳實踐](#28-ui-與-config-最佳實踐-ux-best-practices)
+  - [2.9 UI 佈局與圖示設計規範](#29-ui-佈局與圖示設計規範-layout--icon-design)
 - [第三部分：進階工具與效能優化](#第三部分進階工具與效能優化)
   - [3.1 ThrottledProgress — 進度更新限流器](#31-throttledprogress--進度更新限流器)
 - [第四部分：絕對禁止的反模式](#第四部分絕對禁止的反模式-strict-anti-patterns)
@@ -113,6 +114,7 @@ import uuid
 from PyQt6.QtWidgets import QPushButton, QLabel, QComboBox
 from PyQt6.QtCore import pyqtSignal, QObject
 
+from common_data.task_status import TaskStatus
 from plugin_sdk import BasePluginPanel, PluginContext
 from plugin_sdk import theme
 
@@ -122,7 +124,7 @@ from plugin_sdk import theme
 class _MyWorker(QObject):
     """背景 Worker：不阻塞主線程。"""
     progress = pyqtSignal(int, int)   # current, total
-    finished = pyqtSignal(str)        # "finished" | "error" | "cancelled"
+    finished = pyqtSignal(TaskStatus) # TaskStatus Enum
 
     def __init__(self):
         super().__init__()
@@ -136,11 +138,11 @@ class _MyWorker(QObject):
         total = 100
         for i in range(total):
             if self._cancelled:
-                self.finished.emit("cancelled")
+                self.finished.emit(TaskStatus.CANCELLED)
                 return
             # --- 實際業務邏輯放這裡 ---
             self.progress.emit(i + 1, total)
-        self.finished.emit("finished")
+        self.finished.emit(TaskStatus.FINISHED)
 
 
 # ── 外掛主類別 ─────────────────────────────────────────────────────────────
@@ -337,7 +339,7 @@ class PanelClass(BasePluginPanel):
 
 | 參數 | 型別 | 合法值 |
 |------|------|--------|
-| `status` | `str` | `"finished"` \| `"error"` \| `"cancelled"` |
+| `status` | `TaskStatus` | `TaskStatus.FINISHED` \| `TaskStatus.ERROR` \| `TaskStatus.CANCELLED` |
 
 > **⚠️ 注意**：若外掛使用 `run_worker` 託管背景任務，主程式會自動呼叫此方法。外掛開發者【嚴禁】在呼叫 `run_worker` 前後手動呼叫 `finish_task`，以免破壞主程式狀態機。
 
@@ -514,7 +516,30 @@ def _internal_set_enabled(self, enabled: bool) -> None:
 
 ---
 
-### 2.5 核心一致性策略 (Core Consistency Rules)
+### 2.5 TaskStatus 任務狀態列舉值參考
+
+背景任務（Worker）結束時，所發送與接收的狀態判定已改為強型別的 `TaskStatus` Enum，其定義於 `common_data.task_status` 中。
+
+#### 匯入方式
+
+外掛在宣告信號型別或比對完成狀態時，應以下列方式匯入：
+```python
+from common_data.task_status import TaskStatus
+```
+
+#### 列舉值清單
+
+`TaskStatus` 的所有可用成員與意義如下：
+
+| 列舉值 (Enum Member) | 對應字串數值 (Value) | 說明 |
+| :--- | :--- | :--- |
+| `TaskStatus.FINISHED` | `"finished"` | 任務正常執行完成。 |
+| `TaskStatus.ERROR` | `"error"` | 任務因未預期錯誤或異常中斷。 |
+| `TaskStatus.CANCELLED` | `"cancelled"` | 使用者點擊取消按鈕中止了任務。 |
+
+---
+
+### 2.6 核心一致性策略 (Core Consistency Rules)
 
 本節為外掛開發的**強制規範**，確保所有外掛對 CSV 資料的存取與修改行為一致，不破壞主程式的狀態管理。
 
@@ -599,7 +624,7 @@ widget.blockSignals(False)
 
 ---
 
-### 2.6 樣式套用規範 (Theme)
+### 2.7 樣式套用規範 (Theme)
 
 **嚴格規則**：開發外掛 UI 時，**必須優先呼叫 `plugin_sdk.theme` 提供的 `applyXXXStyle` 函式**，**嚴禁手動 hardcode QSS 樣式或顏色值**。
 
@@ -691,7 +716,7 @@ my_custom_widget.setStyleSheet(f"""
 
 ---
 
-## 2.7 UI 與 Config 最佳實踐 (UX Best Practices)
+## 2.8 UI 與 Config 最佳實踐 (UX Best Practices)
 
 本節描述兩項外掛開發中最容易踩坑的實戰場景，並給出強制性的最佳實踐規範。
 
@@ -849,7 +874,7 @@ def _on_combo_changed(self, ui_index: int) -> None:
 
 ---
 
-## 2.8 UI 佈局與圖示設計規範 (Layout & Icon Design)
+## 2.9 UI 佈局與圖示設計規範 (Layout & Icon Design)
 
 ---
 
@@ -1014,9 +1039,11 @@ ThrottledProgress(signal, parent, min_interval: float = 0.2)
 #### 手動用法範例（僅供底層功能開發者參考）
 
 ```python
+from common_data.task_status import TaskStatus
+
 class _MyWorker(QObject):
     progress = pyqtSignal(int, int)
-    finished = pyqtSignal(str)
+    finished = pyqtSignal(TaskStatus)
 
     def __init__(self):
         super().__init__()
@@ -1026,7 +1053,7 @@ class _MyWorker(QObject):
         total = 50000
         for i in range(total):
             if self._cancelled:
-                self.finished.emit("cancelled")
+                self.finished.emit(TaskStatus.CANCELLED)
                 return
             
             # --- 實際業務邏輯 ---
@@ -1034,7 +1061,7 @@ class _MyWorker(QObject):
             # 直接發送進度即可，主程式會在外部攔截並自動限流
             self.progress.emit(i + 1, total)
 
-        self.finished.emit("finished")
+        self.finished.emit(TaskStatus.FINISHED)
 ```
 
 > **注意**：`ThrottledProgress` 是純 Python 工具類別，但在初始化時**強制要求傳入有效的 `parent` 參數**（傳入 `None` 將引發 `ValueError` 崩潰）。此外，呼叫端必須在 parent 銷毀或工作結束時主動調用 `cancel()` 釋放定時器。未正確 cancel 將依循 Fail-Fast 原則拋出 C++ 物件銷毀異常，以利開發除錯。

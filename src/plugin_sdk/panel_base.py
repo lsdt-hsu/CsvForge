@@ -6,6 +6,9 @@ from plugin_sdk.context import PluginContext
 from plugin_sdk.theme import applyTitleLabel, applyHintLabel
 
 
+from common_data.task_status import TaskStatus
+
+
 class BasePluginPanel(QFrame):
     """
     外掛面板實體層 ── QFrame 的實體載體，負責 UI 骨架與私有信號宣告。
@@ -37,7 +40,7 @@ class BasePluginPanel(QFrame):
     _log_emitted = pyqtSignal(str, str)
     _request_silent_save = pyqtSignal()
     _task_started = pyqtSignal(str, int, str, bool)
-    _task_finished = pyqtSignal(str)
+    _task_finished = pyqtSignal(TaskStatus)
     # Worker 生命週期委託信號：外掛透過 api.run_worker() 觸發，
     # 由主程式端 PluginHostAdapter 接收並統一管理 QThread 生命週期。
     # 參數：(worker: QObject, task_name: str, total: int, initial_log: str, prevent_sleep: bool)

@@ -3,6 +3,7 @@ import csv
 import time
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
+from common_data.task_status import TaskStatus
 from .csv_worker import CSVWorker
 from utils import ThrottledProgress
 
@@ -74,7 +75,7 @@ class CSVWriteWorker(CSVWorker):
 
 class CSVWriter(QObject):
     task_started = pyqtSignal(str, int, str, bool)
-    task_finished = pyqtSignal(str)
+    task_finished = pyqtSignal(TaskStatus)
     save_completed = pyqtSignal(str)
     save_error = pyqtSignal(str)
     
@@ -133,14 +134,14 @@ class CSVWriter(QObject):
                 if not self.is_silent:
                     parent_win = self.parent_win.window() if self.parent_win else None
                     QMessageBox.information(parent_win, "成功", f"存檔成功！\n檔案已儲存至：\n{worker.output_path}")
-                    self.task_finished.emit("finished")
+                    self.task_finished.emit(TaskStatus.FINISHED)
                     
                 self.finished.emit()
             else:
                 err_msg = worker.error_message
                 if "使用者已取消" in err_msg or "取消" in err_msg or worker._is_cancelled:
                     if not self.is_silent:
-                        self.task_finished.emit("cancelled")
+                        self.task_finished.emit(TaskStatus.CANCELLED)
                     self.cancelled.emit()
                 else:
                     self.save_error.emit(err_msg)
@@ -148,7 +149,7 @@ class CSVWriter(QObject):
                     if not self.is_silent:
                         parent_win = self.parent_win.window() if self.parent_win else None
                         QMessageBox.critical(parent_win, "儲存中斷", f"儲存過程發生錯誤：\n{err_msg}")
-                        self.task_finished.emit("error")
+                        self.task_finished.emit(TaskStatus.ERROR)
                     self.finished.emit()
         finally:
             if self._current_worker == worker:

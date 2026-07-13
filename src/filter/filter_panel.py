@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon, QIntValidator
 from dataclasses import dataclass, field
+from common_data.task_status import TaskStatus
 from plugin_sdk.panel_base import BasePluginPanel
 from plugin_sdk.theme import applyStandardLabelStyle, applyStandardLineEditStyle, applyPrimaryButtonStyle
 
@@ -415,9 +416,9 @@ class FilterPanel(BasePluginPanel):
         count = len(matched_indices) if matched_indices is not None else 0
         self.api.write_log("SUCCESS", f"過濾完成！共匹配 {count} 筆資料，耗時 {elapsed_time:.2f} 秒。")
 
-    def _on_filter_done(self, status: str) -> None:
+    def _on_filter_done(self, status: TaskStatus) -> None:
         """標準完成回調。由 worker.finished 信號觸發，在 Adapter 自動呼叫 finish_task 前執行。"""
-        if status == "error" and self.worker is not None:
+        if status == TaskStatus.ERROR and self.worker is not None:
             err_msg = getattr(self.worker, "_last_error", "未知錯誤")
             if err_msg:
                 QMessageBox.critical(self, "過濾錯誤", err_msg)

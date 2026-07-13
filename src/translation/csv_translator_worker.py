@@ -2,6 +2,7 @@ import concurrent.futures
 import re
 import time
 from PyQt6.QtCore import QObject, pyqtSignal
+from common_data.task_status import TaskStatus
 from deep_translator import GoogleTranslator
 from utils.network import get_http_error_info
 
@@ -25,7 +26,7 @@ class CSVTranslatorWorker(QObject):
 
     # ── 標準接口信號（run_worker 架構必要）────────────────────────────────────────────
     progress = pyqtSignal(int, int)      # current, total
-    finished = pyqtSignal(str)           # "finished" | "error" | "cancelled"
+    finished = pyqtSignal(TaskStatus)           # TaskStatus Enum
 
     # ── 業務信號（外掛面板可連接）───────────────────────────────────────────────────
     status_updated = pyqtSignal(str)     # 狀態欄更新日誌
@@ -318,18 +319,18 @@ class CSVTranslatorWorker(QObject):
                     
             if self._is_cancelled:
                 self.log_emitted.emit("WARNING", "使用者已取消翻譯。")
-                self.finished.emit("cancelled")
+                self.finished.emit(TaskStatus.CANCELLED)
             else:
                 if tag_buffer:
                     self.log_emitted.emit("INFO", f"開始處理最後殘留批次，共 {len(tag_buffer)} 筆...")
                     self.translate_batch(tag_buffer, self.target_col_idx)
                 self.log_emitted.emit("SUCCESS", "翻譯完成！")
-                self.finished.emit("finished")
+                self.finished.emit(TaskStatus.FINISHED)
   
         except Exception as e:
             self._last_error = str(e)
             self.log_emitted.emit("ERROR", f"翻譯過程發生錯誤：{str(e)}")
-            self.finished.emit("error")
+            self.finished.emit(TaskStatus.ERROR)
         finally:
             if self._executor:
                 self._executor.shutdown(wait=False)

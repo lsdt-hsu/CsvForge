@@ -1,5 +1,6 @@
 import time
 from PyQt6.QtCore import QObject, pyqtSignal
+from common_data.task_status import TaskStatus
 from ai.ai_utils import build_final_prompt
 from ai.ai_client import generate_local_ai, generate_google_ai
 
@@ -25,7 +26,7 @@ class CSVAIWorker(QObject):
 
     # ── 標準接口信號（run_worker 架構必要）────────────────────────────────────
     progress = pyqtSignal(int, int)      # current, total
-    finished = pyqtSignal(str)           # "finished" | "error" | "cancelled"
+    finished = pyqtSignal(TaskStatus)           # TaskStatus Enum
 
     # ── 業務信號（外掛面板可連接）─────────────────────────────────────────────
     status_updated = pyqtSignal(str)
@@ -69,7 +70,7 @@ class CSVAIWorker(QObject):
             if not self.all_rows:
                 self._last_error = "沒有可載入的 CSV 資料"
                 self.log_emitted.emit("ERROR", self._last_error)
-                self.finished.emit("error")
+                self.finished.emit(TaskStatus.ERROR)
                 return
 
             # 1. 取得標準 headers
@@ -89,14 +90,14 @@ class CSVAIWorker(QObject):
             except (ValueError, TypeError):
                 self._last_error = "目標輸出欄號格式不正確"
                 self.log_emitted.emit("ERROR", self._last_error)
-                self.finished.emit("error")
+                self.finished.emit(TaskStatus.ERROR)
                 return
 
             # 若發現輸出欄位超出有效範圍，直接報錯
             if target_col_idx >= len(self.all_rows[0]):
                 self._last_error = f"目標輸出欄號 '{target_col_idx + 1}' 超出目前 CSV 的有效範圍，請先新增欄位或重新選擇！"
                 self.log_emitted.emit("ERROR", self._last_error)
-                self.finished.emit("error")
+                self.finished.emit(TaskStatus.ERROR)
                 return
 
             # 檢查 Prompt 內引用的欄位是否都存在於 headers 中
@@ -106,7 +107,7 @@ class CSVAIWorker(QObject):
             if missing_fields:
                 self._last_error = f"自訂 Prompt 中引用了不存在於目前 CSV 的欄位：{', '.join(missing_fields)}"
                 self.log_emitted.emit("ERROR", self._last_error)
-                self.finished.emit("error")
+                self.finished.emit(TaskStatus.ERROR)
                 return
 
             # 3. 取得需要執行的列索引清單，排列表頭行本身
@@ -119,7 +120,7 @@ class CSVAIWorker(QObject):
 
             if total_count == 0:
                 self.log_emitted.emit("WARNING", "沒有選定任何有效資料列進行處理")
-                self.finished.emit("finished")
+                self.finished.emit(TaskStatus.FINISHED)
                 return
 
             self.status_updated.emit("執行中...")
@@ -128,7 +129,7 @@ class CSVAIWorker(QObject):
             for r_idx in run_indices:
                 if self._is_cancelled:
                     self.log_emitted.emit("WARNING", "使用者中止了 AI 處理任務")
-                    self.finished.emit("cancelled")
+                    self.finished.emit(TaskStatus.CANCELLED)
                     return
 
                 row = self.all_rows[r_idx]
@@ -182,9 +183,9 @@ class CSVAIWorker(QObject):
 
             self.status_updated.emit("完成")
             self.log_emitted.emit("SUCCESS", "AI 批次處理任務已結束！")
-            self.finished.emit("finished")
+            self.finished.emit(TaskStatus.FINISHED)
 
         except Exception as e:
             self._last_error = str(e)
             self.log_emitted.emit("ERROR", f"AI背景任務異常中止: {str(e)}")
-            self.finished.emit("error")
+            self.finished.emit(TaskStatus.ERROR)

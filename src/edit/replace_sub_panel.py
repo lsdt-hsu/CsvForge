@@ -8,13 +8,14 @@ except ImportError:
 import re
 from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QPushButton
 from PyQt6.QtCore import QObject, pyqtSignal
+from common_data.task_status import TaskStatus
 from plugin_sdk import theme
 from edit.base_sub_panel import BaseSubPanel
 
 # 1. 直接遷移原有的 Worker
 class _RegexReplaceWorker(QObject):
     progress = pyqtSignal(int, int)
-    finished = pyqtSignal(str)
+    finished = pyqtSignal(TaskStatus)
     log_emitted = pyqtSignal(str, str)
 
     def __init__(self, csv_data, visible_indices, dst_col, compiled_pattern, replacement_str):
@@ -33,7 +34,7 @@ class _RegexReplaceWorker(QObject):
         total = len(self.visible_indices)
         for idx, row_idx in enumerate(self.visible_indices):
             if self._cancelled:
-                self.finished.emit("cancelled")
+                self.finished.emit(TaskStatus.CANCELLED)
                 return
             try:
                 row = self.csv_data.all_rows[row_idx]
@@ -48,7 +49,7 @@ class _RegexReplaceWorker(QObject):
             except Exception:
                 pass
             self.progress.emit(idx + 1, total)
-        self.finished.emit("finished")
+        self.finished.emit(TaskStatus.FINISHED)
 
 # 2. 實作子面板類別
 class ReplaceSubPanel(BaseSubPanel):
@@ -271,18 +272,18 @@ class ReplaceSubPanel(BaseSubPanel):
             prevent_sleep=True
         )
 
-    def _on_worker_finished(self, status: str):
+    def _on_worker_finished(self, status: TaskStatus):
         self._is_working = False
         self.btn_start.setText("開始取代")
         theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
 
-        if status == "finished":
+        if status == TaskStatus.FINISHED:
             self.context.csv_data.set_modified(True)
             self.context.csv_data.data_changed.emit()
             self.api.request_silent_save()
             self.api.write_log("SUCCESS", "批次取代任務已完成")
             self.api.update_status("✅ 取代完成")
-        elif status == "cancelled":
+        elif status == TaskStatus.CANCELLED:
             self.api.write_log("WARNING", "取代任務已取消")
             self.api.update_status("⚠️ 任務已取消")
             self.set_panel_enabled(True) # 確保取消後按鈕恢復可用狀態

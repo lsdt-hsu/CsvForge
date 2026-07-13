@@ -8,6 +8,9 @@ if TYPE_CHECKING:
     from plugin_sdk.panel_base import BasePluginPanel
 
 
+from common_data.task_status import TaskStatus
+
+
 class PluginAPI:
     """
     外掛對講機 ── 外掛子類別與主程式溝通的唯一合法途徑。
@@ -102,7 +105,7 @@ class PluginAPI:
         """
         self._panel._task_started.emit(task_name, total, initial_log, prevent_sleep)
 
-    def finish_task(self, status: str) -> None:
+    def finish_task(self, status: TaskStatus) -> None:
         """
         通知主程式背景任務已結束。
         主程式收到後將解鎖 UI、停止計時器、恢復休眠。
@@ -110,7 +113,7 @@ class PluginAPI:
         【注意】：若使用 run_worker()，此方法由主程式自動呼叫，外掛無需手動呼叫。
 
         Args:
-            status: 結束狀態，合法值為 "finished" | "error" | "cancelled"。
+            status: 結束狀態，TaskStatus 物件。
         """
         self._panel._task_finished.emit(status)
 

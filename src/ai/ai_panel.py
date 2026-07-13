@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+from common_data.task_status import TaskStatus
 from plugin_sdk.panel_base import BasePluginPanel
 from plugin_sdk.theme import applyStandardLabelStyle, applyStandardComboBoxStyle, applyPrimaryButtonStyle
 from ai.ai_prompt_widget import AiPromptWidget
@@ -319,7 +320,7 @@ class AiPanel(BasePluginPanel):
             prevent_sleep=True
         )
 
-    def _on_worker_done(self, status: str) -> None:
+    def _on_worker_done(self, status: TaskStatus) -> None:
         """Worker 結束時恢復面板 UI 狀態。由 worker.finished 信號觸發。"""
         # 恢復按鈕狀態
         self.btn_start.setText("開始 AI 處理")
@@ -328,7 +329,7 @@ class AiPanel(BasePluginPanel):
         self._internal_set_enabled(True)
 
         # 讀取錯誤訊息（Worker 尚未被 deleteLater，此時引用仍有效）
-        if status == "error" and self._worker is not None:
+        if status == TaskStatus.ERROR and self._worker is not None:
             err_msg = getattr(self._worker, "_last_error", "未知錯誤")
             if err_msg:
                 QMessageBox.critical(self, "AI 處理中斷", f"AI 處理過程中發生錯誤：\n{err_msg}")
