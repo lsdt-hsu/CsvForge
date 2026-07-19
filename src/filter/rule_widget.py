@@ -62,6 +62,18 @@ class CircularToggleButton(QPushButton):
             )
 
 class RuleWidget(QWidget):
+    _N_NON_COL_OPTIONS = 2
+
+    def _ui_to_stored(self, ui_index: int) -> int:
+        if ui_index < self._N_NON_COL_OPTIONS:
+            return -(ui_index + 1)
+        return ui_index - self._N_NON_COL_OPTIONS
+
+    def _stored_to_ui(self, stored: int) -> int:
+        if stored < 0:
+            return -stored - 1
+        return stored + self._N_NON_COL_OPTIONS
+
     def __init__(self, index, parent_panel):
         super().__init__()
         self.index = index  # 1-indexed integer
@@ -103,7 +115,6 @@ class RuleWidget(QWidget):
         lbl_col.setFixedWidth(45)
         self.cmb_compare_col = QComboBox()
         applyStandardComboBoxStyle(self.cmb_compare_col)
-        self.cmb_compare_col.addItem("不過濾", "none")
         self.cmb_compare_col.addItem("所有欄位", "all")
         self.cmb_compare_col.addItem("欄位範圍", "range")
         self.cmb_compare_col.currentIndexChanged.connect(self.on_col_changed)
@@ -220,13 +231,14 @@ class RuleWidget(QWidget):
         self.cmb_range_start.blockSignals(True)
         self.cmb_range_end.blockSignals(True)
         
-        old_col = self.cmb_compare_col.currentData()
+        old_ui_col = self.cmb_compare_col.currentIndex()
+        old_col = self._ui_to_stored(old_ui_col) if old_ui_col >= 0 else -1
+        
         old_target = self.cmb_compare_target.currentData()
         old_start = self.cmb_range_start.currentData()
         old_end = self.cmb_range_end.currentData()
 
         self.cmb_compare_col.clear()
-        self.cmb_compare_col.addItem("不過濾", "none")
         self.cmb_compare_col.addItem("所有欄位", "all")
         self.cmb_compare_col.addItem("欄位範圍", "range")
         
@@ -236,7 +248,7 @@ class RuleWidget(QWidget):
         # 找出當前已選取的所有整數欄位 index，並計算 max_active_col
         if active_cols is None:
             active_cols = []
-            if isinstance(old_col, int):
+            if isinstance(old_col, int) and old_col >= 0:
                 active_cols.append(old_col)
             if isinstance(old_start, int):
                 active_cols.append(old_start)
@@ -257,8 +269,11 @@ class RuleWidget(QWidget):
                 self.cmb_range_start.addItem(text, i)
                 self.cmb_range_end.addItem(text, i)
 
-        idx = self.cmb_compare_col.findData(old_col)
-        self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
+        new_ui_col = self._stored_to_ui(old_col)
+        if 0 <= new_ui_col < self.cmb_compare_col.count():
+            self.cmb_compare_col.setCurrentIndex(new_ui_col)
+        else:
+            self.cmb_compare_col.setCurrentIndex(0)
 
         # 回復 cmb_range_start 的舊值，預設為第一欄 (index 0)
         self.cmb_range_start.setCurrentIndex(old_start if isinstance(old_start, int) and 0 <= old_start < self.cmb_range_start.count() else 0)
@@ -317,13 +332,6 @@ class RuleWidget(QWidget):
             self.range_cols_container.setVisible(True)
         else:
             self.range_cols_container.setVisible(False)
-
-        if col_type is None or col_type == "none":
-            self.cmb_compare_method.setEnabled(False)
-            self.cmb_compare_target.setEnabled(False)
-            self.value_container.setVisible(False)
-            self.belong_container.setVisible(False)
-            return
         
         self.cmb_compare_method.setEnabled(True)
         self.cmb_compare_target.setEnabled(True)
@@ -382,13 +390,8 @@ class RuleWidget(QWidget):
         else:
             val = self.txt_compare_value.text()
             
-        col = self.cmb_compare_col.currentData()
-        if col == "none":
-            col = -1
-        elif col == "all":
-            col = -2
-        elif col == "range":
-            col = -3
+        ui_col = self.cmb_compare_col.currentIndex()
+        col = self._ui_to_stored(ui_col) if ui_col >= 0 else -1
             
         target = self.cmb_compare_target.currentData()
         if target == "manual":
@@ -414,99 +417,70 @@ class RuleWidget(QWidget):
         self.cmb_range_start.blockSignals(True)
         self.cmb_range_end.blockSignals(True)
 
-        col = cfg.get("compare_col", -1)
-        method = cfg.get("compare_method", 0)
-        if not isinstance(method, int):
-            method = 0
-        if not (0 <= method < self.cmb_compare_method.count()):
-            method = 0
-            
-        invert = cfg.get("invert", False)
-        if not isinstance(invert, bool):
-            invert = False
+        try:
+            col = cfg.get("compare_col", -1)
+            method = cfg.get("compare_method", 0)
+            if not isinstance(method, int) or not (0 <= method < self.cmb_compare_method.count()):
+                method = 0
+                
+            invert = cfg.get("invert", False)
+            if not isinstance(invert, bool):
+                invert = False
 
-        target = cfg.get("compare_target", -1)
-        val = cfg.get("compare_value", "")
-        b_idx = cfg.get("belong_value_idx", 0)
-        range_start = cfg.get("range_start", 0)
-        range_end = cfg.get("range_end", 0)
+            target = cfg.get("compare_target", -1)
+            val = cfg.get("compare_value", "")
+            b_idx = cfg.get("belong_value_idx", 0)
+            range_start = cfg.get("range_start", 0)
+            range_end = cfg.get("range_end", 0)
 
-        # 1. 處理 compare_col 的對應與驗證
-        if col == "none":
-            col = -1
-        elif col == "all":
-            col = -2
-        elif col == "range":
-            col = -3
-            
-        if not isinstance(col, int):
-            col = 0
-        elif col < 0 and col not in (-1, -2, -3):
-            col = 0
-            
-        ui_col = col
-        if col == -1:
-            ui_col = "none"
-        elif col == -2:
-            ui_col = "all"
-        elif col == -3:
-            ui_col = "range"
+            # 驗證並套用預設值 (因不考慮舊版相容性，防呆確保格式正確)
+            if not isinstance(col, int) or col < -2:
+                col = -1  # 預設為 -1 (所有欄位)
 
-        # 2. 處理 compare_target 的對應與驗證
-        if target == "manual":
-            target = -1
-            
-        if not isinstance(target, int):
-            target = 0
-        elif target < 0 and target != -1:
-            target = 0
-            
-        ui_target = target
-        if target == -1:
-            ui_target = "manual"
+            if not isinstance(target, int) or target < -1:
+                target = -1
 
-        # 3. 處理 range_start 的驗證
-        if not isinstance(range_start, int) or range_start < 0:
-            range_start = 0
+            if not isinstance(range_start, int) or range_start < 0:
+                range_start = 0
 
-        # 4. 處理 range_end 的驗證
-        if not isinstance(range_end, int) or range_end < 0:
-            range_end = 0
+            if not isinstance(range_end, int) or range_end < 0:
+                range_end = 0
 
-        # 預先依照 config 中的值更新下拉選單選項，以防 configured columns 超出 num_cols
-        active_cols = []
-        for v in (col, target, range_start, range_end):
-            if isinstance(v, int) and v >= 0:
-                active_cols.append(v)
-        self.update_columns(self.parent_panel.num_cols, active_cols)
+            # 預先依照 config 中的值更新下拉選單選項，以防 configured columns 超出 num_cols
+            active_cols = []
+            for v in (col, target, range_start, range_end):
+                if isinstance(v, int) and v >= 0:
+                    active_cols.append(v)
+            self.update_columns(self.parent_panel.num_cols, active_cols)
 
-        idx = self.cmb_compare_col.findData(ui_col)
-        self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
+            ui_col = self._stored_to_ui(col)
+            self.cmb_compare_col.setCurrentIndex(ui_col if 0 <= ui_col < self.cmb_compare_col.count() else 0)
 
-        self.cmb_compare_method.setCurrentIndex(method)
-        self.chk_invert.setChecked(invert)
+            self.cmb_compare_method.setCurrentIndex(method)
+            self.chk_invert.setChecked(invert)
 
-        idx = self.cmb_compare_target.findData(ui_target)
-        self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
+            ui_target = "manual" if target == -1 else target
+            idx = self.cmb_compare_target.findData(ui_target)
+            self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
 
-        # 回復 cmb_range_start 的選擇
-        self.cmb_range_start.setCurrentIndex(range_start if 0 <= range_start < self.cmb_range_start.count() else 0)
+            # 回復 cmb_range_start 的選擇
+            self.cmb_range_start.setCurrentIndex(range_start if 0 <= range_start < self.cmb_range_start.count() else 0)
 
-        # 回復 cmb_range_end 的選擇
-        self.cmb_range_end.setCurrentIndex(range_end if 0 <= range_end < self.cmb_range_end.count() else 0)
+            # 回復 cmb_range_end 的選擇
+            self.cmb_range_end.setCurrentIndex(range_end if 0 <= range_end < self.cmb_range_end.count() else 0)
 
-        self.update_belong_visibility()
+            self.update_belong_visibility()
 
-        if method == CompareMethod.BELONG:
-            if 0 <= b_idx < self.cmb_belong_value.count():
-                self.cmb_belong_value.setCurrentIndex(b_idx)
-        else:
-            self.txt_compare_value.setText(val)
-
-        self.cmb_compare_col.blockSignals(False)
-        self.cmb_compare_method.blockSignals(False)
-        self.chk_invert.blockSignals(False)
-        self.cmb_compare_target.blockSignals(False)
-        self.cmb_belong_value.blockSignals(False)
-        self.cmb_range_start.blockSignals(False)
-        self.cmb_range_end.blockSignals(False)
+            if method == CompareMethod.BELONG:
+                if 0 <= b_idx < self.cmb_belong_value.count():
+                    self.cmb_belong_value.setCurrentIndex(b_idx)
+            else:
+                self.txt_compare_value.setText(val)
+        finally:
+            self.cmb_compare_col.blockSignals(False)
+            self.cmb_compare_method.blockSignals(False)
+            self.chk_invert.blockSignals(False)
+            self.cmb_compare_target.blockSignals(False)
+            self.cmb_belong_value.blockSignals(False)
+            self.cmb_range_start.blockSignals(False)
+            self.cmb_range_end.blockSignals(False)

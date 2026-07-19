@@ -76,9 +76,9 @@ class FilterWorker(QObject):
 
     def check_row_match(self, row, compare_col, compare_method, compare_target, compare_value, regex_pattern, range_start=None, range_end=None, invert=False):
         # 決定比對範圍欄位索引集合
-        if compare_col == "all":
+        if compare_col == -1:  # 所有欄位
             cols_to_check = list(range(len(row)))
-        elif compare_col == "range":
+        elif compare_col == -2:  # 欄位範圍
             start_c = range_start if range_start is not None else 0
             end_c = range_end if range_end is not None else len(row) - 1
             
@@ -94,7 +94,7 @@ class FilterWorker(QObject):
         # 決定比對目標值
         if compare_method == CompareMethod.BELONG:
             target_val = compare_value
-        elif compare_target == "manual":
+        elif compare_target == -1:  # 手動輸入
             target_val = compare_value
         else:
             # 特定欄位的值 (整數)
@@ -108,7 +108,7 @@ class FilterWorker(QObject):
         elif compare_method == CompareMethod.CONTAINS:
             is_match = any(target_val in (row[c] if c < len(row) else "") for c in cols_to_check)
         elif compare_method == CompareMethod.REGEX:
-            if compare_target == "manual" and regex_pattern:
+            if compare_target == -1 and regex_pattern:
                 is_match = any(bool(regex_pattern.search(row[c] if c < len(row) else "")) for c in cols_to_check)
             else:
                 # 欄位比對當作正規表達式
@@ -359,36 +359,33 @@ class FilterWorker(QObject):
         return False
 
     def evaluate_general_rules(self, row, rules_cfg, tree, regex_patterns) -> bool:
-        # 若無規則或無邏輯樹，或者所有規則皆為 "none" (不過濾)，則直接最佳化回傳 True
-        if not rules_cfg or not tree or all(r.get("compare_col") == "none" for r in rules_cfg):
+        # 若無規則或無邏輯樹，則直接最佳化回傳 True
+        if not rules_cfg or not tree:
             return True
 
         # 求解各單一規則結果
         rule_results = []
         for j, r_cfg in enumerate(rules_cfg):
-            col = r_cfg.get("compare_col", "none")
-            if col == "none":
-                rule_results.append(True)
-            else:
-                method = r_cfg.get("compare_method", 0)
-                if not isinstance(method, int):
-                    method = 0
-                
-                invert = r_cfg.get("invert", False)
-                if not isinstance(invert, bool):
-                    invert = False
+            col = r_cfg.get("compare_col")
+            method = r_cfg.get("compare_method", 0)
+            if not isinstance(method, int):
+                method = 0
+            
+            invert = r_cfg.get("invert", False)
+            if not isinstance(invert, bool):
+                invert = False
 
-                match_res = self.check_row_match(
-                    row, col,
-                    method,
-                    r_cfg.get("compare_target"),
-                    r_cfg.get("compare_value"),
-                    regex_patterns[j],
-                    range_start=r_cfg.get("range_start"),
-                    range_end=r_cfg.get("range_end"),
-                    invert=invert
-                )
-                rule_results.append(match_res)
+            match_res = self.check_row_match(
+                row, col,
+                method,
+                r_cfg.get("compare_target"),
+                r_cfg.get("compare_value"),
+                regex_patterns[j],
+                range_start=r_cfg.get("range_start"),
+                range_end=r_cfg.get("range_end"),
+                invert=invert
+            )
+            rule_results.append(match_res)
         
         # 遞迴運算 AST 邏輯樹
         return self.eval_logic_tree(tree, rule_results)
@@ -409,10 +406,10 @@ class FilterWorker(QObject):
                 lt_cfg = self.filter_config.get("logic_tree")
                 tree = logic_tree.deserialize_tree(lt_cfg)
 
-                # 效能優化判定：若無實質行號限制且滿足「無過濾規則」或「所有規則都是不過濾」，直接回傳 None (回復顯示全部)
+                # 效能優化判定：若無實質行號限制且滿足「無過濾規則」，直接回傳 None (回復顯示全部)
                 actual_start = max(2, self.start_row) if self.is_header else self.start_row
                 has_row_limit = (actual_start > (2 if self.is_header else 1)) or (self.end_row is not None and self.end_row < total_rows)
-                is_no_rules_filter = not rules_cfg or not tree or all(r.get("compare_col") == "none" for r in rules_cfg)
+                is_no_rules_filter = not rules_cfg or not tree
 
                 if not has_row_limit and is_no_rules_filter:
                     self.filter_completed.emit(None, time.time() - start_time)
@@ -422,7 +419,6 @@ class FilterWorker(QObject):
                 # 正規表達式預先編譯
                 regex_patterns = []
                 for j, r_cfg in enumerate(rules_cfg):
-                    col = r_cfg.get("compare_col", "none")
                     method = r_cfg.get("compare_method", 0)
                     if not isinstance(method, int):
                         method = 0
@@ -430,7 +426,7 @@ class FilterWorker(QObject):
                     val = r_cfg.get("compare_value", "")
 
                     pat = None
-                    if col != "none" and method == CompareMethod.REGEX and target == "manual":
+                    if method == CompareMethod.REGEX and target == -1:
                         try:
                             pat = re.compile(val)
                         except re.error as e:

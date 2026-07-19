@@ -296,23 +296,12 @@ class FilterPanel(BasePluginPanel):
             target = cfg["compare_target"]
             val = cfg["compare_value"]
 
-            # 正規化以供後續驗證與比較
-            if col == -1:
-                col = "none"
-            elif col == -2:
-                col = "all"
-            elif col == -3:
-                col = "range"
-                
-            if target == -1:
-                target = "manual"
-
             # 檢查比對欄位是否無法對應
-            if isinstance(col, int) and (col >= self.num_cols or col < 0):
+            if col >= 0 and col >= self.num_cols:
                 QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：比對欄位「欄位{col+1}」在當前 CSV 中不存在。")
                 return
 
-            if col == "range":
+            if col == -2:  # 欄位範圍
                 range_start = cfg.get("range_start")
                 range_end = cfg.get("range_end")
                 start_val = range_start if range_start is not None else 0
@@ -322,38 +311,25 @@ class FilterPanel(BasePluginPanel):
                     return
 
             # 檢查比對目標欄位是否無法對應
-            if method != CompareMethod.BELONG and isinstance(target, int) and (target >= self.num_cols or target < 0):
+            if method != CompareMethod.BELONG and target >= 0 and target >= self.num_cols:
                 QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：比對目標「欄位{target+1}」在當前 CSV 中不存在。")
                 return
 
-            if col != "none":
-                if method != CompareMethod.BELONG:
-                    if target == "manual":
-                        if method == CompareMethod.REGEX:
-                            try:
-                                re.compile(val)
-                            except re.error as e:
-                                QMessageBox.warning(self, "錯誤", f"規則 #{r.index} 正規表達式語法錯誤: {e}")
-                                return
-                    else:
-                        if col == target:
-                            QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：欄位比對不可選擇相同的欄位。")
+            if method != CompareMethod.BELONG:
+                if target == -1:  # 手動輸入
+                    if method == CompareMethod.REGEX:
+                        try:
+                            re.compile(val)
+                        except re.error as e:
+                            QMessageBox.warning(self, "錯誤", f"規則 #{r.index} 正規表達式語法錯誤: {e}")
                             return
+                else:
+                    if col == target:
+                        QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：欄位比對不可選擇相同的欄位。")
+                        return
 
-        # 正規化 rules 設定以符合 FilterWorker 所需的舊版字串格式規格
-        normalized_rules = []
-        for r in self.rules:
-            rc = r.get_config().copy()
-            if rc["compare_col"] == -1:
-                rc["compare_col"] = "none"
-            elif rc["compare_col"] == -2:
-                rc["compare_col"] = "all"
-            elif rc["compare_col"] == -3:
-                rc["compare_col"] = "range"
-                
-            if rc["compare_target"] == -1:
-                rc["compare_target"] = "manual"
-            normalized_rules.append(rc)
+        # 這裡直接複製 get_config 回傳的 dict 結構，不需要額外的相容性轉換
+        normalized_rules = [r.get_config().copy() for r in self.rules]
 
         filter_config = {
             "rules": normalized_rules,
