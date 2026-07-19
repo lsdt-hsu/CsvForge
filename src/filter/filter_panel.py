@@ -11,13 +11,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon, QIntValidator
-from dataclasses import dataclass, field
 from common_data.task_status import TaskStatus
 from plugin_sdk.panel_base import BasePluginPanel
 from plugin_sdk.theme import applyStandardLabelStyle, applyStandardLineEditStyle, applyPrimaryButtonStyle
 
 from filter import logic_tree
 from filter.rule_widget import RuleWidget, CircularToggleButton
+from filter.filter_config import FilterPanelConfig, serialize_filter_config, deserialize_filter_config
 
 class CustomTextEdit(QTextEdit):
     focus_out_signal = pyqtSignal()
@@ -26,15 +26,6 @@ class CustomTextEdit(QTextEdit):
         super().focusOutEvent(event)
         self.focus_out_signal.emit()
 
-
-@dataclass
-class FilterPanelConfig:
-    dirty: bool = False
-    rules: list = field(default_factory=list)
-    logic_tree: dict = field(default_factory=dict)
-    expr_text: str = "#1"
-    start_row: str = "1"
-    end_row: str = ""
 
 class FilterPanel(BasePluginPanel):
     request_filter = pyqtSignal(dict)
@@ -453,22 +444,10 @@ class FilterPanel(BasePluginPanel):
         return "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
 
     def _internal_serialize_config(self) -> dict:
-        cfg = self.config
-        return {
-            "rules": cfg.rules,
-            "logic_tree": cfg.logic_tree,
-            "expr_text": cfg.expr_text,
-            "start_row": cfg.start_row,
-            "end_row": cfg.end_row,
-        }
+        return serialize_filter_config(self.config)
 
     def _internal_deserialize_config(self, data: dict) -> None:
-        cfg = self.config
-        cfg.rules = data.get("rules", [])
-        cfg.logic_tree = data.get("logic_tree", {})
-        cfg.expr_text = data.get("expr_text", "#1")
-        cfg.start_row = data.get("start_row", "1")
-        cfg.end_row = data.get("end_row", "")
+        self.config = deserialize_filter_config(data)
         self.restore_from_config()
 
     def _sync_rules_to_config(self) -> None:
