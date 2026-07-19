@@ -16,7 +16,7 @@ class FilterPanelConfig:
     dirty: bool = False
     rules: list = field(default_factory=list)
     logic_tree: dict = field(default_factory=dict)
-    expr_text: str = "#1"
+    expr_text: str = ""
     start_row: str = "1"
     end_row: str = ""
 
@@ -37,7 +37,7 @@ def deserialize_filter_config(data: dict) -> FilterPanelConfig:
     return FilterPanelConfig(
         rules=data.get("rules", []),
         logic_tree=data.get("logic_tree", {}),
-        expr_text=data.get("expr_text", "#1"),
+        expr_text=data.get("expr_text", ""),
         start_row=data.get("start_row", "1"),
         end_row=data.get("end_row", ""),
     )

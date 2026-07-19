@@ -89,7 +89,7 @@ class RuleWidget(QWidget):
         self.btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_delete.setStyleSheet("border: none; background: transparent;")
         self.btn_delete.clicked.connect(self.on_delete_clicked)
-        self.btn_delete.setVisible(self.index > 1)
+        self.btn_delete.setVisible(True)
         title_layout.addWidget(self.btn_delete)
         
         layout.addLayout(title_layout)

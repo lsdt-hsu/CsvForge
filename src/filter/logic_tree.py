@@ -191,6 +191,9 @@ def parse_expression(expr_str, current_count):
     解析運算式字串並做語意檢查。
     傳回解析扁平化後的 LogicNode。若語法或語意不合法，拋出 ValueError。
     """
+    if current_count == 0:
+        return None
+
     # 詞法分析：擷取括號、AND/OR 以及 #1~#5
     tokens = re.findall(r'\(|\)|AND|OR|#[1-5]', expr_str, re.IGNORECASE)
     

@@ -192,6 +192,7 @@ class FilterPanel(BasePluginPanel):
         if len(self.rules) >= 5:
             self.btn_add_rule.setVisible(False)
 
+        self.txt_expression.setReadOnly(False)
         new_expr = logic_tree.to_string(self.logic_tree)
         self.txt_expression.blockSignals(True)
         self.txt_expression.setPlainText(new_expr)
@@ -203,7 +204,7 @@ class FilterPanel(BasePluginPanel):
     def delete_rule(self, del_idx):
         if not self.check_expression_validity():
             return
-        if len(self.rules) <= 1:
+        if len(self.rules) == 0:
             return
 
         self.logic_tree = logic_tree.remove_rule_node(self.logic_tree, del_idx)
@@ -216,10 +217,12 @@ class FilterPanel(BasePluginPanel):
         for i, w in enumerate(self.rules):
             w.index = i + 1
             w.lbl_rule_title.setText(f"規則 #{w.index}")
-            w.btn_delete.setVisible(w.index > 1)
+            w.btn_delete.setVisible(True)
 
         if len(self.rules) < 5:
             self.btn_add_rule.setVisible(True)
+
+        self.txt_expression.setReadOnly(len(self.rules) == 0)
 
         new_expr = logic_tree.to_string(self.logic_tree)
         self.txt_expression.blockSignals(True)
@@ -230,6 +233,18 @@ class FilterPanel(BasePluginPanel):
         self._sync_rules_to_config()
 
     def on_expression_focus_out(self):
+        if len(self.rules) == 0:
+            self.txt_expression.blockSignals(True)
+            self.txt_expression.setPlainText("")
+            applyStandardLineEditStyle(self.txt_expression)
+            self.txt_expression.setReadOnly(True)
+            self.txt_expression.blockSignals(False)
+            self.logic_tree = None
+            self.expression_is_valid = True
+            self._sync_rules_to_config()
+            return
+
+        self.txt_expression.setReadOnly(False)
         expr = self.txt_expression.toPlainText().strip()
         
         if not expr:
@@ -482,11 +497,6 @@ class FilterPanel(BasePluginPanel):
             self.rules.append(w)
             self.rule_list_layout.addWidget(w)
             w.set_config(r_cfg)
-
-        if not self.rules:
-            w = RuleWidget(1, self)
-            self.rules.append(w)
-            self.rule_list_layout.addWidget(w)
 
         lt_cfg = config.get("logic_tree")
         self.logic_tree = logic_tree.deserialize_tree(lt_cfg)
