@@ -17,7 +17,7 @@ from plugin_sdk.theme import applyStandardLabelStyle, applyStandardLineEditStyle
 
 from filter import logic_tree
 from filter.rule_widget import RuleWidget, CircularToggleButton
-from filter.filter_config import FilterPanelConfig, serialize_filter_config, deserialize_filter_config
+from filter.filter_config import FilterPanelConfig, serialize_filter_config, deserialize_filter_config, CompareMethod
 
 class CustomTextEdit(QTextEdit):
     focus_out_signal = pyqtSignal()
@@ -307,14 +307,14 @@ class FilterPanel(BasePluginPanel):
                     return
 
             # 檢查比對目標欄位是否無法對應
-            if method not in ("屬於", "不屬於") and isinstance(target, int) and (target >= self.num_cols or target < 0):
+            if method != CompareMethod.BELONG and isinstance(target, int) and (target >= self.num_cols or target < 0):
                 QMessageBox.warning(self, "錯誤", f"規則 #{r.index}：比對目標「欄位{target+1}」在當前 CSV 中不存在。")
                 return
 
             if col != "none":
-                if method not in ("屬於", "不屬於"):
+                if method != CompareMethod.BELONG:
                     if target == "manual":
-                        if method == "正規表達式":
+                        if method == CompareMethod.REGEX:
                             try:
                                 re.compile(val)
                             except re.error as e:

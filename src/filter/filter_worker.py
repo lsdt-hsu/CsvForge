@@ -3,6 +3,7 @@ import time
 import unicodedata
 from PyQt6.QtCore import QObject, pyqtSignal
 from common_data.task_status import TaskStatus
+from filter.filter_config import CompareMethod
 
 # 全角數字/符號轉換表
 FULL_TO_HALF_MAP = {
@@ -73,7 +74,7 @@ class FilterWorker(QObject):
         """供主程式呼叫，用以要求終止過濾迴圈。"""
         self._is_cancelled = True
 
-    def check_row_match(self, row, compare_col, compare_method, compare_target, compare_value, regex_pattern, range_start=None, range_end=None):
+    def check_row_match(self, row, compare_col, compare_method, compare_target, compare_value, regex_pattern, range_start=None, range_end=None, invert=False):
         # 決定比對範圍欄位索引集合
         if compare_col == "all":
             cols_to_check = list(range(len(row)))
@@ -91,7 +92,7 @@ class FilterWorker(QObject):
             cols_to_check = [compare_col]
 
         # 決定比對目標值
-        if compare_method in ("屬於", "不屬於"):
+        if compare_method == CompareMethod.BELONG:
             target_val = compare_value
         elif compare_target == "manual":
             target_val = compare_value
@@ -102,14 +103,11 @@ class FilterWorker(QObject):
 
         is_match = False
         
-        if compare_method == "完全符合":
+        if compare_method == CompareMethod.FULL_MATCH:
             is_match = any((row[c] if c < len(row) else "") == target_val for c in cols_to_check)
-        elif compare_method == "包含":
+        elif compare_method == CompareMethod.CONTAINS:
             is_match = any(target_val in (row[c] if c < len(row) else "") for c in cols_to_check)
-        elif compare_method == "未包含":
-            # 所有欄位皆不包含 target_val (AND 邏輯)
-            is_match = all(target_val not in (row[c] if c < len(row) else "") for c in cols_to_check)
-        elif compare_method == "正規表達式":
+        elif compare_method == CompareMethod.REGEX:
             if compare_target == "manual" and regex_pattern:
                 is_match = any(bool(regex_pattern.search(row[c] if c < len(row) else "")) for c in cols_to_check)
             else:
@@ -119,11 +117,10 @@ class FilterWorker(QObject):
                     is_match = any(bool(t_regex.search(row[c] if c < len(row) else "")) for c in cols_to_check)
                 except re.error:
                     is_match = False
-        elif compare_method in ("屬於", "不屬於"):
-            is_belong = any(self.is_belong_match(row[c] if c < len(row) else "", compare_target, target_val) for c in cols_to_check)
-            is_match = not is_belong if compare_method == "不屬於" else is_belong
+        elif compare_method == CompareMethod.BELONG:
+            is_match = any(self.is_belong_match(row[c] if c < len(row) else "", compare_target, target_val) for c in cols_to_check)
                     
-        return is_match
+        return not is_match if invert else is_match
 
     def is_belong_match(self, text, target, sub_value):
         if target == "語系":
@@ -373,14 +370,23 @@ class FilterWorker(QObject):
             if col == "none":
                 rule_results.append(True)
             else:
+                method = r_cfg.get("compare_method", 0)
+                if not isinstance(method, int):
+                    method = 0
+                
+                invert = r_cfg.get("invert", False)
+                if not isinstance(invert, bool):
+                    invert = False
+
                 match_res = self.check_row_match(
                     row, col,
-                    r_cfg.get("compare_method"),
+                    method,
                     r_cfg.get("compare_target"),
                     r_cfg.get("compare_value"),
                     regex_patterns[j],
                     range_start=r_cfg.get("range_start"),
-                    range_end=r_cfg.get("range_end")
+                    range_end=r_cfg.get("range_end"),
+                    invert=invert
                 )
                 rule_results.append(match_res)
         
@@ -417,12 +423,14 @@ class FilterWorker(QObject):
                 regex_patterns = []
                 for j, r_cfg in enumerate(rules_cfg):
                     col = r_cfg.get("compare_col", "none")
-                    method = r_cfg.get("compare_method")
+                    method = r_cfg.get("compare_method", 0)
+                    if not isinstance(method, int):
+                        method = 0
                     target = r_cfg.get("compare_target")
                     val = r_cfg.get("compare_value", "")
 
                     pat = None
-                    if col != "none" and method == "正規表達式" and target == "manual":
+                    if col != "none" and method == CompareMethod.REGEX and target == "manual":
                         try:
                             pat = re.compile(val)
                         except re.error as e:

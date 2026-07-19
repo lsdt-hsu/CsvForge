@@ -2,7 +2,14 @@
 filter_config.py — 過濾面板設定與序列化
 """
 
+from enum import IntEnum
 from dataclasses import dataclass, field
+
+class CompareMethod(IntEnum):
+    FULL_MATCH = 0  # 全符合
+    CONTAINS = 1    # 包含
+    BELONG = 2      # 屬於
+    REGEX = 3       # 正規表達式
 
 @dataclass
 class FilterPanelConfig:

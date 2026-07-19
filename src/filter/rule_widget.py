@@ -1,9 +1,10 @@
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QWidget, QHBoxLayout
+    QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QWidget, QHBoxLayout, QCheckBox
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QPen, QColor
 from plugin_sdk.theme import applyStandardLabelStyle, applyStandardComboBoxStyle, applyStandardLineEditStyle
+from filter.filter_config import CompareMethod
 
 class CircularToggleButton(QPushButton):
     def __init__(self, parent=None):
@@ -97,9 +98,9 @@ class RuleWidget(QWidget):
         row1 = QHBoxLayout()
         row1.setContentsMargins(0, 0, 0, 0)
         row1.setSpacing(10)
-        lbl_col = QLabel("比對欄位：")
+        lbl_col = QLabel("欄位：")
         applyStandardLabelStyle(lbl_col)
-        lbl_col.setFixedWidth(75)
+        lbl_col.setFixedWidth(45)
         self.cmb_compare_col = QComboBox()
         applyStandardComboBoxStyle(self.cmb_compare_col)
         self.cmb_compare_col.addItem("不過濾", "none")
@@ -151,24 +152,32 @@ class RuleWidget(QWidget):
         row2 = QHBoxLayout()
         row2.setContentsMargins(0, 0, 0, 0)
         row2.setSpacing(10)
-        lbl_method = QLabel("比對方式：")
+        lbl_method = QLabel("方式：")
         applyStandardLabelStyle(lbl_method)
-        lbl_method.setFixedWidth(75)
+        lbl_method.setFixedWidth(45)
         self.cmb_compare_method = QComboBox()
         applyStandardComboBoxStyle(self.cmb_compare_method)
-        self.cmb_compare_method.addItems(["完全符合", "包含", "未包含", "正規表達式", "屬於", "不屬於"])
+        self.cmb_compare_method.addItems(["全符合", "包含", "屬於", "正規表達式"])
+        self.cmb_compare_method.setFixedWidth(120)
         self.cmb_compare_method.currentIndexChanged.connect(self.on_method_changed)
+        
+        self.chk_invert = QCheckBox("反相")
+        self.chk_invert.setChecked(False)
+        self.chk_invert.stateChanged.connect(self.parent_panel.on_rule_content_changed)
+        
         row2.addWidget(lbl_method)
         row2.addWidget(self.cmb_compare_method)
+        row2.addWidget(self.chk_invert)
+        row2.addStretch(1)
         layout.addLayout(row2)
 
         # 3. 比對目標列
         row3 = QHBoxLayout()
         row3.setContentsMargins(0, 0, 0, 0)
         row3.setSpacing(10)
-        lbl_target = QLabel("比對目標：")
+        lbl_target = QLabel("目標：")
         applyStandardLabelStyle(lbl_target)
-        lbl_target.setFixedWidth(75)
+        lbl_target.setFixedWidth(45)
         self.cmb_compare_target = QComboBox()
         applyStandardComboBoxStyle(self.cmb_compare_target)
         self.cmb_compare_target.addItem("手動輸入", "manual")
@@ -177,10 +186,10 @@ class RuleWidget(QWidget):
         row3.addWidget(self.cmb_compare_target)
         layout.addLayout(row3)
 
-        # 4. 輸入框容器 (內縮 20 像素)
+        # 4. 輸入框容器 (內縮 45 像素以對齊下拉選單)
         self.value_container = QWidget()
         value_layout = QHBoxLayout(self.value_container)
-        value_layout.setContentsMargins(20, 0, 0, 0)
+        value_layout.setContentsMargins(45, 0, 0, 0)
         value_layout.setSpacing(0)
         self.txt_compare_value = QLineEdit()
         applyStandardLineEditStyle(self.txt_compare_value)
@@ -189,10 +198,10 @@ class RuleWidget(QWidget):
         value_layout.addWidget(self.txt_compare_value)
         layout.addWidget(self.value_container)
 
-        # 5. 屬於容器 (內縮 20 像素)
+        # 5. 屬於容器 (內縮 45 像素以對齊下拉選單)
         self.belong_container = QWidget()
         belong_layout = QHBoxLayout(self.belong_container)
-        belong_layout.setContentsMargins(20, 0, 0, 0)
+        belong_layout.setContentsMargins(45, 0, 0, 0)
         belong_layout.setSpacing(0)
         self.cmb_belong_value = QComboBox()
         applyStandardComboBoxStyle(self.cmb_belong_value)
@@ -269,8 +278,8 @@ class RuleWidget(QWidget):
         self.cmb_compare_target.blockSignals(True)
         old_target = self.cmb_compare_target.currentData()
         self.cmb_compare_target.clear()
-        method = self.cmb_compare_method.currentText()
-        if method in ("屬於", "不屬於"):
+        method_idx = self.cmb_compare_method.currentIndex()
+        if method_idx == CompareMethod.BELONG:
             self.cmb_compare_target.addItem("語系", "語系")
             self.cmb_compare_target.addItem("含數字", "含數字")
             self.cmb_compare_target.addItem("純數字", "純數字")
@@ -319,20 +328,20 @@ class RuleWidget(QWidget):
         self.cmb_compare_method.setEnabled(True)
         self.cmb_compare_target.setEnabled(True)
 
-        method = self.cmb_compare_method.currentText()
-        if method in ("屬於", "不屬於"):
+        method_idx = self.cmb_compare_method.currentIndex()
+        if method_idx == CompareMethod.BELONG:
             self.value_container.setVisible(False)
             self.belong_container.setVisible(True)
             
-            target = self.cmb_compare_target.currentData()
+            target_idx = self.cmb_compare_target.currentIndex()
             self.cmb_belong_value.blockSignals(True)
             old_belong = self.cmb_belong_value.currentText()
             self.cmb_belong_value.clear()
-            if target == "語系":
+            if target_idx == 0:  # 語系
                 items = ["中文", "繁體中文", "簡體中文", "日文(通用)", "日文(專字)", "韓文", "英文", "拉丁語系", "其他語系"]
-            elif target in ("含數字", "純數字"):
+            elif target_idx in (1, 2):  # 含數字, 純數字
                 items = ["半形", "全半形", "多國語言"]
-            elif target in ("文數字(無符號)", "僅符號"):
+            elif target_idx in (3, 4):  # 文數字(無符號), 僅符號
                 items = ["半形", "全半形"]
             else:
                 items = []
@@ -344,8 +353,8 @@ class RuleWidget(QWidget):
             self.cmb_belong_value.blockSignals(False)
         else:
             self.belong_container.setVisible(False)
-            target = self.cmb_compare_target.currentData()
-            if target == "manual":
+            target_idx = self.cmb_compare_target.currentIndex()
+            if target_idx == 0:  # 手動輸入
                 self.value_container.setVisible(True)
             else:
                 self.value_container.setVisible(False)
@@ -367,8 +376,8 @@ class RuleWidget(QWidget):
         self.parent_panel.delete_rule(self.index)
 
     def get_config(self):
-        method = self.cmb_compare_method.currentText()
-        if method in ("屬於", "不屬於"):
+        method_idx = self.cmb_compare_method.currentIndex()
+        if method_idx == CompareMethod.BELONG:
             val = self.cmb_belong_value.currentText()
         else:
             val = self.txt_compare_value.text()
@@ -387,7 +396,8 @@ class RuleWidget(QWidget):
             
         return {
             "compare_col": col,
-            "compare_method": self.cmb_compare_method.currentText(),
+            "compare_method": method_idx,
+            "invert": self.chk_invert.isChecked(),
             "compare_target": target,
             "compare_value": val,
             "belong_value_idx": self.cmb_belong_value.currentIndex(),
@@ -398,13 +408,23 @@ class RuleWidget(QWidget):
     def set_config(self, cfg):
         self.cmb_compare_col.blockSignals(True)
         self.cmb_compare_method.blockSignals(True)
+        self.chk_invert.blockSignals(True)
         self.cmb_compare_target.blockSignals(True)
         self.cmb_belong_value.blockSignals(True)
         self.cmb_range_start.blockSignals(True)
         self.cmb_range_end.blockSignals(True)
 
         col = cfg.get("compare_col", -1)
-        method = cfg.get("compare_method", "完全符合")
+        method = cfg.get("compare_method", 0)
+        if not isinstance(method, int):
+            method = 0
+        if not (0 <= method < self.cmb_compare_method.count()):
+            method = 0
+            
+        invert = cfg.get("invert", False)
+        if not isinstance(invert, bool):
+            invert = False
+
         target = cfg.get("compare_target", -1)
         val = cfg.get("compare_value", "")
         b_idx = cfg.get("belong_value_idx", 0)
@@ -463,8 +483,8 @@ class RuleWidget(QWidget):
         idx = self.cmb_compare_col.findData(ui_col)
         self.cmb_compare_col.setCurrentIndex(idx if idx >= 0 else 0)
 
-        idx = self.cmb_compare_method.findText(method)
-        self.cmb_compare_method.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cmb_compare_method.setCurrentIndex(method)
+        self.chk_invert.setChecked(invert)
 
         idx = self.cmb_compare_target.findData(ui_target)
         self.cmb_compare_target.setCurrentIndex(idx if idx >= 0 else 0)
@@ -477,7 +497,7 @@ class RuleWidget(QWidget):
 
         self.update_belong_visibility()
 
-        if method in ("屬於", "不屬於"):
+        if method == CompareMethod.BELONG:
             if 0 <= b_idx < self.cmb_belong_value.count():
                 self.cmb_belong_value.setCurrentIndex(b_idx)
         else:
@@ -485,6 +505,7 @@ class RuleWidget(QWidget):
 
         self.cmb_compare_col.blockSignals(False)
         self.cmb_compare_method.blockSignals(False)
+        self.chk_invert.blockSignals(False)
         self.cmb_compare_target.blockSignals(False)
         self.cmb_belong_value.blockSignals(False)
         self.cmb_range_start.blockSignals(False)
