@@ -4,9 +4,9 @@ logic_tree_editor_dialog.py — 邏輯樹編輯器對話框
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QGraphicsView,
-    QGraphicsScene, QGraphicsLineItem, QPushButton, QWidget
+    QGraphicsScene, QGraphicsLineItem, QPushButton, QWidget, QMessageBox
 )
-from PyQt6.QtCore import Qt, QPointF
+from PyQt6.QtCore import Qt, QPointF, QTimer
 from PyQt6.QtGui import QPen, QColor, QPainter
 from plugin_sdk import theme
 
@@ -20,6 +20,36 @@ except ImportError:
     from logic_node import RuleNode, LogicOpNode
     from rule_node_item import RuleNodeItem
     from logic_node_item import LogicNodeItem
+
+
+class EditorGraphicsScene(QGraphicsScene):
+    """
+    自訂 QGraphicsScene，負責將滑鼠與鍵盤事件轉發至 LogicTreeEditorDialog。
+    """
+
+    def __init__(self, dialog: "LogicTreeEditorDialog", parent=None):
+        super().__init__(parent)
+        self.dialog = dialog
+
+    def mousePressEvent(self, event):
+        if self.dialog.handle_scene_mouse_press(event):
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.dialog.handle_scene_mouse_move(event):
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self.dialog.handle_scene_mouse_release(event):
+            return
+        super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        if self.dialog.handle_scene_key_press(event):
+            return
+        super().keyPressEvent(event)
 
 
 class LogicTreeEditorDialog(QDialog):
@@ -38,6 +68,24 @@ class LogicTreeEditorDialog(QDialog):
         self.setModal(True)
         self.setStyleSheet("QDialog { background-color: #1a1b26; }")
 
+        # 拖曳與 Slot preview 控制變數
+        self._slot_positions = []
+        self._initial_rule_items = []
+        self._initial_slot_map = {}
+        self._spacing_x = 110.0
+        self._base_y = 300.0
+
+        self._is_dragging = False
+        self._dragged_item = None
+        self._ghost_item = None
+        self._pending_slot_idx = None
+        self._current_slot_order = []
+
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.setInterval(200)
+        self._hover_timer.timeout.connect(self._on_hover_timeout)
+
         self._init_ui(expression_text)
         self._build_tree_graph()
 
@@ -55,8 +103,8 @@ class LogicTreeEditorDialog(QDialog):
         self.txt_expression.setAcceptRichText(False)
         main_layout.addWidget(self.txt_expression)
 
-        # 2. 中間區域：圖形化編輯區 (QGraphicsView & QGraphicsScene，佔用剩餘空間)
-        self.graphics_scene = QGraphicsScene(self)
+        # 2. 中間區域：圖形化編輯區 (QGraphicsView & EditorGraphicsScene，佔用剩餘空間)
+        self.graphics_scene = EditorGraphicsScene(self, self)
         self.graphics_scene.setBackgroundBrush(Qt.GlobalColor.transparent)
 
         self.graphics_view = QGraphicsView(self.graphics_scene)
@@ -126,6 +174,8 @@ class LogicTreeEditorDialog(QDialog):
         spacing_x = 110.0
         base_y = 300.0
         level_height = 80.0
+        self._spacing_x = spacing_x
+        self._base_y = base_y
 
         for i, leaf in enumerate(leaf_nodes):
             level_map[leaf] = 0
@@ -172,10 +222,13 @@ class LogicTreeEditorDialog(QDialog):
         draw_connections(tree_root)
 
         # 4. 繪製節點 (RuleNodeItem & LogicNodeItem)
+        rule_items_by_leaf = {}
+
         def draw_nodes(node):
             pos = pos_map[node]
             if isinstance(node, RuleNode) or node.op_type == "LEAF":
                 item = RuleNodeItem(node.leaf_idx)
+                rule_items_by_leaf[node] = item
             else:
                 item = LogicNodeItem(node.op_type)
 
@@ -188,6 +241,12 @@ class LogicTreeEditorDialog(QDialog):
                     draw_nodes(child)
 
         draw_nodes(tree_root)
+
+        # 記錄 Slot 座標與 Initial Rule 節點列表
+        self._slot_positions = [QPointF(i * spacing_x, base_y) for i in range(len(leaf_nodes))]
+        self._initial_rule_items = [rule_items_by_leaf[leaf] for leaf in leaf_nodes if leaf in rule_items_by_leaf]
+        self._initial_slot_map = {item: i for i, item in enumerate(self._initial_rule_items)}
+        self._current_slot_order = list(self._initial_rule_items)
 
         # 5. 調整 Scene 範圍與 View 縮放視角
         boundingRect = self.graphics_scene.itemsBoundingRect()
@@ -203,3 +262,150 @@ class LogicTreeEditorDialog(QDialog):
             self.graphics_view.fitInView(
                 boundingRect.adjusted(-60, -60, 60, 60), Qt.AspectRatioMode.KeepAspectRatio
             )
+
+    # ----------------------------------------------------------------------
+    # 拖曳與 Slot Preview 事件處理
+    # ----------------------------------------------------------------------
+
+    def _calc_slot_idx(self, x_pos: float) -> int:
+        if not self._slot_positions:
+            return 0
+        idx = int(round(x_pos / self._spacing_x))
+        return max(0, min(len(self._slot_positions) - 1, idx))
+
+    def handle_scene_mouse_press(self, event) -> bool:
+        if event.button() == Qt.MouseButton.LeftButton:
+            items = self.graphics_scene.items(event.scenePos())
+            target_item = None
+            for it in items:
+                if isinstance(it, RuleNodeItem) and it != self._ghost_item:
+                    target_item = it
+                    break
+
+            if target_item and target_item in self._initial_rule_items:
+                self._start_drag(target_item, event.scenePos())
+                return True
+
+        elif self._is_dragging and event.button() in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton):
+            self._cancel_drag()
+            return True
+
+        return False
+
+    def _start_drag(self, item: RuleNodeItem, scene_pos: QPointF):
+        self._is_dragging = True
+        self._dragged_item = item
+
+        # 記錄本次拖曳開始前的順序與 Slot 映射基準
+        self._drag_start_order = list(self._current_slot_order)
+        self._drag_start_slot_map = {it: i for i, it in enumerate(self._drag_start_order)}
+
+        # 建立半透明預覽圖示跟隨游標
+        self._ghost_item = RuleNodeItem(item.rule_idx)
+        self._ghost_item.setOpacity(0.6)
+        self._ghost_item.setZValue(100)
+        self.graphics_scene.addItem(self._ghost_item)
+        self._ghost_item.setPos(scene_pos)
+
+        slot_idx = self._calc_slot_idx(scene_pos.x())
+        self._pending_slot_idx = slot_idx
+        self._hover_timer.start(200)
+
+    def handle_scene_mouse_move(self, event) -> bool:
+        if self._is_dragging:
+            scene_pos = event.scenePos()
+            if self._ghost_item:
+                self._ghost_item.setPos(scene_pos)
+
+            slot_idx = self._calc_slot_idx(scene_pos.x())
+            if slot_idx != self._pending_slot_idx:
+                self._pending_slot_idx = slot_idx
+                self._hover_timer.start(200)
+
+            return True
+        return False
+
+    def _on_hover_timeout(self):
+        if not self._is_dragging or self._pending_slot_idx is None or self._dragged_item is None:
+            return
+
+        target_slot = self._pending_slot_idx
+
+        # 計算預覽 Slot 排列 (將 dragged_item 插入 target_slot，其餘順移)
+        new_order = [item for item in self._drag_start_order if item != self._dragged_item]
+        target_slot = max(0, min(len(new_order), target_slot))
+        new_order.insert(target_slot, self._dragged_item)
+
+        # 更新卡片位置與視覺狀態回饋 (相對拖曳前狀態 _drag_start_slot_map)
+        for i, item in enumerate(new_order):
+            item.setPos(self._slot_positions[i])
+            if item == self._dragged_item:
+                item.set_visual_state(RuleNodeItem.STATE_DRAGGING)
+            elif self._drag_start_slot_map.get(item) != i:
+                item.set_visual_state(RuleNodeItem.STATE_DISPLACED)
+            else:
+                item.set_visual_state(RuleNodeItem.STATE_NORMAL)
+
+        self._current_slot_order = new_order
+
+    def _cancel_drag(self):
+        if not self._is_dragging:
+            return
+
+        self._hover_timer.stop()
+
+        if self._ghost_item and self._ghost_item.scene() == self.graphics_scene:
+            self.graphics_scene.removeItem(self._ghost_item)
+            self._ghost_item = None
+
+        # 還原至該次拖曳開始前順序與一般視覺狀態
+        for i, item in enumerate(self._drag_start_order):
+            item.setPos(self._slot_positions[i])
+            item.set_visual_state(RuleNodeItem.STATE_NORMAL)
+
+        self._current_slot_order = list(self._drag_start_order)
+        self._is_dragging = False
+        self._dragged_item = None
+        self._pending_slot_idx = None
+
+    def handle_scene_mouse_release(self, event) -> bool:
+        if self._is_dragging and event.button() == Qt.MouseButton.LeftButton:
+            self._hover_timer.stop()
+
+            if self._ghost_item and self._ghost_item.scene() == self.graphics_scene:
+                self.graphics_scene.removeItem(self._ghost_item)
+                self._ghost_item = None
+
+            target_slot = self._calc_slot_idx(event.scenePos().x())
+            candidate_order = [item for item in self._drag_start_order if item != self._dragged_item]
+            target_slot = max(0, min(len(candidate_order), target_slot))
+            candidate_order.insert(target_slot, self._dragged_item)
+
+            apply_order = candidate_order
+
+            # 拖曳結束：套用最終位置，且所有 Rule 視覺狀態設為一般狀態 (STATE_NORMAL)
+            for i, item in enumerate(apply_order):
+                item.setPos(self._slot_positions[i])
+                item.set_visual_state(RuleNodeItem.STATE_NORMAL)
+
+            self._current_slot_order = list(apply_order)
+            self._is_dragging = False
+            self._dragged_item = None
+            self._pending_slot_idx = None
+            return True
+
+        return False
+
+    def handle_scene_key_press(self, event) -> bool:
+        if self._is_dragging and event.key() == Qt.Key.Key_Escape:
+            self._cancel_drag()
+            return True
+        return False
+
+    def keyPressEvent(self, event):
+        if self._is_dragging and event.key() == Qt.Key.Key_Escape:
+            self._cancel_drag()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
