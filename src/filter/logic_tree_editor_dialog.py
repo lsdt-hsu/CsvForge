@@ -424,7 +424,8 @@ class LogicTreeEditorDialog(QDialog):
                 item.set_visual_state(RuleNodeItem.STATE_NORMAL)
 
         self._current_slot_order = new_order
-        self._sync_ast_and_update_expression()
+        self._rebuild_tree_from_heights()
+        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
         self._validate_geometry()
 
     def _on_logic_hover_timeout(self):
@@ -449,33 +450,67 @@ class LogicTreeEditorDialog(QDialog):
                 item.set_visual_state(LogicNodeItem.STATE_NORMAL)
 
         self._current_logic_layer_order = new_order
+        self._rebuild_tree_from_heights()
+        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
         self._validate_geometry()
+
+    def _rebuild_tree_from_heights(self):
+        """
+        自動修正：依照當前 Rule 節點順序與 Logic 節點的高度 (Y 座標)，動態重新建立邏輯樹 (AST)。
+        """
+        if not hasattr(self, "_initial_rule_items") or not self._initial_rule_items:
+            return
+
+        rule_items = getattr(self, "_current_slot_order", self._initial_rule_items)
+        if not rule_items:
+            return
+
+        logic_items = sorted(getattr(self, "_initial_logic_items", []), key=lambda it: it.x())
+        num_rules = len(rule_items)
+
+        if num_rules == 1:
+            leaf = RuleNode(leaf_idx=rule_items[0].rule_idx)
+            self._tree_root = leaf
+            self._node_to_item = {leaf: rule_items[0]}
+            return
+
+        node_to_item = {}
+
+        def build_subtree(rule_start: int, rule_end: int):
+            if rule_start == rule_end:
+                leaf = RuleNode(leaf_idx=rule_items[rule_start].rule_idx)
+                node_to_item[leaf] = rule_items[rule_start]
+                return leaf
+
+            best_op_idx = rule_start
+            min_y = logic_items[rule_start].y()
+
+            for op_idx in range(rule_start + 1, rule_end):
+                op_y = logic_items[op_idx].y()
+                if op_y < min_y:
+                    min_y = op_y
+                    best_op_idx = op_idx
+
+            op_item = logic_items[best_op_idx]
+
+            left_child = build_subtree(rule_start, best_op_idx)
+            right_child = build_subtree(best_op_idx + 1, rule_end)
+
+            parent_node = LogicOpNode(op_type=op_item.op_type, children=[left_child, right_child])
+            node_to_item[parent_node] = op_item
+            return parent_node
+
+        self._tree_root = build_subtree(0, num_rules - 1)
+        self._node_to_item = node_to_item
 
     def _sync_ast_and_update_expression(self):
         """
         將目前 Slot 順序中的 RuleNodeItem 同步至 AST 葉節點，並動態重構運算式文字。
         """
-        if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_current_slot_order", None):
-            return
-
-        leaf_nodes = []
-
-        def collect_leaves(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                leaf_nodes.append(node)
-            else:
-                for child in node.children:
-                    collect_leaves(child)
-
-        collect_leaves(self._tree_root)
-
-        for i, leaf in enumerate(leaf_nodes):
-            if i < len(self._current_slot_order):
-                item = self._current_slot_order[i]
-                leaf.leaf_idx = item.rule_idx
-
-        new_expr = logic_tree.to_string(self._tree_root)
-        self.txt_expression.setPlainText(new_expr)
+        self._rebuild_tree_from_heights()
+        if hasattr(self, "_tree_root") and self._tree_root:
+            new_expr = logic_tree.to_string(self._tree_root)
+            self.txt_expression.setPlainText(new_expr)
 
     def _cancel_drag(self):
         if not self._is_dragging:
@@ -496,7 +531,8 @@ class LogicTreeEditorDialog(QDialog):
         self._is_dragging = False
         self._dragged_item = None
         self._pending_slot_idx = None
-        self._sync_ast_and_update_expression()
+        self._rebuild_tree_from_heights()
+        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
         self._validate_geometry()
 
     def _cancel_logic_drag(self):
@@ -518,6 +554,8 @@ class LogicTreeEditorDialog(QDialog):
         self._is_dragging_logic = False
         self._dragged_logic_item = None
         self._pending_logic_layer_idx = None
+        self._rebuild_tree_from_heights()
+        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
         self._validate_geometry()
 
     def handle_scene_mouse_release(self, event) -> bool:
@@ -544,6 +582,8 @@ class LogicTreeEditorDialog(QDialog):
             self._is_dragging_logic = False
             self._dragged_logic_item = None
             self._pending_logic_layer_idx = None
+            self._rebuild_tree_from_heights()
+            self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
             self._validate_geometry()
             return True
 
@@ -570,16 +610,74 @@ class LogicTreeEditorDialog(QDialog):
             self._is_dragging = False
             self._dragged_item = None
             self._pending_slot_idx = None
-            self._sync_ast_and_update_expression()
+            self._rebuild_tree_from_heights()
+            self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
             self._validate_geometry()
             return True
 
         return False
 
+    def _quick_fix_geometry(self):
+        """
+        快速修正：檢查所有邏輯節點之間的拓撲依賴關係，重新分配它們的高度層級。
+        最內層運算的邏輯節點分配在最低高度層級，最外層分配在最高層級，消除幾何錯位。
+        """
+        if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_node_to_item", None):
+            return
+
+        pos_map = {}
+        level_map = {}
+
+        ast_leaves = []
+        def collect_leaves(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                ast_leaves.append(node)
+            else:
+                for child in node.children:
+                    collect_leaves(child)
+        collect_leaves(self._tree_root)
+
+        for i, leaf in enumerate(ast_leaves):
+            level_map[leaf] = 0
+            pos_map[leaf] = QPointF(i * self._spacing_x, self._base_y)
+
+        def calculate_node_metrics(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                return level_map[node], pos_map[node].x()
+
+            child_levels = []
+            child_xs = []
+            for child in node.children:
+                c_lvl, c_x = calculate_node_metrics(child)
+                child_levels.append(c_lvl)
+                child_xs.append(c_x)
+
+            node_lvl = 1 + (max(child_levels) if child_levels else 0)
+            node_x = sum(child_xs) / len(child_xs) if child_xs else 0.0
+
+            level_map[node] = node_lvl
+            node_y = self._base_y - node_lvl * 80.0
+            pos_map[node] = QPointF(node_x, node_y)
+
+            return node_lvl, node_x
+
+        calculate_node_metrics(self._tree_root)
+
+        for node, item in self._node_to_item.items():
+            if isinstance(item, LogicNodeItem) and node in pos_map:
+                item.setPos(pos_map[node])
+                item.set_visual_state(LogicNodeItem.STATE_NORMAL)
+
+        logic_items = list(self._initial_logic_items)
+        logic_items.sort(key=lambda item: (self._base_y - item.pos().y(), item.pos().x()))
+        self._current_logic_layer_order = logic_items
+
+        self._validate_geometry()
+
     def _on_confirm_clicked(self):
-        """按鈕點擊事件：若為「快速修正」則修改回「確認」；若為「確認」則觸發 accept()。"""
+        """按鈕點擊事件：若為「快速修正」則觸發 _quick_fix_geometry；若為「確認」則觸發 accept()。"""
         if self.btn_confirm.text() == "快速修正":
-            self.btn_confirm.setText("確認")
+            self._quick_fix_geometry()
         else:
             self.accept()
 
