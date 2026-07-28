@@ -1,5 +1,5 @@
 """
-test_phase5_geometry_validator.py — Phase 5 幾何合法性檢查模組單元測試
+test_phase5_geometry_validator.py — Phase 5 幾何合法性檢查模組單元測試 (Slot-bound Model)
 """
 
 import sys
@@ -44,33 +44,29 @@ def test_phase5_geometry_validator():
     assert root_op.visual_state == LogicNodeItem.STATE_INVALID
     assert dialog.btn_confirm.text() == "快速修正"
 
+    # 測試「快速修正」按鈕點擊事件
+    dialog._on_confirm_clicked()
+    assert dialog.btn_confirm.text() == "確認"
+
     # 還原高度
     root_op.setPos(root_op.x(), child_op.y() - 80)
     dialog._validate_geometry()
     assert root_op.visual_state == LogicNodeItem.STATE_NORMAL
     assert dialog.btn_confirm.text() == "確認"
 
-    # 3. 測試子樹交叉違規: 交換 Rule 節點 X 座標 (將 #3 移至 #1 左側)
-    rule1_item = dialog._initial_rule_items[0]  # #1 (X = 0)
-    rule3_item = dialog._initial_rule_items[2]  # #3 (X = 220)
+    # 3. 測試 Slot-bound 模型下卡片拖曳對調: 幾何永遠保持合法，表達式動態重構
+    rule3_item = dialog._initial_rule_items[2]  # #3
+    dialog._start_drag(rule3_item, QPointF(0, rule3_item.y()))
+    dialog._pending_slot_idx = 0
+    dialog._on_hover_timeout()
 
-    # 將 Rule #3 移至 X = -50 (位在左子樹 #1 與 #2 之左側)
-    rule3_item.setPos(-50, rule3_item.y())
-    dialog._validate_geometry()
-
-    # 包含 #3 的父節點 OR 應偵測到子樹交叉違規
-    assert root_op.visual_state == LogicNodeItem.STATE_INVALID
-    assert dialog.btn_confirm.text() == "快速修正"
-
-    # 4. 測試「快速修正」按鈕點擊事件
-    dialog._on_confirm_clicked()
-    assert dialog.btn_confirm.text() == "確認"
-
-    # 還原 Rule #3 座標
-    rule3_item.setPos(220, rule3_item.y())
-    dialog._validate_geometry()
+    # Slot-bound 模式下，幾何連線永遠合法 (STATE_NORMAL)，且文字更新為 "(#3 AND #1) OR #2"
     assert root_op.visual_state == LogicNodeItem.STATE_NORMAL
-    assert dialog.btn_confirm.text() == "確認"
+    assert dialog.txt_expression.toPlainText() == "(#3 AND #1) OR #2"
+
+    # 還原拖曳
+    dialog._cancel_drag()
+    assert dialog.txt_expression.toPlainText() == "(#1 AND #2) OR #3"
 
     print("All Phase 5 Geometry Validator tests passed successfully!")
 

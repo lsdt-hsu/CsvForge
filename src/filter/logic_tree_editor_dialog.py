@@ -97,6 +97,7 @@ class LogicTreeEditorDialog(QDialog):
 
         self._tree_root = None
         self._node_to_item = {}
+        self._line_items = []
 
         self._logic_hover_timer = QTimer(self)
         self._logic_hover_timer.setSingleShot(True)
@@ -219,24 +220,6 @@ class LogicTreeEditorDialog(QDialog):
             return node_lvl, node_x
 
         calculate_node_metrics(tree_root)
-
-        # 3. 繪製相連直線 (QGraphicsLineItem)
-        line_pen = QPen(QColor("#565f89"), 2.0)
-        line_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-
-        def draw_connections(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                return
-            p_pos = pos_map[node]
-            for child in node.children:
-                c_pos = pos_map[child]
-                line = QGraphicsLineItem(p_pos.x(), p_pos.y(), c_pos.x(), c_pos.y())
-                line.setPen(line_pen)
-                line.setZValue(-1)
-                self.graphics_scene.addItem(line)
-                draw_connections(child)
-
-        draw_connections(tree_root)
 
         self._tree_root = tree_root
         self._node_to_item = {}
@@ -441,6 +424,8 @@ class LogicTreeEditorDialog(QDialog):
                 item.set_visual_state(RuleNodeItem.STATE_NORMAL)
 
         self._current_slot_order = new_order
+        self._sync_ast_and_update_expression()
+        self._validate_geometry()
 
     def _on_logic_hover_timeout(self):
         if not self._is_dragging_logic or self._pending_logic_layer_idx is None or self._dragged_logic_item is None:
@@ -464,6 +449,33 @@ class LogicTreeEditorDialog(QDialog):
                 item.set_visual_state(LogicNodeItem.STATE_NORMAL)
 
         self._current_logic_layer_order = new_order
+        self._validate_geometry()
+
+    def _sync_ast_and_update_expression(self):
+        """
+        將目前 Slot 順序中的 RuleNodeItem 同步至 AST 葉節點，並動態重構運算式文字。
+        """
+        if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_current_slot_order", None):
+            return
+
+        leaf_nodes = []
+
+        def collect_leaves(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                leaf_nodes.append(node)
+            else:
+                for child in node.children:
+                    collect_leaves(child)
+
+        collect_leaves(self._tree_root)
+
+        for i, leaf in enumerate(leaf_nodes):
+            if i < len(self._current_slot_order):
+                item = self._current_slot_order[i]
+                leaf.leaf_idx = item.rule_idx
+
+        new_expr = logic_tree.to_string(self._tree_root)
+        self.txt_expression.setPlainText(new_expr)
 
     def _cancel_drag(self):
         if not self._is_dragging:
@@ -484,6 +496,7 @@ class LogicTreeEditorDialog(QDialog):
         self._is_dragging = False
         self._dragged_item = None
         self._pending_slot_idx = None
+        self._sync_ast_and_update_expression()
         self._validate_geometry()
 
     def _cancel_logic_drag(self):
@@ -557,6 +570,7 @@ class LogicTreeEditorDialog(QDialog):
             self._is_dragging = False
             self._dragged_item = None
             self._pending_slot_idx = None
+            self._sync_ast_and_update_expression()
             self._validate_geometry()
             return True
 
@@ -574,21 +588,31 @@ class LogicTreeEditorDialog(QDialog):
         幾何合法性檢查器 (Geometry Validator)。
         由底層向上 (Post-Order) 掃描邏輯樹拓撲結構與 QGraphicsItem 幾何位置。
         - 檢查條件 1：父邏輯節點 Y 軸高度等於或低於子節點 Height (parent.y() >= child.y())
-        - 檢查條件 2：相鄰子樹之間是否存在左子樹節點 X 座標大於等於右子樹節點 X 座標之交叉
         """
         if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_node_to_item", None):
             return
 
         invalid_nodes = set()
 
-        def get_subtree_items(node):
-            items = []
-            if node in self._node_to_item:
-                items.append(self._node_to_item[node])
-            if not (isinstance(node, RuleNode) or node.op_type == "LEAF"):
+        # 建立 AST Leaf 節點與當前 Slot Item 之對應 (第 i 個 Leaf -> Slot i 上的 Item)
+        ast_leaves = []
+        def collect_leaves(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                ast_leaves.append(node)
+            else:
                 for child in node.children:
-                    items.extend(get_subtree_items(child))
-            return items
+                    collect_leaves(child)
+        collect_leaves(self._tree_root)
+
+        slot_item_map = {}
+        for i, leaf in enumerate(ast_leaves):
+            if i < len(getattr(self, "_current_slot_order", [])):
+                slot_item_map[leaf] = self._current_slot_order[i]
+
+        def get_item_for_node(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                return slot_item_map.get(node)
+            return self._node_to_item.get(node)
 
         def scan_node(node):
             if isinstance(node, RuleNode) or node.op_type == "LEAF":
@@ -604,22 +628,10 @@ class LogicTreeEditorDialog(QDialog):
 
             # 1. Y 軸高度檢查 (parent.y() >= child.y())
             for child in node.children:
-                child_item = self._node_to_item.get(child)
+                child_item = get_item_for_node(child)
                 if child_item and parent_item.y() >= child_item.y():
                     invalid_nodes.add(node)
                     break
-
-            # 2. 子樹交叉檢查 (left_max_x >= right_min_x)
-            if len(node.children) >= 2:
-                for i in range(len(node.children) - 1):
-                    left_items = get_subtree_items(node.children[i])
-                    right_items = get_subtree_items(node.children[i + 1])
-                    if left_items and right_items:
-                        left_max_x = max(it.x() for it in left_items)
-                        right_min_x = min(it.x() for it in right_items)
-                        if left_max_x >= right_min_x:
-                            invalid_nodes.add(node)
-                            break
 
         scan_node(self._tree_root)
 
@@ -636,6 +648,79 @@ class LogicTreeEditorDialog(QDialog):
             self.btn_confirm.setText("快速修正")
         else:
             self.btn_confirm.setText("確認")
+
+        # 重新計算並繪製動態連線 (Slot-bound 連線)
+        self._update_connection_lines()
+
+    def _update_connection_lines(self):
+        """
+        即時重新計算並繪製所有節點間的連接線 (Slot-bound Model)。
+        - 採 Post-Order (由下往上) 遞迴檢查與繪製。
+        - 邏輯樹之第 i 個 Leaf 節點永遠指向 Slot i (即 self._current_slot_order[i])。
+        - 確保連線永遠留在固定 Slot，卡片置換時連線完全不交叉、不跑位。
+        """
+        if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_node_to_item", None):
+            return
+
+        # 1. 清理現有連線
+        for line_item in getattr(self, "_line_items", []):
+            if line_item.scene() == self.graphics_scene:
+                self.graphics_scene.removeItem(line_item)
+        self._line_items = []
+
+        line_pen = QPen(QColor("#565f89"), 2.0)
+        line_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+
+        # 2. 建立 AST Leaf 節點與當前 Slot Item 之對應 (第 i 個 Leaf -> Slot i 上的 Item)
+        ast_leaves = []
+        def collect_leaves(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                ast_leaves.append(node)
+            else:
+                for child in node.children:
+                    collect_leaves(child)
+        collect_leaves(self._tree_root)
+
+        slot_item_map = {}
+        for i, leaf in enumerate(ast_leaves):
+            if i < len(getattr(self, "_current_slot_order", [])):
+                slot_item_map[leaf] = self._current_slot_order[i]
+
+        def get_item_for_node(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                return slot_item_map.get(node)
+            return self._node_to_item.get(node)
+
+        def process_node_connections(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                return
+
+            for child in node.children:
+                process_node_connections(child)
+
+            parent_item = get_item_for_node(node)
+            if not parent_item:
+                return
+
+            for child in node.children:
+                child_item = get_item_for_node(child)
+                if not child_item:
+                    continue
+
+                # 高度檢查：若父節點 Y >= 子節點 Y，則不繪製
+                if parent_item.y() >= child_item.y():
+                    continue
+
+                line = QGraphicsLineItem(
+                    parent_item.x(), parent_item.y(),
+                    child_item.x(), child_item.y()
+                )
+                line.setPen(line_pen)
+                line.setZValue(-1)
+                self.graphics_scene.addItem(line)
+                self._line_items.append(line)
+
+        process_node_connections(self._tree_root)
 
     def handle_scene_key_press(self, event) -> bool:
         if event.key() == Qt.Key.Key_Escape:
