@@ -16,7 +16,7 @@ from plugin_sdk.panel_base import BasePluginPanel
 from plugin_sdk.theme import applyStandardLabelStyle, applyStandardLineEditStyle, applyPrimaryButtonStyle, applyStandardButtonStyle
 
 from filter import logic_tree
-from filter.logic_tree_editor_dialog import LogicTreeEditorDialog
+from filter.logic_tree_editor.logic_tree_editor_dialog import LogicTreeEditorDialog
 from filter.rule_widget import RuleWidget, CircularToggleButton
 from filter.filter_config import FilterPanelConfig, serialize_filter_config, deserialize_filter_config, CompareMethod
 

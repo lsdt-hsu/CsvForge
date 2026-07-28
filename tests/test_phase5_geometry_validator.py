@@ -15,9 +15,7 @@ if project_root not in sys.path:
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from filter.logic_tree_editor_dialog import LogicTreeEditorDialog
-from filter.logic_node_item import LogicNodeItem
-from filter.rule_node_item import RuleNodeItem
+from filter.logic_tree_editor import LogicTreeEditorDialog, LogicNodeItem, RuleNodeItem
 
 
 def test_phase5_geometry_validator():
