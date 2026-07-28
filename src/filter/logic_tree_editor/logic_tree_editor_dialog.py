@@ -16,47 +16,14 @@ try:
     from filter.logic_tree_editor.rule_node_item import RuleNodeItem
     from filter.logic_tree_editor.logic_node_item import LogicNodeItem
     from filter.logic_tree_editor.logic_op_selection_dialog import LogicOpSelectionDialog
+    from filter.logic_tree_editor.editor_graphics_scene import EditorGraphicsScene
 except ImportError:
     from filter.logic_tree import logic_tree
     from logic_node import RuleNode, LogicOpNode
     from rule_node_item import RuleNodeItem
     from logic_node_item import LogicNodeItem
     from logic_op_selection_dialog import LogicOpSelectionDialog
-
-
-class EditorGraphicsScene(QGraphicsScene):
-    """
-    自訂 QGraphicsScene，負責將滑鼠與鍵盤事件轉發至 LogicTreeEditorDialog。
-    """
-
-    def __init__(self, dialog: "LogicTreeEditorDialog", parent=None):
-        super().__init__(parent)
-        self.dialog = dialog
-
-    def mousePressEvent(self, event):
-        if self.dialog.handle_scene_mouse_press(event):
-            return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self.dialog.handle_scene_mouse_move(event):
-            return
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if self.dialog.handle_scene_mouse_release(event):
-            return
-        super().mouseReleaseEvent(event)
-
-    def mouseDoubleClickEvent(self, event):
-        if self.dialog.handle_scene_mouse_double_click(event):
-            return
-        super().mouseDoubleClickEvent(event)
-
-    def keyPressEvent(self, event):
-        if self.dialog.handle_scene_key_press(event):
-            return
-        super().keyPressEvent(event)
+    from editor_graphics_scene import EditorGraphicsScene
 
 
 class LogicTreeEditorDialog(QDialog):
