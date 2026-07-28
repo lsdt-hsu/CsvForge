@@ -114,7 +114,7 @@ class TreeDragController:
         self.dialog._ghost_item.setOpacity(0.6)
         self.dialog._ghost_item.setZValue(100)
         self.dialog.graphics_scene.addItem(self.dialog._ghost_item)
-        self.dialog._ghost_item.setPos(scene_pos)
+        self.dialog._ghost_item.setPos(QPointF(scene_pos.x(), item.y()))
 
         slot_idx = self.calc_slot_idx(scene_pos.x())
         self.dialog._pending_slot_idx = slot_idx
@@ -153,8 +153,8 @@ class TreeDragController:
 
         if self.dialog._is_dragging:
             scene_pos = event.scenePos()
-            if self.dialog._ghost_item:
-                self.dialog._ghost_item.setPos(scene_pos)
+            if self.dialog._ghost_item and self.dialog._dragged_item:
+                self.dialog._ghost_item.setPos(QPointF(scene_pos.x(), self.dialog._dragged_item.y()))
 
             slot_idx = self.calc_slot_idx(scene_pos.x())
             if slot_idx != self.dialog._pending_slot_idx:
