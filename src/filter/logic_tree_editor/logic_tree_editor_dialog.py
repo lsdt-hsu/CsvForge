@@ -12,12 +12,12 @@ from PyQt6.QtGui import QPen, QColor, QPainter
 from plugin_sdk import theme
 
 try:
-    from filter import logic_tree
-    from filter.logic_node import RuleNode, LogicOpNode
+    from filter.logic_tree import logic_tree
+    from filter.logic_tree.logic_node import RuleNode, LogicOpNode
     from filter.logic_tree_editor.rule_node_item import RuleNodeItem
     from filter.logic_tree_editor.logic_node_item import LogicNodeItem
 except ImportError:
-    import logic_tree
+    from filter.logic_tree import logic_tree
     from logic_node import RuleNode, LogicOpNode
     from rule_node_item import RuleNodeItem
     from logic_node_item import LogicNodeItem

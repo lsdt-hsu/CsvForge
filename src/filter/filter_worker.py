@@ -399,7 +399,7 @@ class FilterWorker(QObject):
             matched_indices = []
 
             try:
-                from filter import logic_tree
+                from filter.logic_tree import logic_tree
 
                 total_rows = len(self.all_rows)
                 end_bound = self.end_row if self.end_row is not None else total_rows

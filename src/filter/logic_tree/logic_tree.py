@@ -5,7 +5,7 @@ logic_tree.py — 邏輯樹運算式解析、操作與序列化
 import re
 
 try:
-    from filter.logic_node import BaseNode, RuleNode, LogicOpNode
+    from filter.logic_tree.logic_node import BaseNode, RuleNode, LogicOpNode
 except ImportError:
     from logic_node import BaseNode, RuleNode, LogicOpNode
 
