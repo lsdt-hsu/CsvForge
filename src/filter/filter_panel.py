@@ -7,15 +7,16 @@ import re
 from PyQt6.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton,
     QWidget, QHBoxLayout, QMessageBox, QRadioButton, QTextEdit,
-    QScrollArea, QFrame
+    QScrollArea, QFrame, QDialog
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QPainter, QPen, QColor, QTransform, QPixmap, QIcon, QIntValidator
 from common_data.task_status import TaskStatus
 from plugin_sdk.panel_base import BasePluginPanel
-from plugin_sdk.theme import applyStandardLabelStyle, applyStandardLineEditStyle, applyPrimaryButtonStyle
+from plugin_sdk.theme import applyStandardLabelStyle, applyStandardLineEditStyle, applyPrimaryButtonStyle, applyStandardButtonStyle
 
 from filter import logic_tree
+from filter.logic_tree_editor_dialog import LogicTreeEditorDialog
 from filter.rule_widget import RuleWidget, CircularToggleButton
 from filter.filter_config import FilterPanelConfig, serialize_filter_config, deserialize_filter_config, CompareMethod
 
@@ -147,6 +148,12 @@ class FilterPanel(BasePluginPanel):
         self.txt_expression.focus_out_signal.connect(self.on_expression_focus_out)
         self.controls_layout.addWidget(self.txt_expression)
 
+        self.btn_ui_edit = QPushButton("圖形化編輯")
+        applyStandardButtonStyle(self.btn_ui_edit)
+        self.btn_ui_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_ui_edit.clicked.connect(self.open_logic_tree_editor)
+        self.controls_layout.addWidget(self.btn_ui_edit)
+
         self.hide_controls()
 
     def _on_row_range_changed(self):
@@ -266,6 +273,15 @@ class FilterPanel(BasePluginPanel):
         except ValueError as e:
             self.txt_expression.setStyleSheet("border: 2px solid #f7768e; border-radius: 6px;")
             self.expression_is_valid = False
+
+    def open_logic_tree_editor(self):
+        """開啟邏輯樹編輯器 Modal 對話框。"""
+        current_expr = self.txt_expression.toPlainText().strip()
+        dialog = LogicTreeEditorDialog(expression_text=current_expr, parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_expr = dialog.get_expression_text()
+            self.txt_expression.setPlainText(new_expr)
+            self.on_expression_focus_out()
 
     def update_column_dropdowns(self, num_cols):
         self.num_cols = num_cols
@@ -424,6 +440,7 @@ class FilterPanel(BasePluginPanel):
         self.btn_add_rule.setEnabled(enabled)
         self.btn_start_filter.setEnabled(enabled)
         self.txt_expression.setEnabled(enabled)
+        self.btn_ui_edit.setEnabled(enabled)
         for r in self.rules:
             r.setEnabled(enabled)
 
