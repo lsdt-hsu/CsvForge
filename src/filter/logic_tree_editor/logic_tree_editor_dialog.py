@@ -19,6 +19,7 @@ try:
     from filter.logic_tree_editor.editor_graphics_scene import EditorGraphicsScene
     from filter.logic_tree_editor.layout_engine import TreeLayoutEngine
     from filter.logic_tree_editor.drag_controller import TreeDragController
+    from filter.logic_tree_editor.connection_renderer import TreeConnectionRenderer
 except ImportError:
     from filter.logic_tree import logic_tree
     from logic_node import RuleNode, LogicOpNode
@@ -28,6 +29,7 @@ except ImportError:
     from editor_graphics_scene import EditorGraphicsScene
     from layout_engine import TreeLayoutEngine
     from drag_controller import TreeDragController
+    from connection_renderer import TreeConnectionRenderer
 
 
 class LogicTreeEditorDialog(QDialog):
@@ -252,152 +254,12 @@ class LogicTreeEditorDialog(QDialog):
             self.accept()
 
     def _validate_geometry(self):
-        """
-        幾何合法性檢查器 (Geometry Validator)。
-        由底層向上 (Post-Order) 掃描邏輯樹拓撲結構與 QGraphicsItem 幾何位置。
-        - 檢查條件 1：父邏輯節點 Y 軸高度等於或低於子節點 Height (parent.y() >= child.y())
-        """
-        if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_node_to_item", None):
-            return
-
-        invalid_nodes = set()
-
-        # 建立 AST Leaf 節點與當前 Slot Item 之對應 (第 i 個 Leaf -> Slot i 上的 Item)
-        ast_leaves = []
-        def collect_leaves(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                ast_leaves.append(node)
-            else:
-                for child in node.children:
-                    collect_leaves(child)
-        collect_leaves(self._tree_root)
-
-        slot_item_map = {}
-        for i, leaf in enumerate(ast_leaves):
-            if i < len(getattr(self, "_current_slot_order", [])):
-                slot_item_map[leaf] = self._current_slot_order[i]
-
-        def get_item_for_node(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                return slot_item_map.get(node)
-            return self._node_to_item.get(node)
-
-        def scan_node(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                return
-
-            # 由底層向上 (Post-Order) 掃描
-            for child in node.children:
-                scan_node(child)
-
-            parent_item = self._node_to_item.get(node)
-            if not parent_item:
-                return
-
-            # 1. Y 軸高度檢查 (parent.y() >= child.y())
-            for child in node.children:
-                child_item = get_item_for_node(child)
-                if child_item and parent_item.y() >= child_item.y():
-                    invalid_nodes.add(node)
-                    break
-
-        scan_node(self._tree_root)
-
-        # 更新 LogicNodeItem 視覺狀態
-        for item in getattr(self, "_initial_logic_items", []):
-            node = next((n for n, it in self._node_to_item.items() if it == item), None)
-            if self._is_dragging_logic and item == self._dragged_logic_item:
-                item.set_visual_state(LogicNodeItem.STATE_DRAGGING)
-            elif (
-                self._is_dragging_logic
-                and item in getattr(self, "_drag_start_logic_layer_map", {})
-                and item in getattr(self, "_current_logic_layer_order", [])
-                and self._current_logic_layer_order.index(item) != self._drag_start_logic_layer_map.get(item)
-            ):
-                item.set_visual_state(LogicNodeItem.STATE_DISPLACED)
-            elif node and node in invalid_nodes:
-                item.set_visual_state(LogicNodeItem.STATE_INVALID)
-            else:
-                item.set_visual_state(LogicNodeItem.STATE_NORMAL)
-
-        # 依據檢查結果切換按鈕文字
-        if invalid_nodes:
-            self.btn_confirm.setText("快速修正")
-        else:
-            self.btn_confirm.setText("確認")
-
-        # 重新計算並繪製動態連線 (Slot-bound 連線)
-        self._update_connection_lines()
+        """幾何合法性檢查器 (Geometry Validator)。"""
+        TreeConnectionRenderer.validate_geometry(self)
 
     def _update_connection_lines(self):
-        """
-        即時重新計算並繪製所有節點間的連接線 (Slot-bound Model)。
-        - 採 Post-Order (由下往上) 遞迴檢查與繪製。
-        - 邏輯樹之第 i 個 Leaf 節點永遠指向 Slot i (即 self._current_slot_order[i])。
-        - 確保連線永遠留在固定 Slot，卡片置換時連線完全不交叉、不跑位。
-        """
-        if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_node_to_item", None):
-            return
-
-        # 1. 清理現有連線
-        for line_item in getattr(self, "_line_items", []):
-            if line_item.scene() == self.graphics_scene:
-                self.graphics_scene.removeItem(line_item)
-        self._line_items = []
-
-        line_pen = QPen(QColor("#565f89"), 2.0)
-        line_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-
-        # 2. 建立 AST Leaf 節點與當前 Slot Item 之對應 (第 i 個 Leaf -> Slot i 上的 Item)
-        ast_leaves = []
-        def collect_leaves(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                ast_leaves.append(node)
-            else:
-                for child in node.children:
-                    collect_leaves(child)
-        collect_leaves(self._tree_root)
-
-        slot_item_map = {}
-        for i, leaf in enumerate(ast_leaves):
-            if i < len(getattr(self, "_current_slot_order", [])):
-                slot_item_map[leaf] = self._current_slot_order[i]
-
-        def get_item_for_node(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                return slot_item_map.get(node)
-            return self._node_to_item.get(node)
-
-        def process_node_connections(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                return
-
-            for child in node.children:
-                process_node_connections(child)
-
-            parent_item = get_item_for_node(node)
-            if not parent_item:
-                return
-
-            for child in node.children:
-                child_item = get_item_for_node(child)
-                if not child_item:
-                    continue
-
-                # 高度檢查：若父節點 Y >= 子節點 Y，則不繪製
-                if parent_item.y() >= child_item.y():
-                    continue
-
-                line = QGraphicsLineItem(
-                    parent_item.x(), parent_item.y(),
-                    child_item.x(), child_item.y()
-                )
-                line.setPen(line_pen)
-                line.setZValue(-1)
-                self.graphics_scene.addItem(line)
-                self._line_items.append(line)
-
-        process_node_connections(self._tree_root)
+        """即時重新計算並繪製所有節點間的連接線 (Slot-bound Model)。"""
+        TreeConnectionRenderer.update_connection_lines(self)
 
     def handle_scene_key_press(self, event) -> bool:
         if event.key() == Qt.Key.Key_Escape:
