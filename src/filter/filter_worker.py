@@ -356,6 +356,9 @@ class FilterWorker(QObject):
             return all(self.eval_logic_tree(c, rule_results) for c in node.children)
         elif node.op_type == "OR":
             return any(self.eval_logic_tree(c, rule_results) for c in node.children)
+        elif node.op_type == "XOR":
+            res = [self.eval_logic_tree(c, rule_results) for c in node.children]
+            return sum(res) % 2 == 1
         return False
 
     def evaluate_general_rules(self, row, rules_cfg, tree, regex_patterns) -> bool:
