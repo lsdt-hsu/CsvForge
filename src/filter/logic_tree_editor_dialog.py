@@ -95,6 +95,9 @@ class LogicTreeEditorDialog(QDialog):
         self._ghost_logic_item = None
         self._pending_logic_layer_idx = None
 
+        self._tree_root = None
+        self._node_to_item = {}
+
         self._logic_hover_timer = QTimer(self)
         self._logic_hover_timer.setSingleShot(True)
         self._logic_hover_timer.setInterval(200)
@@ -143,7 +146,7 @@ class LogicTreeEditorDialog(QDialog):
         self.btn_confirm = QPushButton("確認")
         theme.applyPrimaryButtonStyle(self.btn_confirm, is_running=False)
         self.btn_confirm.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_confirm.clicked.connect(self.accept)
+        self.btn_confirm.clicked.connect(self._on_confirm_clicked)
 
         btn_layout.addWidget(self.btn_cancel)
         btn_layout.addWidget(self.btn_confirm)
@@ -235,6 +238,9 @@ class LogicTreeEditorDialog(QDialog):
 
         draw_connections(tree_root)
 
+        self._tree_root = tree_root
+        self._node_to_item = {}
+
         # 4. 繪製節點 (RuleNodeItem & LogicNodeItem)
         rule_items_by_leaf = {}
         logic_items = []
@@ -248,6 +254,7 @@ class LogicTreeEditorDialog(QDialog):
                 item = LogicNodeItem(node.op_type)
                 logic_items.append(item)
 
+            self._node_to_item[node] = item
             item.setPos(pos)
             item.setZValue(0)
             self.graphics_scene.addItem(item)
@@ -276,7 +283,10 @@ class LogicTreeEditorDialog(QDialog):
         self._initial_logic_items = list(logic_items)
         self._current_logic_layer_order = list(logic_items)
 
-        # 5. 調整 Scene 範圍與 View 縮放視角
+        # 5. 執行初始幾何合法性檢查
+        self._validate_geometry()
+
+        # 6. 調整 Scene 範圍與 View 縮放視角
         boundingRect = self.graphics_scene.itemsBoundingRect()
         if not boundingRect.isEmpty():
             padded_rect = boundingRect.adjusted(-60, -60, 60, 60)
@@ -474,6 +484,7 @@ class LogicTreeEditorDialog(QDialog):
         self._is_dragging = False
         self._dragged_item = None
         self._pending_slot_idx = None
+        self._validate_geometry()
 
     def _cancel_logic_drag(self):
         if not self._is_dragging_logic:
@@ -494,6 +505,7 @@ class LogicTreeEditorDialog(QDialog):
         self._is_dragging_logic = False
         self._dragged_logic_item = None
         self._pending_logic_layer_idx = None
+        self._validate_geometry()
 
     def handle_scene_mouse_release(self, event) -> bool:
         if self._is_dragging_logic and event.button() == Qt.MouseButton.LeftButton:
@@ -519,6 +531,7 @@ class LogicTreeEditorDialog(QDialog):
             self._is_dragging_logic = False
             self._dragged_logic_item = None
             self._pending_logic_layer_idx = None
+            self._validate_geometry()
             return True
 
         if self._is_dragging and event.button() == Qt.MouseButton.LeftButton:
@@ -544,9 +557,85 @@ class LogicTreeEditorDialog(QDialog):
             self._is_dragging = False
             self._dragged_item = None
             self._pending_slot_idx = None
+            self._validate_geometry()
             return True
 
         return False
+
+    def _on_confirm_clicked(self):
+        """按鈕點擊事件：若為「快速修正」則修改回「確認」；若為「確認」則觸發 accept()。"""
+        if self.btn_confirm.text() == "快速修正":
+            self.btn_confirm.setText("確認")
+        else:
+            self.accept()
+
+    def _validate_geometry(self):
+        """
+        幾何合法性檢查器 (Geometry Validator)。
+        由底層向上 (Post-Order) 掃描邏輯樹拓撲結構與 QGraphicsItem 幾何位置。
+        - 檢查條件 1：父邏輯節點 Y 軸高度等於或低於子節點 Height (parent.y() >= child.y())
+        - 檢查條件 2：相鄰子樹之間是否存在左子樹節點 X 座標大於等於右子樹節點 X 座標之交叉
+        """
+        if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_node_to_item", None):
+            return
+
+        invalid_nodes = set()
+
+        def get_subtree_items(node):
+            items = []
+            if node in self._node_to_item:
+                items.append(self._node_to_item[node])
+            if not (isinstance(node, RuleNode) or node.op_type == "LEAF"):
+                for child in node.children:
+                    items.extend(get_subtree_items(child))
+            return items
+
+        def scan_node(node):
+            if isinstance(node, RuleNode) or node.op_type == "LEAF":
+                return
+
+            # 由底層向上 (Post-Order) 掃描
+            for child in node.children:
+                scan_node(child)
+
+            parent_item = self._node_to_item.get(node)
+            if not parent_item:
+                return
+
+            # 1. Y 軸高度檢查 (parent.y() >= child.y())
+            for child in node.children:
+                child_item = self._node_to_item.get(child)
+                if child_item and parent_item.y() >= child_item.y():
+                    invalid_nodes.add(node)
+                    break
+
+            # 2. 子樹交叉檢查 (left_max_x >= right_min_x)
+            if len(node.children) >= 2:
+                for i in range(len(node.children) - 1):
+                    left_items = get_subtree_items(node.children[i])
+                    right_items = get_subtree_items(node.children[i + 1])
+                    if left_items and right_items:
+                        left_max_x = max(it.x() for it in left_items)
+                        right_min_x = min(it.x() for it in right_items)
+                        if left_max_x >= right_min_x:
+                            invalid_nodes.add(node)
+                            break
+
+        scan_node(self._tree_root)
+
+        # 更新 LogicNodeItem 視覺狀態
+        for node, item in self._node_to_item.items():
+            if isinstance(item, LogicNodeItem):
+                if node in invalid_nodes:
+                    item.set_visual_state(LogicNodeItem.STATE_INVALID)
+                else:
+                    item.set_visual_state(LogicNodeItem.STATE_NORMAL)
+
+        # 依據檢查結果切換按鈕文字
+        if invalid_nodes:
+            self.btn_confirm.setText("快速修正")
+        else:
+            self.btn_confirm.setText("確認")
 
     def handle_scene_key_press(self, event) -> bool:
         if event.key() == Qt.Key.Key_Escape:

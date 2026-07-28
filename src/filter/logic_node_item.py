@@ -16,6 +16,7 @@ class LogicNodeItem(QGraphicsItem):
     STATE_NORMAL = "normal"
     STATE_DRAGGING = "dragging"
     STATE_DISPLACED = "displaced"
+    STATE_INVALID = "invalid"
 
     def __init__(self, op_type: str, parent=None):
         super().__init__(parent)
@@ -48,6 +49,11 @@ class LogicNodeItem(QGraphicsItem):
             border_color = QColor("#ff9e64")
             pen_width = 2.0
             text_color = QColor("#ff9e64")
+        elif self.visual_state == self.STATE_INVALID:
+            bg_color = QColor("#451a1a")
+            border_color = QColor("#f7768e")
+            pen_width = 2.5
+            text_color = QColor("#f7768e")
         else:  # STATE_NORMAL (依邏輯運算子主題色彩配對)
             pen_width = 1.5
             if self.op_type == "AND":
