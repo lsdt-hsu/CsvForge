@@ -30,6 +30,12 @@ class LogicNodeItem(QGraphicsItem):
             self.visual_state = state
             self.update()
 
+    def set_op_type(self, op_type: str):
+        op_upper = op_type.upper()
+        if self.op_type != op_upper:
+            self.op_type = op_upper
+            self.update()
+
     def boundingRect(self) -> QRectF:
         return QRectF(-self.width / 2, -self.height / 2, self.width, self.height)
 
