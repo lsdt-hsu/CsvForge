@@ -6,6 +6,7 @@ from filter.logic_tree_editor.logic_tree_editor_dialog import LogicTreeEditorDia
 from filter.logic_tree_editor.logic_op_selection_dialog import LogicOpSelectionDialog
 from filter.logic_tree_editor.editor_graphics_scene import EditorGraphicsScene
 from filter.logic_tree_editor.layout_engine import TreeLayoutEngine
+from filter.logic_tree_editor.drag_controller import TreeDragController
 from filter.logic_tree_editor.logic_node_item import LogicNodeItem
 from filter.logic_tree_editor.rule_node_item import RuleNodeItem
 
@@ -14,6 +15,7 @@ __all__ = [
     "LogicOpSelectionDialog",
     "EditorGraphicsScene",
     "TreeLayoutEngine",
+    "TreeDragController",
     "LogicNodeItem",
     "RuleNodeItem",
 ]

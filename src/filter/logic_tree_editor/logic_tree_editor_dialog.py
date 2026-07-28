@@ -18,6 +18,7 @@ try:
     from filter.logic_tree_editor.logic_op_selection_dialog import LogicOpSelectionDialog
     from filter.logic_tree_editor.editor_graphics_scene import EditorGraphicsScene
     from filter.logic_tree_editor.layout_engine import TreeLayoutEngine
+    from filter.logic_tree_editor.drag_controller import TreeDragController
 except ImportError:
     from filter.logic_tree import logic_tree
     from logic_node import RuleNode, LogicOpNode
@@ -26,6 +27,7 @@ except ImportError:
     from logic_op_selection_dialog import LogicOpSelectionDialog
     from editor_graphics_scene import EditorGraphicsScene
     from layout_engine import TreeLayoutEngine
+    from drag_controller import TreeDragController
 
 
 class LogicTreeEditorDialog(QDialog):
@@ -43,6 +45,8 @@ class LogicTreeEditorDialog(QDialog):
         self.resize(700, 500)
         self.setModal(True)
         self.setStyleSheet("QDialog { background-color: #1a1b26; }")
+
+        self.drag_controller = TreeDragController(self)
 
         # 拖曳與 Slot preview 控制變數 (Rule 節點)
         self._slot_positions = []
@@ -161,197 +165,47 @@ class LogicTreeEditorDialog(QDialog):
             )
 
     # ----------------------------------------------------------------------
-    # 拖曳與 Slot Preview 事件處理
+    # 拖曳與 Slot Preview 事件處理 (委派至 TreeDragController)
     # ----------------------------------------------------------------------
 
     def _calc_slot_idx(self, x_pos: float) -> int:
-        if not self._slot_positions:
-            return 0
-        idx = int(round(x_pos / self._spacing_x))
-        return max(0, min(len(self._slot_positions) - 1, idx))
+        return self.drag_controller.calc_slot_idx(x_pos)
 
     def _calc_layer_idx(self, y_pos: float) -> int:
-        if not self._layer_positions_y:
-            return 0
-        best_idx = 0
-        min_dist = float("inf")
-        for i, layer_y in enumerate(self._layer_positions_y):
-            dist = abs(y_pos - layer_y)
-            if dist < min_dist:
-                min_dist = dist
-                best_idx = i
-        return best_idx
+        return self.drag_controller.calc_layer_idx(y_pos)
 
     def handle_scene_mouse_double_click(self, event) -> bool:
-        if event.button() == Qt.MouseButton.LeftButton:
-            items = self.graphics_scene.items(event.scenePos())
-            target_logic = None
-            for it in items:
-                if isinstance(it, LogicNodeItem) and it != self._ghost_logic_item:
-                    target_logic = it
-                    break
-
-            if target_logic and target_logic in self._initial_logic_items:
-                dlg = LogicOpSelectionDialog(target_logic.op_type, self)
-                if dlg.exec() == QDialog.DialogCode.Accepted:
-                    new_op = dlg.get_selected_op()
-                    if new_op and new_op != target_logic.op_type:
-                        target_logic.set_op_type(new_op)
-                        self._rebuild_tree_from_heights()
-                        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
-                        self._validate_geometry()
-                return True
-        return False
+        return self.drag_controller.handle_mouse_double_click(event)
 
     def handle_scene_mouse_press(self, event) -> bool:
-        if event.button() == Qt.MouseButton.LeftButton:
-            items = self.graphics_scene.items(event.scenePos())
-            target_rule = None
-            target_logic = None
-            for it in items:
-                if isinstance(it, LogicNodeItem) and it != self._ghost_logic_item:
-                    target_logic = it
-                    break
-                elif isinstance(it, RuleNodeItem) and it != self._ghost_item:
-                    target_rule = it
-                    break
-
-            if target_logic and target_logic in self._initial_logic_items:
-                self._start_drag_logic(target_logic, event.scenePos())
-                return True
-            elif target_rule and target_rule in self._initial_rule_items:
-                self._start_drag(target_rule, event.scenePos())
-                return True
-
-        elif (self._is_dragging or self._is_dragging_logic) and event.button() in (
-            Qt.MouseButton.RightButton,
-            Qt.MouseButton.MiddleButton,
-        ):
-            if self._is_dragging_logic:
-                self._cancel_logic_drag()
-            if self._is_dragging:
-                self._cancel_drag()
-            return True
-
-        return False
+        return self.drag_controller.handle_mouse_press(event)
 
     def _start_drag(self, item: RuleNodeItem, scene_pos: QPointF):
-        self._is_dragging = True
-        self._dragged_item = item
-        item.set_visual_state(RuleNodeItem.STATE_DRAGGING)
-
-        # 記錄本次拖曳開始前的順序與 Slot 映射基準
-        self._drag_start_order = list(self._current_slot_order)
-        self._drag_start_slot_map = {it: i for i, it in enumerate(self._drag_start_order)}
-
-        # 建立半透明預覽圖示跟隨游標
-        self._ghost_item = RuleNodeItem(item.rule_idx)
-        self._ghost_item.setOpacity(0.6)
-        self._ghost_item.setZValue(100)
-        self.graphics_scene.addItem(self._ghost_item)
-        self._ghost_item.setPos(scene_pos)
-
-        slot_idx = self._calc_slot_idx(scene_pos.x())
-        self._pending_slot_idx = slot_idx
-        self._hover_timer.start(200)
+        self.drag_controller.start_drag(item, scene_pos)
 
     def _start_drag_logic(self, item: LogicNodeItem, scene_pos: QPointF):
-        self._is_dragging_logic = True
-        self._dragged_logic_item = item
-        item.set_visual_state(LogicNodeItem.STATE_DRAGGING)
-
-        # 記錄本次拖曳開始前的層級順序與映射基準
-        self._drag_start_logic_order = list(self._current_logic_layer_order)
-        self._drag_start_logic_layer_map = {it: i for i, it in enumerate(self._drag_start_logic_order)}
-
-        # 建立半透明預覽圖示跟隨游標 (鎖定 X 軸，僅隨 Y 軸移動)
-        self._ghost_logic_item = LogicNodeItem(item.op_type)
-        self._ghost_logic_item.setOpacity(0.6)
-        self._ghost_logic_item.setZValue(100)
-        self.graphics_scene.addItem(self._ghost_logic_item)
-        self._ghost_logic_item.setPos(QPointF(item.x(), scene_pos.y()))
-
-        layer_idx = self._calc_layer_idx(scene_pos.y())
-        self._pending_logic_layer_idx = layer_idx
-        self._logic_hover_timer.start(200)
+        self.drag_controller.start_drag_logic(item, scene_pos)
 
     def handle_scene_mouse_move(self, event) -> bool:
-        if self._is_dragging_logic:
-            scene_pos = event.scenePos()
-            if self._ghost_logic_item and self._dragged_logic_item:
-                self._ghost_logic_item.setPos(QPointF(self._dragged_logic_item.x(), scene_pos.y()))
-
-            layer_idx = self._calc_layer_idx(scene_pos.y())
-            if layer_idx != self._pending_logic_layer_idx:
-                self._pending_logic_layer_idx = layer_idx
-                self._logic_hover_timer.start(200)
-
-            return True
-
-        if self._is_dragging:
-            scene_pos = event.scenePos()
-            if self._ghost_item:
-                self._ghost_item.setPos(scene_pos)
-
-            slot_idx = self._calc_slot_idx(scene_pos.x())
-            if slot_idx != self._pending_slot_idx:
-                self._pending_slot_idx = slot_idx
-                self._hover_timer.start(200)
-
-            return True
-        return False
+        return self.drag_controller.handle_mouse_move(event)
 
     def _on_hover_timeout(self):
-        if not self._is_dragging or self._pending_slot_idx is None or self._dragged_item is None:
-            return
-
-        target_slot = self._pending_slot_idx
-
-        # 計算預覽 Slot 排列 (將 dragged_item 插入 target_slot，其餘順移)
-        new_order = [item for item in self._drag_start_order if item != self._dragged_item]
-        target_slot = max(0, min(len(new_order), target_slot))
-        new_order.insert(target_slot, self._dragged_item)
-
-        # 更新卡片位置與視覺狀態回饋 (相對拖曳前狀態 _drag_start_slot_map)
-        for i, item in enumerate(new_order):
-            item.setPos(self._slot_positions[i])
-            if item == self._dragged_item:
-                item.set_visual_state(RuleNodeItem.STATE_DRAGGING)
-            elif self._drag_start_slot_map.get(item) != i:
-                item.set_visual_state(RuleNodeItem.STATE_DISPLACED)
-            else:
-                item.set_visual_state(RuleNodeItem.STATE_NORMAL)
-
-        self._current_slot_order = new_order
-        self._rebuild_tree_from_heights()
-        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
-        self._validate_geometry()
+        self.drag_controller.on_hover_timeout()
 
     def _on_logic_hover_timeout(self):
-        if not self._is_dragging_logic or self._pending_logic_layer_idx is None or self._dragged_logic_item is None:
-            return
+        self.drag_controller.on_logic_hover_timeout()
 
-        target_layer = self._pending_logic_layer_idx
+    def _cancel_drag(self):
+        self.drag_controller.cancel_drag()
 
-        # 計算預覽 Logic 層級排列 (將 dragged_logic_item 插入 target_layer，其餘順移)
-        new_order = [item for item in self._drag_start_logic_order if item != self._dragged_logic_item]
-        target_layer = max(0, min(len(new_order), target_layer))
-        new_order.insert(target_layer, self._dragged_logic_item)
+    def _cancel_logic_drag(self):
+        self.drag_controller.cancel_logic_drag()
 
-        # 更新 Logic 節點高度與視覺狀態回饋
-        for i, item in enumerate(new_order):
-            item.setPos(item.x(), self._layer_positions_y[i])
-            if item == self._dragged_logic_item:
-                item.set_visual_state(LogicNodeItem.STATE_DRAGGING)
-            elif self._drag_start_logic_layer_map.get(item) != i:
-                item.set_visual_state(LogicNodeItem.STATE_DISPLACED)
-            else:
-                item.set_visual_state(LogicNodeItem.STATE_NORMAL)
+    def handle_scene_mouse_release(self, event) -> bool:
+        return self.drag_controller.handle_mouse_release(event)
 
-        self._current_logic_layer_order = new_order
-        self._rebuild_tree_from_heights()
-        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
-        self._validate_geometry()
+    def handle_scene_key_press(self, event) -> bool:
+        return self.drag_controller.handle_key_press(event)
 
     def _rebuild_tree_from_heights(self):
         """
@@ -372,111 +226,6 @@ class LogicTreeEditorDialog(QDialog):
         if hasattr(self, "_tree_root") and self._tree_root:
             new_expr = logic_tree.to_string(self._tree_root)
             self.txt_expression.setPlainText(new_expr)
-
-    def _cancel_drag(self):
-        if not self._is_dragging:
-            return
-
-        self._hover_timer.stop()
-
-        if self._ghost_item and self._ghost_item.scene() == self.graphics_scene:
-            self.graphics_scene.removeItem(self._ghost_item)
-            self._ghost_item = None
-
-        # 還原至該次拖曳開始前順序與一般視覺狀態
-        for i, item in enumerate(self._drag_start_order):
-            item.setPos(self._slot_positions[i])
-            item.set_visual_state(RuleNodeItem.STATE_NORMAL)
-
-        self._current_slot_order = list(self._drag_start_order)
-        self._is_dragging = False
-        self._dragged_item = None
-        self._pending_slot_idx = None
-        self._rebuild_tree_from_heights()
-        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
-        self._validate_geometry()
-
-    def _cancel_logic_drag(self):
-        if not self._is_dragging_logic:
-            return
-
-        self._logic_hover_timer.stop()
-
-        if self._ghost_logic_item and self._ghost_logic_item.scene() == self.graphics_scene:
-            self.graphics_scene.removeItem(self._ghost_logic_item)
-            self._ghost_logic_item = None
-
-        # 還原至該次拖曳開始前的層級順序與一般視覺狀態
-        for i, item in enumerate(self._drag_start_logic_order):
-            item.setPos(item.x(), self._layer_positions_y[i])
-            item.set_visual_state(LogicNodeItem.STATE_NORMAL)
-
-        self._current_logic_layer_order = list(self._drag_start_logic_order)
-        self._is_dragging_logic = False
-        self._dragged_logic_item = None
-        self._pending_logic_layer_idx = None
-        self._rebuild_tree_from_heights()
-        self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
-        self._validate_geometry()
-
-    def handle_scene_mouse_release(self, event) -> bool:
-        if self._is_dragging_logic and event.button() == Qt.MouseButton.LeftButton:
-            self._logic_hover_timer.stop()
-
-            if self._ghost_logic_item and self._ghost_logic_item.scene() == self.graphics_scene:
-                self.graphics_scene.removeItem(self._ghost_logic_item)
-                self._ghost_logic_item = None
-
-            target_layer = self._calc_layer_idx(event.scenePos().y())
-            candidate_order = [item for item in self._drag_start_logic_order if item != self._dragged_logic_item]
-            target_layer = max(0, min(len(candidate_order), target_layer))
-            candidate_order.insert(target_layer, self._dragged_logic_item)
-
-            apply_order = candidate_order
-
-            # 拖曳結束：套用最終位置，且所有 Logic 視覺狀態設為一般狀態 (STATE_NORMAL)
-            for i, item in enumerate(apply_order):
-                item.setPos(item.x(), self._layer_positions_y[i])
-                item.set_visual_state(LogicNodeItem.STATE_NORMAL)
-
-            self._current_logic_layer_order = list(apply_order)
-            self._is_dragging_logic = False
-            self._dragged_logic_item = None
-            self._pending_logic_layer_idx = None
-            self._rebuild_tree_from_heights()
-            self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
-            self._validate_geometry()
-            return True
-
-        if self._is_dragging and event.button() == Qt.MouseButton.LeftButton:
-            self._hover_timer.stop()
-
-            if self._ghost_item and self._ghost_item.scene() == self.graphics_scene:
-                self.graphics_scene.removeItem(self._ghost_item)
-                self._ghost_item = None
-
-            target_slot = self._calc_slot_idx(event.scenePos().x())
-            candidate_order = [item for item in self._drag_start_order if item != self._dragged_item]
-            target_slot = max(0, min(len(candidate_order), target_slot))
-            candidate_order.insert(target_slot, self._dragged_item)
-
-            apply_order = candidate_order
-
-            # 拖曳結束：套用最終位置，且所有 Rule 視覺狀態設為一般狀態 (STATE_NORMAL)
-            for i, item in enumerate(apply_order):
-                item.setPos(self._slot_positions[i])
-                item.set_visual_state(RuleNodeItem.STATE_NORMAL)
-
-            self._current_slot_order = list(apply_order)
-            self._is_dragging = False
-            self._dragged_item = None
-            self._pending_slot_idx = None
-            self._rebuild_tree_from_heights()
-            self.txt_expression.setPlainText(logic_tree.to_string(self._tree_root))
-            self._validate_geometry()
-            return True
-
-        return False
 
     def _quick_fix_geometry(self):
         """
