@@ -17,6 +17,7 @@ try:
     from filter.logic_tree_editor.logic_node_item import LogicNodeItem
     from filter.logic_tree_editor.logic_op_selection_dialog import LogicOpSelectionDialog
     from filter.logic_tree_editor.editor_graphics_scene import EditorGraphicsScene
+    from filter.logic_tree_editor.layout_engine import TreeLayoutEngine
 except ImportError:
     from filter.logic_tree import logic_tree
     from logic_node import RuleNode, LogicOpNode
@@ -24,6 +25,7 @@ except ImportError:
     from logic_node_item import LogicNodeItem
     from logic_op_selection_dialog import LogicOpSelectionDialog
     from editor_graphics_scene import EditorGraphicsScene
+    from layout_engine import TreeLayoutEngine
 
 
 class LogicTreeEditorDialog(QDialog):
@@ -134,137 +136,21 @@ class LogicTreeEditorDialog(QDialog):
 
     def _build_tree_graph(self):
         """解析頂部運算式文字並在 QGraphicsScene 繪製節點與相連直線。"""
-        self.graphics_scene.clear()
-        expr_str = self.get_expression_text().strip()
-        if not expr_str:
-            return
-
-        try:
-            tree_root = logic_tree.parse_expression(expr_str)
-        except Exception:
-            return
-
-        if not tree_root:
-            return
-
-        # 1. 蒐集規則葉節點 (由左至右)
-        leaf_nodes = []
-
-        def collect_leaves(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                leaf_nodes.append(node)
-            else:
-                for child in node.children:
-                    collect_leaves(child)
-
-        collect_leaves(tree_root)
-
-        # 2. 計算節點層級與座標 (pos_x, pos_y)
-        pos_map = {}
-        level_map = {}
-
-        spacing_x = 110.0
-        base_y = 300.0
-        level_height = 80.0
-        self._spacing_x = spacing_x
-        self._base_y = base_y
-
-        for i, leaf in enumerate(leaf_nodes):
-            level_map[leaf] = 0
-            pos_map[leaf] = QPointF(i * spacing_x, base_y)
-
-        def get_rightmost_leaf(n):
-            if isinstance(n, RuleNode) or n.op_type == "LEAF":
-                return n
-            return get_rightmost_leaf(n.children[-1])
-
-        def get_leftmost_leaf(n):
-            if isinstance(n, RuleNode) or n.op_type == "LEAF":
-                return n
-            return get_leftmost_leaf(n.children[0])
-
-        def calculate_node_metrics(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                return level_map[node], pos_map[node].x()
-
-            child_levels = []
-            for child in node.children:
-                c_lvl, _ = calculate_node_metrics(child)
-                child_levels.append(c_lvl)
-
-            node_lvl = 1 + (max(child_levels) if child_levels else 0)
-
-            if len(node.children) >= 2:
-                rightmost_left = get_rightmost_leaf(node.children[0])
-                leftmost_right = get_leftmost_leaf(node.children[1])
-                node_x = (pos_map[rightmost_left].x() + pos_map[leftmost_right].x()) / 2.0
-            elif node.children:
-                _, node_x = calculate_node_metrics(node.children[0])
-            else:
-                node_x = 0.0
-
-            level_map[node] = node_lvl
-            node_y = base_y - node_lvl * level_height
-            pos_map[node] = QPointF(node_x, node_y)
-
-            return node_lvl, node_x
-
-        calculate_node_metrics(tree_root)
-
-        self._tree_root = tree_root
-        self._node_to_item = {}
-
-        # 4. 繪製節點 (RuleNodeItem & LogicNodeItem)
-        rule_items_by_leaf = {}
-        logic_items = []
-
-        def draw_nodes(node):
-            pos = pos_map[node]
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                item = RuleNodeItem(node.leaf_idx)
-                rule_items_by_leaf[node] = item
-            else:
-                item = LogicNodeItem(node.op_type)
-                logic_items.append(item)
-
-            self._node_to_item[node] = item
-            item.setPos(pos)
-            item.setZValue(0)
-            self.graphics_scene.addItem(item)
-
-            if not (isinstance(node, RuleNode) or node.op_type == "LEAF"):
-                for child in node.children:
-                    draw_nodes(child)
-
-        draw_nodes(tree_root)
-
-        # 記錄 Slot 座標與 Initial Rule 節點列表
-        self._slot_positions = [QPointF(i * spacing_x, base_y) for i in range(len(leaf_nodes))]
-        self._initial_rule_items = [rule_items_by_leaf[leaf] for leaf in leaf_nodes if leaf in rule_items_by_leaf]
-        self._initial_slot_map = {item: i for i, item in enumerate(self._initial_rule_items)}
-        self._current_slot_order = list(self._initial_rule_items)
-
-        # 建立離散高度層級 (n 個 Rule -> n-1 個離散高度層級)
-        num_layers = max(0, len(leaf_nodes) - 1)
-        self._layer_positions_y = [base_y - (i + 1) * level_height for i in range(num_layers)]
-
-        # 依初始 Y 座標由低到高（Level 1 至 Level n-1）排序 Logic 節點，並指派至對應離散層級
-        logic_items.sort(key=lambda item: (base_y - item.pos().y(), item.pos().x()))
-        for i in range(min(num_layers, len(logic_items))):
-            logic_items[i].setPos(logic_items[i].x(), self._layer_positions_y[i])
-
-        self._initial_logic_items = list(logic_items)
-        self._current_logic_layer_order = list(logic_items)
-
-        # 5. 執行初始幾何合法性檢查
-        self._validate_geometry()
-
-        # 6. 調整 Scene 範圍與 View 縮放視角
-        boundingRect = self.graphics_scene.itemsBoundingRect()
-        if not boundingRect.isEmpty():
-            padded_rect = boundingRect.adjusted(-60, -60, 60, 60)
-            self.graphics_scene.setSceneRect(padded_rect)
-            self.graphics_view.fitInView(padded_rect, Qt.AspectRatioMode.KeepAspectRatio)
+        res = TreeLayoutEngine.build_tree_graph(self, self.get_expression_text())
+        (
+            self._tree_root,
+            self._node_to_item,
+            leaf_nodes,
+            self._slot_positions,
+            self._initial_rule_items,
+            self._initial_slot_map,
+            self._current_slot_order,
+            self._layer_positions_y,
+            self._initial_logic_items,
+            self._current_logic_layer_order,
+        ) = res
+        if self._tree_root:
+            self._validate_geometry()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -471,50 +357,12 @@ class LogicTreeEditorDialog(QDialog):
         """
         自動修正：依照當前 Rule 節點順序與 Logic 節點的高度 (Y 座標)，動態重新建立邏輯樹 (AST)。
         """
-        if not hasattr(self, "_initial_rule_items") or not self._initial_rule_items:
-            return
-
-        rule_items = getattr(self, "_current_slot_order", self._initial_rule_items)
-        if not rule_items:
-            return
-
-        logic_items = sorted(getattr(self, "_initial_logic_items", []), key=lambda it: it.x())
-        num_rules = len(rule_items)
-
-        if num_rules == 1:
-            leaf = RuleNode(leaf_idx=rule_items[0].rule_idx)
-            self._tree_root = leaf
-            self._node_to_item = {leaf: rule_items[0]}
-            return
-
-        node_to_item = {}
-
-        def build_subtree(rule_start: int, rule_end: int):
-            if rule_start == rule_end:
-                leaf = RuleNode(leaf_idx=rule_items[rule_start].rule_idx)
-                node_to_item[leaf] = rule_items[rule_start]
-                return leaf
-
-            best_op_idx = rule_start
-            min_y = logic_items[rule_start].y()
-
-            for op_idx in range(rule_start + 1, rule_end):
-                op_y = logic_items[op_idx].y()
-                if op_y < min_y:
-                    min_y = op_y
-                    best_op_idx = op_idx
-
-            op_item = logic_items[best_op_idx]
-
-            left_child = build_subtree(rule_start, best_op_idx)
-            right_child = build_subtree(best_op_idx + 1, rule_end)
-
-            parent_node = LogicOpNode(op_type=op_item.op_type, children=[left_child, right_child])
-            node_to_item[parent_node] = op_item
-            return parent_node
-
-        self._tree_root = build_subtree(0, num_rules - 1)
-        self._node_to_item = node_to_item
+        initial_rules = getattr(self, "_initial_rule_items", [])
+        current_slots = getattr(self, "_current_slot_order", initial_rules)
+        initial_logics = getattr(self, "_initial_logic_items", [])
+        self._tree_root, self._node_to_item = TreeLayoutEngine.rebuild_tree_from_heights(
+            initial_rules, current_slots, initial_logics
+        )
 
     def _sync_ast_and_update_expression(self):
         """
@@ -635,73 +483,17 @@ class LogicTreeEditorDialog(QDialog):
         快速修正：檢查所有邏輯節點之間的拓撲依賴關係，重新分配它們的高度層級。
         最內層運算的邏輯節點分配在最低高度層級，最外層分配在最高層級，消除幾何錯位。
         """
-        if not hasattr(self, "_tree_root") or not self._tree_root or not getattr(self, "_node_to_item", None):
-            return
+        tree_root = getattr(self, "_tree_root", None)
+        node_to_item = getattr(self, "_node_to_item", None)
+        initial_logics = getattr(self, "_initial_logic_items", [])
+        spacing_x = getattr(self, "_spacing_x", 110.0)
+        base_y = getattr(self, "_base_y", 300.0)
 
-        pos_map = {}
-        level_map = {}
-
-        ast_leaves = []
-        def collect_leaves(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                ast_leaves.append(node)
-            else:
-                for child in node.children:
-                    collect_leaves(child)
-        collect_leaves(self._tree_root)
-
-        for i, leaf in enumerate(ast_leaves):
-            level_map[leaf] = 0
-            pos_map[leaf] = QPointF(i * self._spacing_x, self._base_y)
-
-        def get_rightmost_leaf(n):
-            if isinstance(n, RuleNode) or n.op_type == "LEAF":
-                return n
-            return get_rightmost_leaf(n.children[-1])
-
-        def get_leftmost_leaf(n):
-            if isinstance(n, RuleNode) or n.op_type == "LEAF":
-                return n
-            return get_leftmost_leaf(n.children[0])
-
-        def calculate_node_metrics(node):
-            if isinstance(node, RuleNode) or node.op_type == "LEAF":
-                return level_map[node], pos_map[node].x()
-
-            child_levels = []
-            for child in node.children:
-                c_lvl, _ = calculate_node_metrics(child)
-                child_levels.append(c_lvl)
-
-            node_lvl = 1 + (max(child_levels) if child_levels else 0)
-
-            if len(node.children) >= 2:
-                rightmost_left = get_rightmost_leaf(node.children[0])
-                leftmost_right = get_leftmost_leaf(node.children[1])
-                node_x = (pos_map[rightmost_left].x() + pos_map[leftmost_right].x()) / 2.0
-            elif node.children:
-                _, node_x = calculate_node_metrics(node.children[0])
-            else:
-                node_x = 0.0
-
-            level_map[node] = node_lvl
-            node_y = self._base_y - node_lvl * 80.0
-            pos_map[node] = QPointF(node_x, node_y)
-
-            return node_lvl, node_x
-
-        calculate_node_metrics(self._tree_root)
-
-        for node, item in self._node_to_item.items():
-            if isinstance(item, LogicNodeItem) and node in pos_map:
-                item.setPos(pos_map[node])
-                item.set_visual_state(LogicNodeItem.STATE_NORMAL)
-
-        logic_items = list(self._initial_logic_items)
-        logic_items.sort(key=lambda item: (self._base_y - item.pos().y(), item.pos().x()))
-        self._current_logic_layer_order = logic_items
-
-        self._validate_geometry()
+        if tree_root and node_to_item:
+            self._current_logic_layer_order = TreeLayoutEngine.quick_fix_geometry(
+                tree_root, node_to_item, initial_logics, spacing_x, base_y
+            )
+            self._validate_geometry()
 
     def _on_confirm_clicked(self):
         """按鈕點擊事件：若為「快速修正」則觸發 _quick_fix_geometry；若為「確認」則觸發 accept()。"""
