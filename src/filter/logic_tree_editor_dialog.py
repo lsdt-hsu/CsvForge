@@ -199,19 +199,35 @@ class LogicTreeEditorDialog(QDialog):
             level_map[leaf] = 0
             pos_map[leaf] = QPointF(i * spacing_x, base_y)
 
+        def get_rightmost_leaf(n):
+            if isinstance(n, RuleNode) or n.op_type == "LEAF":
+                return n
+            return get_rightmost_leaf(n.children[-1])
+
+        def get_leftmost_leaf(n):
+            if isinstance(n, RuleNode) or n.op_type == "LEAF":
+                return n
+            return get_leftmost_leaf(n.children[0])
+
         def calculate_node_metrics(node):
             if isinstance(node, RuleNode) or node.op_type == "LEAF":
                 return level_map[node], pos_map[node].x()
 
             child_levels = []
-            child_xs = []
             for child in node.children:
-                c_lvl, c_x = calculate_node_metrics(child)
+                c_lvl, _ = calculate_node_metrics(child)
                 child_levels.append(c_lvl)
-                child_xs.append(c_x)
 
             node_lvl = 1 + (max(child_levels) if child_levels else 0)
-            node_x = sum(child_xs) / len(child_xs) if child_xs else 0.0
+
+            if len(node.children) >= 2:
+                rightmost_left = get_rightmost_leaf(node.children[0])
+                leftmost_right = get_leftmost_leaf(node.children[1])
+                node_x = (pos_map[rightmost_left].x() + pos_map[leftmost_right].x()) / 2.0
+            elif node.children:
+                _, node_x = calculate_node_metrics(node.children[0])
+            else:
+                node_x = 0.0
 
             level_map[node] = node_lvl
             node_y = base_y - node_lvl * level_height
@@ -341,6 +357,7 @@ class LogicTreeEditorDialog(QDialog):
     def _start_drag(self, item: RuleNodeItem, scene_pos: QPointF):
         self._is_dragging = True
         self._dragged_item = item
+        item.set_visual_state(RuleNodeItem.STATE_DRAGGING)
 
         # 記錄本次拖曳開始前的順序與 Slot 映射基準
         self._drag_start_order = list(self._current_slot_order)
@@ -360,6 +377,7 @@ class LogicTreeEditorDialog(QDialog):
     def _start_drag_logic(self, item: LogicNodeItem, scene_pos: QPointF):
         self._is_dragging_logic = True
         self._dragged_logic_item = item
+        item.set_visual_state(LogicNodeItem.STATE_DRAGGING)
 
         # 記錄本次拖曳開始前的層級順序與映射基準
         self._drag_start_logic_order = list(self._current_logic_layer_order)
@@ -641,19 +659,35 @@ class LogicTreeEditorDialog(QDialog):
             level_map[leaf] = 0
             pos_map[leaf] = QPointF(i * self._spacing_x, self._base_y)
 
+        def get_rightmost_leaf(n):
+            if isinstance(n, RuleNode) or n.op_type == "LEAF":
+                return n
+            return get_rightmost_leaf(n.children[-1])
+
+        def get_leftmost_leaf(n):
+            if isinstance(n, RuleNode) or n.op_type == "LEAF":
+                return n
+            return get_leftmost_leaf(n.children[0])
+
         def calculate_node_metrics(node):
             if isinstance(node, RuleNode) or node.op_type == "LEAF":
                 return level_map[node], pos_map[node].x()
 
             child_levels = []
-            child_xs = []
             for child in node.children:
-                c_lvl, c_x = calculate_node_metrics(child)
+                c_lvl, _ = calculate_node_metrics(child)
                 child_levels.append(c_lvl)
-                child_xs.append(c_x)
 
             node_lvl = 1 + (max(child_levels) if child_levels else 0)
-            node_x = sum(child_xs) / len(child_xs) if child_xs else 0.0
+
+            if len(node.children) >= 2:
+                rightmost_left = get_rightmost_leaf(node.children[0])
+                leftmost_right = get_leftmost_leaf(node.children[1])
+                node_x = (pos_map[rightmost_left].x() + pos_map[leftmost_right].x()) / 2.0
+            elif node.children:
+                _, node_x = calculate_node_metrics(node.children[0])
+            else:
+                node_x = 0.0
 
             level_map[node] = node_lvl
             node_y = self._base_y - node_lvl * 80.0
@@ -734,12 +768,21 @@ class LogicTreeEditorDialog(QDialog):
         scan_node(self._tree_root)
 
         # 更新 LogicNodeItem 視覺狀態
-        for node, item in self._node_to_item.items():
-            if isinstance(item, LogicNodeItem):
-                if node in invalid_nodes:
-                    item.set_visual_state(LogicNodeItem.STATE_INVALID)
-                else:
-                    item.set_visual_state(LogicNodeItem.STATE_NORMAL)
+        for item in getattr(self, "_initial_logic_items", []):
+            node = next((n for n, it in self._node_to_item.items() if it == item), None)
+            if self._is_dragging_logic and item == self._dragged_logic_item:
+                item.set_visual_state(LogicNodeItem.STATE_DRAGGING)
+            elif (
+                self._is_dragging_logic
+                and item in getattr(self, "_drag_start_logic_layer_map", {})
+                and item in getattr(self, "_current_logic_layer_order", [])
+                and self._current_logic_layer_order.index(item) != self._drag_start_logic_layer_map.get(item)
+            ):
+                item.set_visual_state(LogicNodeItem.STATE_DISPLACED)
+            elif node and node in invalid_nodes:
+                item.set_visual_state(LogicNodeItem.STATE_INVALID)
+            else:
+                item.set_visual_state(LogicNodeItem.STATE_NORMAL)
 
         # 依據檢查結果切換按鈕文字
         if invalid_nodes:
