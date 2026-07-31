@@ -1,5 +1,23 @@
 """
 logic_tree_editor_dialog.py — 邏輯樹編輯器對話框
+
+[幾何不合法問題與設計處理]
+「幾何不合法」是指在拖曳完成後，幾何上發生「父邏輯節點 Y >= 子節點 Y」
+或「左子樹的節點跟到右子樹右方，造成子樹交叉」的狀況。
+
+分析結論（詳見 .local_reports/geometry_invalidity_analysis.md）：
+  在以下兩條「設計不可變」的保護下，幾何不合法在數學上不可能發生：
+
+  [設計不可變一] Logic 節點禁止水平拖曳（X 軸鎖定）
+    Logic 節點 X 由 AST 計算得到（相鄰葉節點的中點），且在整個編輯周期內永不改變。
+    此保證 rebuild_tree_from_heights 的 X 排序 → gap-index 對應關係持續成立。
+
+  [設計不可變二] Rule 節點拖曳不變更邏輯樹架構，只更換運算元位置
+    Rule 節點拖曳只更新 _current_slot_order，不改變任何 Logic 節點的 X/Y。
+    因此 build_subtree 的 min-Y 選根邏輯不變，AST 拓撲結構保持不變。
+
+  在此兩條不可變的保護下，幾何合法性檢查已經在數學上隱含保證，
+  validate_geometry 的掃描結果恆為通過，相關邏輯已移除。
 """
 
 from PyQt6.QtWidgets import (
@@ -156,7 +174,7 @@ class LogicTreeEditorDialog(QDialog):
             self._current_logic_layer_order,
         ) = res
         if self._tree_root:
-            self._validate_geometry()
+            self._refresh_display()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -229,33 +247,13 @@ class LogicTreeEditorDialog(QDialog):
             new_expr = logic_tree.to_string(self._tree_root)
             self.txt_expression.setPlainText(new_expr)
 
-    def _quick_fix_geometry(self):
-        """
-        快速修正：檢查所有邏輯節點之間的拓撲依賴關係，重新分配它們的高度層級。
-        最內層運算的邏輯節點分配在最低高度層級，最外層分配在最高層級，消除幾何錯位。
-        """
-        tree_root = getattr(self, "_tree_root", None)
-        node_to_item = getattr(self, "_node_to_item", None)
-        initial_logics = getattr(self, "_initial_logic_items", [])
-        spacing_x = getattr(self, "_spacing_x", 110.0)
-        base_y = getattr(self, "_base_y", 300.0)
-
-        if tree_root and node_to_item:
-            self._current_logic_layer_order = TreeLayoutEngine.quick_fix_geometry(
-                tree_root, node_to_item, initial_logics, spacing_x, base_y
-            )
-            self._validate_geometry()
-
     def _on_confirm_clicked(self):
-        """按鈕點擊事件：若為「快速修正」則觸發 _quick_fix_geometry；若為「確認」則觸發 accept()。"""
-        if self.btn_confirm.text() == "快速修正":
-            self._quick_fix_geometry()
-        else:
-            self.accept()
+        """按鈕點擊事件：確認並關閉對話框。"""
+        self.accept()
 
-    def _validate_geometry(self):
-        """幾何合法性檢查器 (Geometry Validator)。"""
-        TreeConnectionRenderer.validate_geometry(self)
+    def _refresh_display(self):
+        """更新 Logic 節點視覺狀態並重新繪製連接線。"""
+        TreeConnectionRenderer.refresh_display(self)
 
     def _update_connection_lines(self):
         """即時重新計算並繪製所有節點間的連接線 (Slot-bound Model)。"""

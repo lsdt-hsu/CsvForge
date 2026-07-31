@@ -63,7 +63,7 @@ class TreeDragController:
                         target_logic.set_op_type(new_op)
                         self.dialog._rebuild_tree_from_heights()
                         self.dialog.txt_expression.setPlainText(logic_tree.to_string(self.dialog._tree_root))
-                        self.dialog._validate_geometry()
+                        self.dialog._refresh_display()
                 return True
         return False
 
@@ -132,6 +132,10 @@ class TreeDragController:
         self.dialog._ghost_logic_item.setOpacity(0.6)
         self.dialog._ghost_logic_item.setZValue(100)
         self.dialog.graphics_scene.addItem(self.dialog._ghost_logic_item)
+        # [設計不可變] Ghost 的 X 軸鎖定為拖曳前節點的原始 X，禁止水平偏移。
+        # Logic 節點 X 是由 AST 計算出的子樹葉節點相鄰中點；若 X 改變，
+        # rebuild_tree_from_heights 的 X 排序 → gap-index 對應關係將失效，
+        # 導致 build_subtree 以錯誤的切割點重建 AST，造成運算子語意錯誤。
         self.dialog._ghost_logic_item.setPos(QPointF(item.x(), scene_pos.y()))
 
         layer_idx = self.calc_layer_idx(scene_pos.y())
@@ -142,6 +146,8 @@ class TreeDragController:
         if self.dialog._is_dragging_logic:
             scene_pos = event.scenePos()
             if self.dialog._ghost_logic_item and self.dialog._dragged_logic_item:
+                # [設計不可變] 拖曳中 Ghost 僅允許 Y 軸跟隨滑鼠，X 鎖定為拖曳目標的原始 X。
+                # 保持 X 不變是確保 rebuild_tree_from_heights 能正確重建 AST 的前提。
                 self.dialog._ghost_logic_item.setPos(QPointF(self.dialog._dragged_logic_item.x(), scene_pos.y()))
 
             layer_idx = self.calc_layer_idx(scene_pos.y())
@@ -169,6 +175,10 @@ class TreeDragController:
         if not self.dialog._is_dragging or self.dialog._pending_slot_idx is None or self.dialog._dragged_item is None:
             return
 
+        # [設計不可變] Rule 節點拖曳只更新 _current_slot_order（葉節點的排列順序）。
+        # Logic 節點的 X、Y 座標完全不受影響，因此 rebuild_tree_from_heights 中
+        # build_subtree 的 min-Y 選根邏輯不變，AST 拓撲結構（運算子父子關係）保持不變。
+        # 只有葉節點的「內容」（rule_idx）隨 slot 順序改變，不影響運算結構。
         target_slot = self.dialog._pending_slot_idx
         drag_start_order = getattr(self.dialog, "_drag_start_order", [])
 
@@ -192,7 +202,7 @@ class TreeDragController:
         self.dialog._current_slot_order = new_order
         self.dialog._rebuild_tree_from_heights()
         self.dialog.txt_expression.setPlainText(logic_tree.to_string(self.dialog._tree_root))
-        self.dialog._validate_geometry()
+        self.dialog._refresh_display()
 
     def on_logic_hover_timeout(self):
         if not self.dialog._is_dragging_logic or self.dialog._pending_logic_layer_idx is None or self.dialog._dragged_logic_item is None:
@@ -210,6 +220,9 @@ class TreeDragController:
 
         for i, item in enumerate(new_order):
             if i < len(layer_positions_y):
+                # [設計不可變] 僅更新 Y 軸（Layer 高度），X 永不改變。
+                # Y 的離散層級決定 build_subtree 的 min-Y 選根順序（運算子的父子層級關係）；
+                # X 的固定確保 gap-index 對應關係持續成立。
                 item.setPos(item.x(), layer_positions_y[i])
             if item == self.dialog._dragged_logic_item:
                 item.set_visual_state(LogicNodeItem.STATE_DRAGGING)
@@ -221,7 +234,7 @@ class TreeDragController:
         self.dialog._current_logic_layer_order = new_order
         self.dialog._rebuild_tree_from_heights()
         self.dialog.txt_expression.setPlainText(logic_tree.to_string(self.dialog._tree_root))
-        self.dialog._validate_geometry()
+        self.dialog._refresh_display()
 
     def cancel_drag(self):
         if not self.dialog._is_dragging:
@@ -247,7 +260,7 @@ class TreeDragController:
         self.dialog._pending_slot_idx = None
         self.dialog._rebuild_tree_from_heights()
         self.dialog.txt_expression.setPlainText(logic_tree.to_string(self.dialog._tree_root))
-        self.dialog._validate_geometry()
+        self.dialog._refresh_display()
 
     def cancel_logic_drag(self):
         if not self.dialog._is_dragging_logic:
@@ -273,7 +286,7 @@ class TreeDragController:
         self.dialog._pending_logic_layer_idx = None
         self.dialog._rebuild_tree_from_heights()
         self.dialog.txt_expression.setPlainText(logic_tree.to_string(self.dialog._tree_root))
-        self.dialog._validate_geometry()
+        self.dialog._refresh_display()
 
     def handle_mouse_release(self, event) -> bool:
         if self.dialog._is_dragging_logic and event.button() == Qt.MouseButton.LeftButton:
@@ -294,6 +307,7 @@ class TreeDragController:
 
             for i, item in enumerate(apply_order):
                 if i < len(layer_positions_y):
+                    # [設計不可變] 放開後的最終位置只更新 Y，X 保持不變。
                     item.setPos(item.x(), layer_positions_y[i])
                 item.set_visual_state(LogicNodeItem.STATE_NORMAL)
 
@@ -303,7 +317,7 @@ class TreeDragController:
             self.dialog._pending_logic_layer_idx = None
             self.dialog._rebuild_tree_from_heights()
             self.dialog.txt_expression.setPlainText(logic_tree.to_string(self.dialog._tree_root))
-            self.dialog._validate_geometry()
+            self.dialog._refresh_display()
             return True
 
         if self.dialog._is_dragging and event.button() == Qt.MouseButton.LeftButton:
@@ -313,6 +327,7 @@ class TreeDragController:
                 self.dialog.graphics_scene.removeItem(self.dialog._ghost_item)
                 self.dialog._ghost_item = None
 
+            # [設計不可變] Rule 放開只更新 slot 排列，不改變 Logic 節點位置，AST 拓撲不變。
             target_slot = self.calc_slot_idx(event.scenePos().x())
             drag_start_order = getattr(self.dialog, "_drag_start_order", [])
             candidate_order = [item for item in drag_start_order if item != self.dialog._dragged_item]
@@ -333,7 +348,7 @@ class TreeDragController:
             self.dialog._pending_slot_idx = None
             self.dialog._rebuild_tree_from_heights()
             self.dialog.txt_expression.setPlainText(logic_tree.to_string(self.dialog._tree_root))
-            self.dialog._validate_geometry()
+            self.dialog._refresh_display()
             return True
 
         return False

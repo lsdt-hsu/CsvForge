@@ -180,6 +180,25 @@ class TreeLayoutEngine:
     def rebuild_tree_from_heights(initial_rule_items, current_slot_order, initial_logic_items):
         """
         依照當前 Rule 節點順序與 Logic 節點的高度 (Y 座標)，動態重新建立邏輯樹 (AST)。
+
+        [正確性保證] 此函式在設計約束下數學上保證輸出合法的二元 AST：
+
+        保證一：X 排序 = gap-index 對應
+          logic_items 依 X 座標排序後，logic_items[i] 必然對應 gap i
+          （Slot[i] 與 Slot[i+1] 之間）。
+          原因：calculate_node_metrics 以「左子樹最右葉 X + 右子樹最左葉 X」之中點
+          計算 Logic 節點 X，在二元 AST 的中序遍歷中這兩葉必然相鄰，
+          故 Logic 節點 X = (k×spacing_x + (k+1)×spacing_x)/2，精確落在 gap k。
+          此對應關係在 Logic 節點 X 永不改變（設計不可變一）的前提下持續成立。
+
+        保證二：parent.y() < child.y() 恆成立
+          build_subtree 選擇「範圍內 Y 最小（視覺最高）」的 Logic 節點為根節點。
+          因此任何父 Logic 節點的 Y 必然小於其所有子 Logic 節點，
+          幾何合法性的「父 Y >= 子 Y」條件在此演算法下永遠通過。
+
+        保證三：輸出為嚴格二元樹
+          build_subtree 每次遞迴恰好建立一個 LogicOpNode(children=[left, right])，
+          永不產生多叉節點。
         """
         if not initial_rule_items:
             return None, {}
@@ -206,6 +225,9 @@ class TreeLayoutEngine:
             best_op_idx = rule_start
             min_y = logic_items[rule_start].y()
 
+            # [設計不可變] min-Y 選根：Y 最小（視覺最高）的 Logic 節點成為當前子樹的根節點。
+            # 此選擇策略保證 parent.y() 恆小於所有 child Logic 節點的 y()，
+            # 即「高層邏輯節點 Y 嚴格小於低層邏輯節點 Y」的幾何合法性由此保證。
             for op_idx in range(rule_start + 1, rule_end):
                 op_y = logic_items[op_idx].y()
                 if op_y < min_y:
@@ -224,23 +246,3 @@ class TreeLayoutEngine:
         tree_root = build_subtree(0, num_rules - 1)
         return tree_root, node_to_item
 
-    @staticmethod
-    def quick_fix_geometry(tree_root, node_to_item, initial_logic_items, spacing_x=110.0, base_y=300.0, level_height=80.0):
-        """
-        檢查所有邏輯節點之間的拓撲依賴關係，重新分配它們的高度層級。
-        """
-        if not tree_root or not node_to_item:
-            return []
-
-        leaf_nodes, pos_map, _ = TreeLayoutEngine.calculate_node_metrics(
-            tree_root, spacing_x, base_y, level_height
-        )
-
-        for node, item in node_to_item.items():
-            if isinstance(item, LogicNodeItem) and node in pos_map:
-                item.setPos(pos_map[node])
-                item.set_visual_state(LogicNodeItem.STATE_NORMAL)
-
-        logic_items = list(initial_logic_items or [])
-        logic_items.sort(key=lambda item: (base_y - item.pos().y(), item.pos().x()))
-        return logic_items

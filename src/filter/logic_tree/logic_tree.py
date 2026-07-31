@@ -83,23 +83,23 @@ def clean_tree(tree):
 
 def add_rule_node(tree, new_idx):
     """
-    新增規則：將新規則 leaf_idx=new_idx 加到前一個規則 (new_idx-1) 所屬的群組中。
-    如果前一個規則無 Parent (即原本為單一 Root 節點)，則建立一個 AND 群組包覆兩者。
+    新增規則：將 new_idx 對應的新規則裝點以二元 AND 包覆到現有樹之右側。
+
+    [設計不可變] 此函式保證輸出始終為嚴格二元樹（每個 LogicOpNode 恰好 2 個子節點）。
+    舊設計透過 find_parent_and_child + parent.children.append 將新規則加入現有群組，
+    會產生多叉節點（N-ary tree），已與邏輯樹編輯器的幾何佈局引擎不相容，故廢棄。
+
+    字串等僷性證明：
+      AND(AND(#1, #2), #3) --to_string--> "#1 AND #2 AND #3"
+      AND(#1, #2, #3)      --to_string--> "#1 AND #2 AND #3"  (舊設計，同內容)
+    parse_expression 重新解析後亦得到完全相同的二元 AST。
     """
     new_leaf = RuleNode(leaf_idx=new_idx)
     if not tree:
         return new_leaf
-
-    parent, target_node = find_parent_and_child(tree, new_idx - 1)
-    if parent is None:
-        # 代表 target_node 就是根節點
-        new_root = LogicOpNode("AND", children=[tree, new_leaf])
-        return new_root
-    else:
-        parent.children.append(new_leaf)
-        # 進行扁平化維持結構正確
-        tree.flatten()
-        return tree
+    # 始終以新的二元 AND 節點包覆整棵現有樹與新規則葉節點，
+    # 不再查找 Parent 直接 append，嚴格防止產生多叉節點。
+    return LogicOpNode("AND", children=[tree, new_leaf])
 
 
 def decrement_leafs(node, threshold):
@@ -232,8 +232,7 @@ def parse_expression(expr_str: str, current_count: int = None):
     except SyntaxError as e:
         raise ValueError(f"語法錯誤: {e}")
 
-    # 執行扁平化壓平連續 AND/OR/XOR
-    tree.flatten()
+    # Parser 的遞降文法保證輸出為嚴格二元樹，此處不需要呼叫 flatten()。
 
     # 語意驗證（若傳入 current_count 且 > 0）
     if current_count is not None and current_count > 0:

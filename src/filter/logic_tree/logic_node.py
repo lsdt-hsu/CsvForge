@@ -13,7 +13,11 @@ class BaseNode:
         self.leaf_idx = None
 
     def flatten(self):
-        """子類別實作扁平化邏輯"""
+        """
+        扁平化基底方法（空操作）。
+        舊設計曾在此合併多叉節點，但該路徑已廢棄（見 add_rule_node）。
+        現行系統嚴格維持二元樹不變量，本方法僅保留以維持介面相容性。
+        """
         pass
 
     def __repr__(self):
@@ -43,10 +47,9 @@ class LogicOpNode(BaseNode):
         self.children = children or []
         self.leaf_idx = None
 
-    def flatten(self):
-        """遞迴進行子節點扁平化（維持二元樹結構，每個邏輯運算子限定 2 個運算元）。"""
-        for child in self.children:
-            child.flatten()
+    # flatten() 方法已移除。
+    # 舊設計以此遞迴扁平化多叉節點，但 LogicOpNode 現已嚴格維持二元樹不變量，
+    # 不再需要合併操作。繼承自 BaseNode.flatten()（空操作）。
 
     def __repr__(self):
         return f"<LogicOpNode op_type={self.op_type} children_count={len(self.children)}>"
