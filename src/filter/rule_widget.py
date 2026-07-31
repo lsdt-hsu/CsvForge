@@ -61,6 +61,32 @@ class CircularToggleButton(QPushButton):
                 int(center_x), int(center_y + line_len / 2.0)
             )
 
+class ElidedLabel(QLabel):
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._full_text = text
+
+    def setText(self, text):
+        self._full_text = text
+        self.setToolTip(text)
+        self._update_elided_text()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_elided_text()
+
+    def _update_elided_text(self):
+        if not self._full_text:
+            super().setText("")
+            return
+        fm = self.fontMetrics()
+        avail_width = self.width() - 25
+        if avail_width > 0:
+            elided = fm.elidedText(self._full_text, Qt.TextElideMode.ElideRight, avail_width)
+            super().setText(elided)
+        else:
+            super().setText(self._full_text)
+
 class RuleWidget(QWidget):
     _N_NON_COL_OPTIONS = 2
 
@@ -78,7 +104,70 @@ class RuleWidget(QWidget):
         super().__init__()
         self.index = index  # 1-indexed integer
         self.parent_panel = parent_panel
+        self._is_expanded = True
         self.init_ui()
+
+    def _on_toggle_clicked(self):
+        self._is_expanded = not self._is_expanded
+        self.btn_toggle.setText("▼" if self._is_expanded else "▶")
+        self.details_container.setVisible(self._is_expanded)
+        self.lbl_summary.setVisible(not self._is_expanded)
+        if not self._is_expanded:
+            self.update_summary()
+
+    def update_summary(self):
+        col_type = self.cmb_compare_col.currentData()
+        if col_type == "all":
+            col_str = "所有欄位"
+        elif col_type == "range":
+            start_t = self.cmb_range_start.currentText() or ""
+            end_t = self.cmb_range_end.currentText() or ""
+            col_str = f"{start_t}~{end_t}" if (start_t or end_t) else "欄位範圍"
+        else:
+            col_str = self.cmb_compare_col.currentText()
+
+        tokens = [col_str]
+        if self.chk_invert.isChecked():
+            tokens.append("非")
+
+        method_idx = self.cmb_compare_method.currentIndex()
+        tokens.append(self.cmb_compare_method.currentText())
+
+        if method_idx == CompareMethod.BELONG:
+            target_t = self.cmb_compare_target.currentText()
+            belong_t = self.cmb_belong_value.currentText()
+            if target_t:
+                tokens.append(target_t)
+            if belong_t:
+                tokens.append(belong_t)
+        else:
+            target_data = self.cmb_compare_target.currentData()
+            if target_data == "manual":
+                val = self.txt_compare_value.text().strip()
+                if val:
+                    tokens.append(val)
+            else:
+                target_col_t = self.cmb_compare_target.currentText()
+                if target_col_t:
+                    tokens.append(target_col_t)
+
+        self.lbl_summary.setText(" ".join(tokens))
+
+    def on_invert_changed(self, state):
+        self.update_summary()
+        self.parent_panel.on_rule_content_changed()
+
+    def on_range_changed(self, idx):
+        self.update_summary()
+        self.parent_panel.on_rule_content_changed()
+
+    def on_value_changed(self, text):
+        self.update_summary()
+        self.parent_panel.on_rule_content_changed()
+
+    def on_belong_changed(self, idx):
+        self.update_summary()
+        self.parent_panel.on_rule_content_changed()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -87,7 +176,27 @@ class RuleWidget(QWidget):
 
         title_layout = QHBoxLayout()
         title_layout.setContentsMargins(0, 0, 0, 0)
-        
+        title_layout.setSpacing(6)
+
+        self.btn_toggle = QPushButton("▼")
+        self.btn_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_toggle.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                font-weight: bold;
+                font-size: 14px;
+                color: #7aa2f7;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                color: #89ddff;
+            }
+        """)
+        self.btn_toggle.setFixedWidth(16)
+        self.btn_toggle.clicked.connect(self._on_toggle_clicked)
+        title_layout.addWidget(self.btn_toggle)
+
         self.lbl_rule_title = QLabel(f"規則 #{self.index}")
         applyStandardLabelStyle(self.lbl_rule_title)
         self.lbl_rule_title.setStyleSheet(self.lbl_rule_title.styleSheet() + " font-weight: bold;")
@@ -106,6 +215,19 @@ class RuleWidget(QWidget):
         
         layout.addLayout(title_layout)
 
+        # 簡要資訊 (收合時顯示，不可編輯，過長自動截斷)
+        self.lbl_summary = ElidedLabel()
+        applyStandardLabelStyle(self.lbl_summary)
+        self.lbl_summary.setStyleSheet(self.lbl_summary.styleSheet().replace("}", "    padding-left: 22px;\n}"))
+        self.lbl_summary.setVisible(False)
+        layout.addWidget(self.lbl_summary)
+
+        # 詳細控制項容器 (展開時顯示，收合時隱藏)
+        self.details_container = QWidget()
+        details_layout = QVBoxLayout(self.details_container)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(6)
+
         # 1. 比對欄位列
         row1 = QHBoxLayout()
         row1.setContentsMargins(0, 0, 0, 0)
@@ -120,7 +242,7 @@ class RuleWidget(QWidget):
         self.cmb_compare_col.currentIndexChanged.connect(self.on_col_changed)
         row1.addWidget(lbl_col)
         row1.addWidget(self.cmb_compare_col)
-        layout.addLayout(row1)
+        details_layout.addLayout(row1)
 
         # 欄位範圍的「從欄位」與「到欄位」容器 (上下兩排)
         self.range_cols_container = QWidget()
@@ -137,7 +259,7 @@ class RuleWidget(QWidget):
         lbl_range_start.setFixedWidth(55)
         self.cmb_range_start = QComboBox()
         applyStandardComboBoxStyle(self.cmb_range_start)
-        self.cmb_range_start.currentIndexChanged.connect(self.parent_panel.on_rule_content_changed)
+        self.cmb_range_start.currentIndexChanged.connect(self.on_range_changed)
         row_start.addWidget(lbl_range_start)
         row_start.addWidget(self.cmb_range_start, stretch=1)
         range_cols_layout.addLayout(row_start)
@@ -151,12 +273,12 @@ class RuleWidget(QWidget):
         lbl_range_end.setFixedWidth(55)
         self.cmb_range_end = QComboBox()
         applyStandardComboBoxStyle(self.cmb_range_end)
-        self.cmb_range_end.currentIndexChanged.connect(self.parent_panel.on_rule_content_changed)
+        self.cmb_range_end.currentIndexChanged.connect(self.on_range_changed)
         row_end.addWidget(lbl_range_end)
         row_end.addWidget(self.cmb_range_end, stretch=1)
         range_cols_layout.addLayout(row_end)
         
-        layout.addWidget(self.range_cols_container)
+        details_layout.addWidget(self.range_cols_container)
         self.range_cols_container.setVisible(False)
 
         # 2. 比對方式列
@@ -174,13 +296,13 @@ class RuleWidget(QWidget):
         
         self.chk_invert = QCheckBox("反相")
         self.chk_invert.setChecked(False)
-        self.chk_invert.stateChanged.connect(self.parent_panel.on_rule_content_changed)
+        self.chk_invert.stateChanged.connect(self.on_invert_changed)
         
         row2.addWidget(lbl_method)
         row2.addWidget(self.cmb_compare_method)
         row2.addWidget(self.chk_invert)
         row2.addStretch(1)
-        layout.addLayout(row2)
+        details_layout.addLayout(row2)
 
         # 3. 比對目標列
         row3 = QHBoxLayout()
@@ -195,7 +317,7 @@ class RuleWidget(QWidget):
         self.cmb_compare_target.currentIndexChanged.connect(self.on_target_changed)
         row3.addWidget(lbl_target)
         row3.addWidget(self.cmb_compare_target)
-        layout.addLayout(row3)
+        details_layout.addLayout(row3)
 
         # 4. 輸入框容器 (內縮 45 像素以對齊下拉選單)
         self.value_container = QWidget()
@@ -205,9 +327,9 @@ class RuleWidget(QWidget):
         self.txt_compare_value = QLineEdit()
         applyStandardLineEditStyle(self.txt_compare_value)
         self.txt_compare_value.setPlaceholderText("輸入比對值或正規表達式")
-        self.txt_compare_value.textChanged.connect(self.parent_panel.on_rule_content_changed)
+        self.txt_compare_value.textChanged.connect(self.on_value_changed)
         value_layout.addWidget(self.txt_compare_value)
-        layout.addWidget(self.value_container)
+        details_layout.addWidget(self.value_container)
 
         # 5. 屬於容器 (內縮 45 像素以對齊下拉選單)
         self.belong_container = QWidget()
@@ -216,11 +338,15 @@ class RuleWidget(QWidget):
         belong_layout.setSpacing(0)
         self.cmb_belong_value = QComboBox()
         applyStandardComboBoxStyle(self.cmb_belong_value)
-        self.cmb_belong_value.currentIndexChanged.connect(self.parent_panel.on_rule_content_changed)
+        self.cmb_belong_value.currentIndexChanged.connect(self.on_belong_changed)
         belong_layout.addWidget(self.cmb_belong_value)
-        layout.addWidget(self.belong_container)
+        details_layout.addWidget(self.belong_container)
         
         self.belong_container.setVisible(False)
+
+        layout.addWidget(self.details_container)
+
+        self.update_summary()
 
         if self.parent_panel.num_cols > 0:
             self.update_columns(self.parent_panel.num_cols)
@@ -367,6 +493,8 @@ class RuleWidget(QWidget):
             else:
                 self.value_container.setVisible(False)
 
+        self.update_summary()
+
     def on_col_changed(self, idx):
         self.update_belong_visibility()
         self.parent_panel.on_rule_content_changed()
@@ -476,6 +604,12 @@ class RuleWidget(QWidget):
                     self.cmb_belong_value.setCurrentIndex(b_idx)
             else:
                 self.txt_compare_value.setText(val)
+
+            self._is_expanded = True
+            self.btn_toggle.setText("▼")
+            self.details_container.setVisible(True)
+            self.lbl_summary.setVisible(False)
+            self.update_summary()
         finally:
             self.cmb_compare_col.blockSignals(False)
             self.cmb_compare_method.blockSignals(False)
