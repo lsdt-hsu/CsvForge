@@ -20,12 +20,6 @@ from filter.logic_tree_editor.logic_tree_editor_dialog import LogicTreeEditorDia
 from filter.rule_widget import RuleWidget, CircularToggleButton
 from filter.filter_config import FilterPanelConfig, serialize_filter_config, deserialize_filter_config, CompareMethod
 
-class CustomTextEdit(QTextEdit):
-    focus_out_signal = pyqtSignal()
-
-    def focusOutEvent(self, event):
-        super().focusOutEvent(event)
-        self.focus_out_signal.emit()
 
 
 class FilterPanel(BasePluginPanel):
@@ -130,29 +124,22 @@ class FilterPanel(BasePluginPanel):
         self.scroll_area.setWidget(self.scroll_content)
         self.controls_layout.addWidget(self.scroll_area, stretch=1)
 
-        self.btn_start_filter = QPushButton("開始過濾")
-        applyPrimaryButtonStyle(self.btn_start_filter, is_running=False)
-        self.btn_start_filter.clicked.connect(self.on_filter_clicked)
-        self.controls_layout.addWidget(self.btn_start_filter)
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(0, 0, 0, 0)
+        btn_layout.setSpacing(8)
 
-        self.lbl_expr_title = QLabel("當前規則邏輯 (可編輯)：")
-        applyStandardLabelStyle(self.lbl_expr_title)
-        self.lbl_expr_title.setStyleSheet(self.lbl_expr_title.styleSheet() + " font-weight: bold; margin-top: 5px;")
-        self.controls_layout.addWidget(self.lbl_expr_title)
-
-        self.txt_expression = CustomTextEdit()
-        applyStandardLineEditStyle(self.txt_expression)
-        self.txt_expression.setPlaceholderText("例如: #1 AND (#2 OR #3)")
-        self.txt_expression.setFixedHeight(45)
-        self.txt_expression.setAcceptRichText(False)
-        self.txt_expression.focus_out_signal.connect(self.on_expression_focus_out)
-        self.controls_layout.addWidget(self.txt_expression)
-
-        self.btn_ui_edit = QPushButton("圖形化編輯")
+        self.btn_ui_edit = QPushButton("邏輯")
         applyStandardButtonStyle(self.btn_ui_edit)
         self.btn_ui_edit.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_ui_edit.clicked.connect(self.open_logic_tree_editor)
-        self.controls_layout.addWidget(self.btn_ui_edit)
+
+        self.btn_start_filter = QPushButton("開始過濾")
+        applyPrimaryButtonStyle(self.btn_start_filter, is_running=False)
+        self.btn_start_filter.clicked.connect(self.on_filter_clicked)
+
+        btn_layout.addWidget(self.btn_ui_edit, 1)
+        btn_layout.addWidget(self.btn_start_filter, 2)
+        self.controls_layout.addLayout(btn_layout)
 
         self.hide_controls()
 
@@ -199,12 +186,6 @@ class FilterPanel(BasePluginPanel):
         if len(self.rules) >= 5:
             self.btn_add_rule.setVisible(False)
 
-        self.txt_expression.setReadOnly(False)
-        new_expr = logic_tree.to_string(self.logic_tree)
-        self.txt_expression.blockSignals(True)
-        self.txt_expression.setPlainText(new_expr)
-        self.txt_expression.setStyleSheet("")
-        self.txt_expression.blockSignals(False)
         self.expression_is_valid = True
         self._sync_rules_to_config()
 
@@ -229,59 +210,21 @@ class FilterPanel(BasePluginPanel):
         if len(self.rules) < 5:
             self.btn_add_rule.setVisible(True)
 
-        self.txt_expression.setReadOnly(len(self.rules) == 0)
-
-        new_expr = logic_tree.to_string(self.logic_tree)
-        self.txt_expression.blockSignals(True)
-        self.txt_expression.setPlainText(new_expr)
-        self.txt_expression.setStyleSheet("")
-        self.txt_expression.blockSignals(False)
         self.expression_is_valid = True
         self._sync_rules_to_config()
 
-    def on_expression_focus_out(self):
-        if len(self.rules) == 0:
-            self.txt_expression.blockSignals(True)
-            self.txt_expression.setPlainText("")
-            applyStandardLineEditStyle(self.txt_expression)
-            self.txt_expression.setReadOnly(True)
-            self.txt_expression.blockSignals(False)
-            self.logic_tree = None
-            self.expression_is_valid = True
-            self._sync_rules_to_config()
-            return
-
-        self.txt_expression.setReadOnly(False)
-        expr = self.txt_expression.toPlainText().strip()
-        
-        if not expr:
-            expr = " AND ".join(f"#{i}" for i in range(1, len(self.rules) + 1))
-            self.txt_expression.setPlainText(expr)
-
-        try:
-            tree = logic_tree.parse_expression(expr, len(self.rules))
-            self.logic_tree = tree
-            
-            formatted_expr = logic_tree.to_string(tree)
-            self.txt_expression.blockSignals(True)
-            self.txt_expression.setPlainText(formatted_expr)
-            applyStandardLineEditStyle(self.txt_expression)
-            self.txt_expression.blockSignals(False)
-
-            self.expression_is_valid = True
-            self._sync_rules_to_config()
-        except ValueError as e:
-            self.txt_expression.setStyleSheet("border: 2px solid #f7768e; border-radius: 6px;")
-            self.expression_is_valid = False
-
     def open_logic_tree_editor(self):
         """開啟邏輯樹編輯器 Modal 對話框。"""
-        current_expr = self.txt_expression.toPlainText().strip()
+        current_expr = logic_tree.to_string(self.logic_tree) if self.logic_tree else ""
         dialog = LogicTreeEditorDialog(expression_text=current_expr, parent=self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_expr = dialog.get_expression_text()
-            self.txt_expression.setPlainText(new_expr)
-            self.on_expression_focus_out()
+            try:
+                self.logic_tree = logic_tree.parse_expression(new_expr, len(self.rules))
+                self.expression_is_valid = True
+                self._sync_rules_to_config()
+            except ValueError:
+                pass
 
     def update_column_dropdowns(self, num_cols):
         self.num_cols = num_cols
@@ -439,7 +382,6 @@ class FilterPanel(BasePluginPanel):
         self.txt_filter_end_row.setEnabled(enabled)
         self.btn_add_rule.setEnabled(enabled)
         self.btn_start_filter.setEnabled(enabled)
-        self.txt_expression.setEnabled(enabled)
         self.btn_ui_edit.setEnabled(enabled)
         for r in self.rules:
             r.setEnabled(enabled)
@@ -462,7 +404,7 @@ class FilterPanel(BasePluginPanel):
         cfg = self.config
         cfg.rules = [r.get_config() for r in self.rules]
         cfg.logic_tree = logic_tree.serialize_tree(self.logic_tree)
-        cfg.expr_text = self.txt_expression.toPlainText()
+        cfg.expr_text = logic_tree.to_string(self.logic_tree) if self.logic_tree else ""
         cfg.start_row = self.txt_filter_start_row.text().strip()
         cfg.end_row = self.txt_filter_end_row.text().strip()
         cfg.dirty = True
@@ -471,7 +413,6 @@ class FilterPanel(BasePluginPanel):
         if not config:
             return
 
-        self.txt_expression.blockSignals(True)
         self.txt_filter_start_row.blockSignals(True)
         self.txt_filter_end_row.blockSignals(True)
 
@@ -492,13 +433,15 @@ class FilterPanel(BasePluginPanel):
             w.set_config(r_cfg)
 
         lt_cfg = config.get("logic_tree")
-        self.logic_tree = logic_tree.deserialize_tree(lt_cfg)
-
-        expr_text = config.get("expr_text", "")
-        self.txt_expression.setPlainText(expr_text)
-        self.txt_expression.blockSignals(False)
-
-        self.on_expression_focus_out()
+        if lt_cfg:
+            self.logic_tree = logic_tree.deserialize_tree(lt_cfg)
+        elif config.get("expr_text"):
+            try:
+                self.logic_tree = logic_tree.parse_expression(config.get("expr_text"), len(self.rules))
+            except ValueError:
+                self.logic_tree = None
+        else:
+            self.logic_tree = None
 
         self.btn_add_rule.setVisible(len(self.rules) < 5)
 
