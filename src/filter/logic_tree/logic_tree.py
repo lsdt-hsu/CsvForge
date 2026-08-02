@@ -127,6 +127,9 @@ def remove_rule_node(tree, del_idx):
         # 刪除了唯一的根節點
         return None
 
+    # [Fail-Fast 原則] 若樹結構異常或 target_node 不在 parent.children 中，
+    # 依據 Fail-Fast 原則不作防禦性檢查 (如 if target_node in parent.children)，
+    # 直接讓 parent.children.remove(target_node) 拋出 ValueError 讓 App 立即 Crash，以便即時暴露並修復結構邏輯問題。
     parent.children.remove(target_node)
 
     # 清理與縮併樹
