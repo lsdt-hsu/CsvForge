@@ -259,15 +259,6 @@ class LogicTreeEditorDialog(QDialog):
         """即時重新計算並繪製所有節點間的連接線 (Slot-bound Model)。"""
         TreeConnectionRenderer.update_connection_lines(self)
 
-    def handle_scene_key_press(self, event) -> bool:
-        if event.key() == Qt.Key.Key_Escape:
-            if self._is_dragging_logic:
-                self._cancel_logic_drag()
-                return True
-            if self._is_dragging:
-                self._cancel_drag()
-                return True
-        return False
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:

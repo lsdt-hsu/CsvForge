@@ -9,16 +9,6 @@ try:
 except ImportError:
     from logic_node import BaseNode, RuleNode, LogicOpNode
 
-
-class LogicNode(BaseNode):
-    """向後相容之 LogicNode 工廠與型別判斷介面"""
-
-    def __new__(cls, op_type, children=None, leaf_idx=None):
-        if op_type == "LEAF":
-            return RuleNode(leaf_idx=leaf_idx)
-        return LogicOpNode(op_type=op_type, children=children)
-
-
 def to_string(node, parent_op=None):
     """將邏輯樹轉回文字表示，混用不同類型運算時自動加上括號，連續同類型則去括號。"""
     if not node:
