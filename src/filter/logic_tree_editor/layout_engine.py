@@ -216,6 +216,9 @@ class TreeLayoutEngine:
 
         node_to_item = {}
 
+        # [Fail-Fast 原則] logic_items 數量預期應為 num_rules - 1。
+        # 若長度不一致（例如 logic_items 長度不足），依據 Fail-Fast 原則不作靜默防禦或退化處理，
+        # 讓 logic_items[rule_start] 存取直接觸發 IndexError 讓 App 立即 Crash，以便即時揭露並修復狀態不一致問題。
         def build_subtree(rule_start: int, rule_end: int):
             if rule_start == rule_end:
                 leaf = RuleNode(leaf_idx=rule_items[rule_start].rule_idx)
