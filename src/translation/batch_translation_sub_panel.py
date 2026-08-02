@@ -367,7 +367,7 @@ class BatchTranslationSubPanel(BaseSubPanel):
             prevent_sleep=True,
         )
 
-    def _on_worker_done(self, status: str) -> None:
+    def _on_worker_done(self, status) -> None:
         self._is_working = False
         self.btn_start.setText("開始翻譯")
         self.btn_start.setEnabled(True)
@@ -394,5 +394,4 @@ class BatchTranslationSubPanel(BaseSubPanel):
 
         self._worker = None
 
-        if status in ("finished", "cancelled", "error"):
-            self._on_translation_done()
+        self._on_translation_done()
