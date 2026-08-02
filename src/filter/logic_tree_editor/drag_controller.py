@@ -103,6 +103,10 @@ class TreeDragController:
         return False
 
     def start_drag(self, item: RuleNodeItem, scene_pos: QPointF):
+        if self.dialog._ghost_item and self.dialog._ghost_item.scene() == self.dialog.graphics_scene:
+            self.dialog.graphics_scene.removeItem(self.dialog._ghost_item)
+            self.dialog._ghost_item = None
+
         self.dialog._is_dragging = True
         self.dialog._dragged_item = item
         item.set_visual_state(RuleNodeItem.STATE_DRAGGING)
@@ -121,6 +125,10 @@ class TreeDragController:
         self.dialog._hover_timer.start(200)
 
     def start_drag_logic(self, item: LogicNodeItem, scene_pos: QPointF):
+        if self.dialog._ghost_logic_item and self.dialog._ghost_logic_item.scene() == self.dialog.graphics_scene:
+            self.dialog.graphics_scene.removeItem(self.dialog._ghost_logic_item)
+            self.dialog._ghost_logic_item = None
+
         self.dialog._is_dragging_logic = True
         self.dialog._dragged_logic_item = item
         item.set_visual_state(LogicNodeItem.STATE_DRAGGING)
