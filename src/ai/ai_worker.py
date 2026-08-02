@@ -16,7 +16,7 @@ class CSVAIWorker(QObject):
 
     標準接口信號（run_worker 架構必要）：
       progress(current, total): 進度更新，主程式自動套 ThrottledProgress 節流。
-      finished(status): 任務結束，"finished" | "error" | "cancelled"。
+      finished(status): 任務結束， TaskStatus 列舉物件。
 
     業務信號（外掛面板可自行連接）：
       status_updated(status_str): 更新 UI 狀態列字串。

@@ -58,7 +58,7 @@ class PluginAPI:
           - 繼承自 QObject（不繼承 QThread）
           - 擁有 run() 方法作為工作入口
           - 擁有 progress = pyqtSignal(int, int) 信號（主程式自動套 ThrottledProgress）
-          - 擁有 finished = pyqtSignal(str) 信號，結束時 emit "finished" | "error" | "cancelled"
+          - 擁有 finished = pyqtSignal(TaskStatus) 信號，結束時 emit TaskStatus Enum 成員
           - 擁有 cancel() 方法供主程式呼叫
 
         主程式收到請求後自動執行：

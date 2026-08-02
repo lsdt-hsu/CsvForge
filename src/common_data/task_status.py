@@ -1,7 +1,7 @@
-from enum import Enum, unique
+from enum import Enum, auto, unique
 
 @unique
 class TaskStatus(Enum):
-    FINISHED = "finished"
-    ERROR = "error"
-    CANCELLED = "cancelled"
+    FINISHED = auto()
+    ERROR = auto()
+    CANCELLED = auto()

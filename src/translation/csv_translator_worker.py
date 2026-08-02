@@ -16,7 +16,7 @@ class CSVTranslatorWorker(QObject):
 
     標準接口信號（run_worker 架構必要）：
       progress(current, total): 進度更新，主程式自動套 ThrottledProgress 節流。
-      finished(status): 任務結束， "finished" | "error" | "cancelled"。
+      finished(status): 任務結束， TaskStatus 列舉物件。
 
     業務信號（外掛面板可自行連接）：
       status_updated(status_str): 更新 UI 狀態列字串。
@@ -51,7 +51,7 @@ class CSVTranslatorWorker(QObject):
         self.skip_translated = skip_translated
         self._is_cancelled = False
         self.error_rank = 0
-        # 供面板在 finished("error") 時讀取錯誤詳情
+        # 供面板在 TaskStatus.ERROR 時讀取錯誤詳情
         self._last_error: str = ""
         self.prevent_sleep = True
         self.task_name = "翻譯中..."

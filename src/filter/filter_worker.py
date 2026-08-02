@@ -32,7 +32,7 @@ class FilterWorker(QObject):
 
     標準接口信號（run_worker 架構必要）：
       progress(current, total): 進度更新，主程式自動套 ThrottledProgress 節流。
-      finished(status): 任務結束， "finished" | "error" | "cancelled"。
+      finished(status): 任務結束， TaskStatus 列舉物件。
 
     業務信號（外掛面板可自行連接）：
       filter_completed(matched_indices, elapsed_time): 過濾完成，帶回結果與耗時。
@@ -58,7 +58,7 @@ class FilterWorker(QObject):
         self.filter_config = filter_config
         
         self._is_cancelled = False
-        # 供面板在 finished("error") 時讀取錯誤詳情
+        # 供面板在 TaskStatus.ERROR 時讀取錯誤詳情
         self._last_error: str = ""
 
         # 初始化 OpenCC 轉換器 (離線字典載入)
