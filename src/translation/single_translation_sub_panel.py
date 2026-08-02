@@ -4,6 +4,7 @@ from PyQt6.QtCore import Qt
 
 from plugin_sdk import theme
 from edit.base_sub_panel import BaseSubPanel
+from translation.single_csv_translator_worker import SingleCSVTranslatorWorker
 
 INTERVAL_OPTIONS = [1.0, 1.5, 2.5, 5.0, 7.5, 10.0, 15.0]
 
@@ -27,6 +28,8 @@ class SingleTranslationSubPanel(BaseSubPanel):
     def __init__(self, api, context, parent=None):
         super().__init__("單筆翻譯", api, context, parent)
         self.config = SingleTranslateConfig()
+        self._worker = None
+
         self._setup_ui()
 
     def _setup_ui(self):
@@ -226,8 +229,123 @@ class SingleTranslationSubPanel(BaseSubPanel):
         self.txt_src_col.setEnabled(global_enabled)
         self.txt_tgt_col.setEnabled(global_enabled)
         self.chk_skip_translated.setEnabled(global_enabled)
-        self.btn_start.setEnabled(global_enabled)
+        if self._worker is None:
+            self.btn_start.setEnabled(global_enabled or self._is_working)
 
-    def on_start_clicked(self) -> None:
-        self.api.write_log("INFO", "單筆翻譯功能開發中")
-        self.api.update_status("ℹ️ 單筆翻譯功能開發中")
+    # ── 便捷讀取方法 ─────────────────────────────────────────────────────────
+
+    def get_src_lang(self):
+        return self.cb_src_lang.currentData()
+
+    def get_tgt_lang(self):
+        return self.cb_tgt_lang.currentData()
+
+    def get_single_interval(self) -> float:
+        idx = max(0, min(self.slider_single_interval.value(), len(INTERVAL_OPTIONS) - 1))
+        return INTERVAL_OPTIONS[idx]
+
+    def get_src_col(self) -> int:
+        return self.txt_src_col.currentData() if self.txt_src_col.currentData() is not None else 0
+
+    def get_tgt_col(self) -> int:
+        return self.txt_tgt_col.currentData() if self.txt_tgt_col.currentData() is not None else 1
+
+    def get_skip_translated(self) -> bool:
+        return self.chk_skip_translated.isChecked()
+
+    # ── 任務執行與 Worker 控制 ────────────────────────────────────────────────
+
+    def _on_translation_done(self):
+        self.api.request_silent_save()
+
+    def _on_data_changed(self):
+        if self.context and self.context.csv_data:
+            self.context.csv_data.set_modified(True)
+            self.context.csv_data.data_changed.emit()
+
+    def on_start_clicked(self):
+        if self._is_working and self._worker is not None:
+            self._worker.cancel()
+            self.btn_start.setText("正在停止...")
+            self.btn_start.setEnabled(False)
+            return
+        self._start_translation_task()
+
+    def _start_translation_task(self) -> None:
+        if not self.context or not self.context.is_data_loaded:
+            self.api.write_log("WARNING", "請先載入 CSV 資料")
+            self.api.update_status("❌ 參數錯誤：未載入資料")
+            return
+
+        src_col = self.get_src_col()
+        tgt_col = self.get_tgt_col()
+
+        if src_col == tgt_col:
+            self.api.write_log("WARNING", "來源欄位與目標欄位不可相同，請重新選擇。")
+            self.api.update_status("❌ 參數錯誤：欄位不可相同")
+            return
+
+        visible_row_indices = self.context.csv_data.get_visible_indices()
+        all_rows = self.context.csv_data.all_rows
+        total = len(visible_row_indices)
+
+        self._worker = SingleCSVTranslatorWorker(
+            all_rows=all_rows,
+            visible_row_indices=visible_row_indices,
+            source_col_idx=src_col,
+            target_col_idx=tgt_col,
+            source_lang=self.get_src_lang(),
+            target_lang=self.get_tgt_lang(),
+            single_interval=self.get_single_interval(),
+            skip_translated=self.get_skip_translated(),
+        )
+
+        self._worker.status_updated.connect(self.api.update_status)
+        self._worker.log_emitted.connect(self.api.write_log)
+        self._worker.data_changed.connect(self._on_data_changed)
+        self._worker.finished.connect(self._on_worker_done)
+
+        self._is_working = True
+        self.btn_start.setText("停止翻譯")
+        self.btn_start.setEnabled(True)
+        theme.applyPrimaryButtonStyle(self.btn_start, is_running=True)
+        self.set_panel_enabled(False)
+
+        self.api.run_worker(
+            self._worker,
+            task_name="單筆翻譯中...",
+            total=total,
+            initial_log="開始執行 CSV 單筆翻譯...",
+            prevent_sleep=True,
+        )
+
+    def _on_worker_done(self, status: str) -> None:
+        self._is_working = False
+        self.btn_start.setText("開始翻譯")
+        self.btn_start.setEnabled(True)
+        theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
+        self.set_panel_enabled(True)
+
+        if self._worker is not None:
+            try:
+                self._worker.status_updated.disconnect(self.api.update_status)
+            except TypeError:
+                pass
+            try:
+                self._worker.log_emitted.disconnect(self.api.write_log)
+            except TypeError:
+                pass
+            try:
+                self._worker.data_changed.disconnect(self._on_data_changed)
+            except TypeError:
+                pass
+            try:
+                self._worker.finished.disconnect(self._on_worker_done)
+            except TypeError:
+                pass
+
+        self._worker = None
+
+        if status in ("finished", "cancelled", "error"):
+            self._on_translation_done()
+
