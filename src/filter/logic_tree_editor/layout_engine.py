@@ -96,6 +96,7 @@ class TreeLayoutEngine:
         解析頂部運算式文字，並在 dialog 的 QGraphicsScene 繪製節點與佈局。
         """
         dialog.graphics_scene.clear()
+        dialog._line_items = []
         expr_str = expression_text.strip()
         if not expr_str:
             return None, {}, [], [], [], {}, [], [], [], []
