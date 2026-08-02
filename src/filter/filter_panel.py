@@ -24,6 +24,7 @@ from filter.filter_config import FilterPanelConfig, serialize_filter_config, des
 
 class FilterPanel(BasePluginPanel):
     request_filter = pyqtSignal(dict)
+    MAX_RULES: int = 10
 
     def __init__(self, parent=None, context=None):
         super().__init__(parent, title_text="過濾", require_data_loading=True, context=context)
@@ -171,7 +172,7 @@ class FilterPanel(BasePluginPanel):
     def add_rule(self):
         if not self.check_expression_validity():
             return
-        if len(self.rules) >= 5:
+        if len(self.rules) >= self.MAX_RULES:
             return
 
         new_idx = len(self.rules) + 1
@@ -183,7 +184,7 @@ class FilterPanel(BasePluginPanel):
         
         self.rule_list_layout.addWidget(w)
 
-        if len(self.rules) >= 5:
+        if len(self.rules) >= self.MAX_RULES:
             self.btn_add_rule.setVisible(False)
 
         self.expression_is_valid = True
@@ -207,7 +208,7 @@ class FilterPanel(BasePluginPanel):
             w.lbl_rule_title.setText(f"規則 #{w.index}")
             w.btn_delete.setVisible(True)
 
-        if len(self.rules) < 5:
+        if len(self.rules) < self.MAX_RULES:
             self.btn_add_rule.setVisible(True)
 
         self.expression_is_valid = True
@@ -443,7 +444,7 @@ class FilterPanel(BasePluginPanel):
         else:
             self.logic_tree = None
 
-        self.btn_add_rule.setVisible(len(self.rules) < 5)
+        self.btn_add_rule.setVisible(len(self.rules) < self.MAX_RULES)
 
     def restore_from_config(self) -> None:
         cfg = self.config
