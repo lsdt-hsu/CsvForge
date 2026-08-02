@@ -428,19 +428,29 @@ class FilterPanel(BasePluginPanel):
         rules_cfg = config.get("rules", [])
         expr_text = config.get("expr_text", "")
 
-        if expr_text:
-            try:
-                self.logic_tree = logic_tree.parse_expression(expr_text, len(rules_cfg))
-            except ValueError:
-                self.logic_tree = None
-        elif rules_cfg:
+        if rules_cfg:
             default_expr = " AND ".join(f"#{i+1}" for i in range(len(rules_cfg)))
-            try:
-                self.logic_tree = logic_tree.parse_expression(default_expr, len(rules_cfg))
-            except ValueError:
-                self.logic_tree = None
+            tree = None
+            if expr_text:
+                try:
+                    tree = logic_tree.parse_expression(expr_text, len(rules_cfg))
+                except ValueError:
+                    tree = None
+
+            if tree is None:
+                try:
+                    tree = logic_tree.parse_expression(default_expr, len(rules_cfg))
+                except ValueError:
+                    tree = None
+                config["expr_text"] = default_expr
+                if hasattr(self, "config") and self.config:
+                    self.config.expr_text = default_expr
+            self.logic_tree = tree
         else:
             self.logic_tree = None
+            config["expr_text"] = ""
+            if hasattr(self, "config") and self.config:
+                self.config.expr_text = ""
 
         for i, r_cfg in enumerate(rules_cfg):
             w = RuleWidget(i + 1, self)

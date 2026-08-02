@@ -66,4 +66,50 @@ def test_filter_panel_deserialize_preserves_expr_text():
 
 if __name__ == "__main__":
     test_filter_panel_deserialize_preserves_expr_text()
+
+    # 1. 測試 parse_expression 當 current_count == 0 時
+    from filter.logic_tree import logic_tree
+    try:
+        logic_tree.parse_expression("#1", current_count=0)
+        assert False, "應拋出 ValueError"
+    except ValueError:
+        pass
+    assert logic_tree.parse_expression("", current_count=0) is None
+
+    # 2. 測試當 expr_text 不合法且有 rules 時，回退至預設運算式
+    panel = FilterPanel()
+    invalid_data = {
+        "rules": [{}, {}],
+        "expr_text": "#1 AND #999", # 不合法規則序號
+        "start_row": "1",
+        "end_row": ""
+    }
+    panel._internal_deserialize_config(invalid_data)
+    assert panel.config.expr_text == "#1 AND #2"
+    assert panel.logic_tree is not None
+
+    # 3. 測試當 rules 為空且有 expr_text 時，強制清空 expr_text 且 logic_tree 設為 None
+    empty_rules_data = {
+        "rules": [],
+        "expr_text": "#1",
+        "start_row": "1",
+        "end_row": ""
+    }
+    panel._internal_deserialize_config(empty_rules_data)
+    assert panel.config.expr_text == ""
+    # 4. 測試 FilterWorker 若遇到不合法的 expr_text 依照 Fail-Fast 原則直拋例外
+    from filter.filter_worker import FilterWorker
+    worker = FilterWorker(
+        all_rows=[["col1"]],
+        filter_config={"rules": [{}], "expr_text": "#1 AND #999"},
+        start_row=1,
+        end_row=1,
+        is_header=False
+    )
+    try:
+        worker.run()
+        assert False, "FilterWorker 在不合法 expr_text 下應遵照 Fail-Fast 直接崩潰/拋出 Exception"
+    except Exception:
+        pass
+
     print("ALL TESTS PASSED SUCCESSFULLY!")

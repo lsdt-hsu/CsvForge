@@ -227,8 +227,8 @@ def parse_expression(expr_str: str, current_count: int = None):
 
     # Parser 的遞降文法保證輸出為嚴格二元樹，此處不需要呼叫 flatten()。
 
-    # 語意驗證（若傳入 current_count 且 > 0）
-    if current_count is not None and current_count > 0:
+    # 語意驗證（若傳入 current_count 且 >= 0）
+    if current_count is not None and current_count >= 0:
         leafs = []
 
         def collect_leafs(node):

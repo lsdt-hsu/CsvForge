@@ -407,17 +407,12 @@ class FilterWorker(QObject):
 
                 rules_cfg = self.filter_config.get("rules", [])
                 expr_text = self.filter_config.get("expr_text", "")
+
+                # [Fail-Fast 原則] FilterWorker 完全依賴 FilterPanel 傳入已驗證/校正的 expr_text。
+                # 不作防禦性 try-except 捕捉與降級備援；若 expr_text 語法或語意不合法，
+                # 直接讓 parse_expression 拋出例外讓 App 崩潰，以便即時暴露並修復上游邏輯問題。
                 if expr_text:
-                    try:
-                        tree = logic_tree.parse_expression(expr_text, len(rules_cfg))
-                    except Exception:
-                        tree = None
-                elif rules_cfg:
-                    default_expr = " AND ".join(f"#{i+1}" for i in range(len(rules_cfg)))
-                    try:
-                        tree = logic_tree.parse_expression(default_expr, len(rules_cfg))
-                    except Exception:
-                        tree = None
+                    tree = logic_tree.parse_expression(expr_text, len(rules_cfg))
                 else:
                     tree = None
 
