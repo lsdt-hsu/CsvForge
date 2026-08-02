@@ -278,15 +278,17 @@ class ReplaceSubPanel(BaseSubPanel):
         theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
 
         if status == TaskStatus.FINISHED:
-            self.context.csv_data.set_modified(True)
-            self.context.csv_data.data_changed.emit()
-            self.api.request_silent_save()
             self.api.write_log("SUCCESS", "批次取代任務已完成")
             self.api.update_status("✅ 取代完成")
         elif status == TaskStatus.CANCELLED:
             self.api.write_log("WARNING", "取代任務已取消")
             self.api.update_status("⚠️ 任務已取消")
-            self.set_panel_enabled(True) # 確保取消後按鈕恢復可用狀態
+            self.set_panel_enabled(True)  # 確保取消後按鈕恢復可用狀態
+
+        if self.context and self.context.csv_data:
+            self.context.csv_data.set_modified(True)
+            self.context.csv_data.data_changed.emit()
+        self.api.request_silent_save()
 
     # --- 狀態機鎖定邏輯 ---
     def set_panel_enabled(self, global_enabled: bool) -> None:

@@ -267,12 +267,14 @@ class PasteSubPanel(BaseSubPanel):
         theme.applyPrimaryButtonStyle(self.btn_start, is_running=False)
 
         if status == TaskStatus.FINISHED:
-            self.context.csv_data.set_modified(True)
-            self.context.csv_data.data_changed.emit()
-            self.api.request_silent_save()
             self.api.write_log("SUCCESS", "批次貼上任務已完成")
             self.api.update_status("✅ 貼上完成")
         elif status == TaskStatus.CANCELLED:
             self.api.write_log("WARNING", "貼上任務已取消")
             self.api.update_status("⚠️ 任務已取消")
             self.set_panel_enabled(True)
+
+        if self.context and self.context.csv_data:
+            self.context.csv_data.set_modified(True)
+            self.context.csv_data.data_changed.emit()
+        self.api.request_silent_save()
