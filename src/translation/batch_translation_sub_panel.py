@@ -76,6 +76,7 @@ class BatchTranslationSubPanel(BaseSubPanel):
 
         self.lbl_batch_title = QLabel("批次間隔：10 秒")
         theme.applyStandardLabelStyle(self.lbl_batch_title)
+        self.lbl_batch_title.setFixedWidth(110)
         self.slider_batch_interval = QSlider(Qt.Orientation.Horizontal)
         theme.applyStandardSliderStyle(self.slider_batch_interval)
         self.slider_batch_interval.setRange(10, 30)
@@ -84,6 +85,7 @@ class BatchTranslationSubPanel(BaseSubPanel):
 
         self.lbl_single_title = QLabel("單筆間隔：1.0 秒")
         theme.applyStandardLabelStyle(self.lbl_single_title)
+        self.lbl_single_title.setFixedWidth(110)
         self.slider_single_interval = QSlider(Qt.Orientation.Horizontal)
         theme.applyStandardSliderStyle(self.slider_single_interval)
         self.slider_single_interval.setRange(2, 10)
@@ -92,6 +94,7 @@ class BatchTranslationSubPanel(BaseSubPanel):
 
         self.lbl_batch_size_title = QLabel("批次筆數：18 筆")
         theme.applyStandardLabelStyle(self.lbl_batch_size_title)
+        self.lbl_batch_size_title.setFixedWidth(110)
         self.slider_batch_size = QSlider(Qt.Orientation.Horizontal)
         theme.applyStandardSliderStyle(self.slider_batch_size)
         self.slider_batch_size.setRange(10, 20)
