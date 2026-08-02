@@ -544,6 +544,7 @@ class RuleWidget(QWidget):
         self.cmb_belong_value.blockSignals(True)
         self.cmb_range_start.blockSignals(True)
         self.cmb_range_end.blockSignals(True)
+        self.txt_compare_value.blockSignals(True)
 
         try:
             col = cfg.get("compare_col", -1)
@@ -618,3 +619,4 @@ class RuleWidget(QWidget):
             self.cmb_belong_value.blockSignals(False)
             self.cmb_range_start.blockSignals(False)
             self.cmb_range_end.blockSignals(False)
+            self.txt_compare_value.blockSignals(False)

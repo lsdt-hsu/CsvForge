@@ -406,8 +406,20 @@ class FilterWorker(QObject):
                 end_bound = min(end_bound, total_rows)
 
                 rules_cfg = self.filter_config.get("rules", [])
-                lt_cfg = self.filter_config.get("logic_tree")
-                tree = logic_tree.deserialize_tree(lt_cfg)
+                expr_text = self.filter_config.get("expr_text", "")
+                if expr_text:
+                    try:
+                        tree = logic_tree.parse_expression(expr_text, len(rules_cfg))
+                    except Exception:
+                        tree = None
+                elif rules_cfg:
+                    default_expr = " AND ".join(f"#{i+1}" for i in range(len(rules_cfg)))
+                    try:
+                        tree = logic_tree.parse_expression(default_expr, len(rules_cfg))
+                    except Exception:
+                        tree = None
+                else:
+                    tree = None
 
                 # 效能優化判定：若無實質行號限制且滿足「無過濾規則」，直接回傳 None (回復顯示全部)
                 actual_start = max(2, self.start_row) if self.is_header else self.start_row

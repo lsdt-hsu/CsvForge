@@ -293,7 +293,7 @@ class FilterPanel(BasePluginPanel):
 
         filter_config = {
             "rules": normalized_rules,
-            "logic_tree": logic_tree.serialize_tree(self.logic_tree)
+            "expr_text": logic_tree.to_string(self.logic_tree) if self.logic_tree else ""
         }
 
         # 驗證行號輸入
@@ -404,7 +404,6 @@ class FilterPanel(BasePluginPanel):
     def _sync_rules_to_config(self) -> None:
         cfg = self.config
         cfg.rules = [r.get_config() for r in self.rules]
-        cfg.logic_tree = logic_tree.serialize_tree(self.logic_tree)
         cfg.expr_text = logic_tree.to_string(self.logic_tree) if self.logic_tree else ""
         cfg.start_row = self.txt_filter_start_row.text().strip()
         cfg.end_row = self.txt_filter_end_row.text().strip()
@@ -427,22 +426,27 @@ class FilterPanel(BasePluginPanel):
         self.rules.clear()
 
         rules_cfg = config.get("rules", [])
+        expr_text = config.get("expr_text", "")
+
+        if expr_text:
+            try:
+                self.logic_tree = logic_tree.parse_expression(expr_text, len(rules_cfg))
+            except ValueError:
+                self.logic_tree = None
+        elif rules_cfg:
+            default_expr = " AND ".join(f"#{i+1}" for i in range(len(rules_cfg)))
+            try:
+                self.logic_tree = logic_tree.parse_expression(default_expr, len(rules_cfg))
+            except ValueError:
+                self.logic_tree = None
+        else:
+            self.logic_tree = None
+
         for i, r_cfg in enumerate(rules_cfg):
             w = RuleWidget(i + 1, self)
             self.rules.append(w)
             self.rule_list_layout.addWidget(w)
             w.set_config(r_cfg)
-
-        lt_cfg = config.get("logic_tree")
-        if lt_cfg:
-            self.logic_tree = logic_tree.deserialize_tree(lt_cfg)
-        elif config.get("expr_text"):
-            try:
-                self.logic_tree = logic_tree.parse_expression(config.get("expr_text"), len(self.rules))
-            except ValueError:
-                self.logic_tree = None
-        else:
-            self.logic_tree = None
 
         self.btn_add_rule.setVisible(len(self.rules) < self.MAX_RULES)
 
@@ -450,7 +454,6 @@ class FilterPanel(BasePluginPanel):
         cfg = self.config
         config_dict = {
             "rules": cfg.rules,
-            "logic_tree": cfg.logic_tree,
             "expr_text": cfg.expr_text,
             "start_row": cfg.start_row,
             "end_row": cfg.end_row,
